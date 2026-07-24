@@ -1,0 +1,361 @@
+Software Requirements Specification (SRS)
+Ayetis Digital Workflow Portal
+1. Introduction
+1.1 Purpose
+The purpose of this document is to define the software requirements for the Ayetis Portal System. The portal will provide a centralized workflow management platform for managing dental/orthodontic cases from submission by doctors/clients through validation, production, quality assurance, consultation, approval, and final delivery.
+The system will support multiple user roles with controlled access, case tracking, communication, file management, notifications, reporting, and performance monitoring.
+1.2 Company
+Company Name: Ayetis
+1.3 Scope
+The portal will manage the complete lifecycle of a case:
+Doctor Submission → Coordinator Validation → Designer Processing → QC Review → Consultant Review (Optional) → Doctor Approval → Case Completion → Doctor Review  → Case Approval/Modification request → Delivery of final files/Repeat the cycle from Designer Processings
+
+2. User Roles & Portal Access
+The system will have the following user portals:
+    1. Doctor Portal (Client View)
+    2. Admin Portal (Management/Owner View)
+    3. Coordinator Portal
+    4. Designer Portal
+    5. Quality Control (QC) Portal
+    6. Orthodontist/Consultant Portal
+    7. Supervisor Portal
+    8. Reporting & Analytics Portal
+
+3. Doctor Portal (Client Portal)
+3.1 Purpose
+The Doctor Portal will allow doctors/clients to submit cases, upload required files, communicate with Ayetis team, review completed cases, and provide feedback.
+3.2 Functional Requirements
+Doctor should be able to:
+    • Create/login into account
+    • Submit new case
+    • Generate unique Case ID
+    • Upload required patient files
+Examples:
+    • STL files
+    • Scans
+    • Photos
+    • X-rays
+    • Submit Treatment instructions form
+    • Other supporting documents
+    • Add case notes/instructions
+    • View case status
+    • Track progress timeline
+3.3 Case Status Visibility
+Doctor can view:
+    • Submitted
+    • Under Validation
+    • Waiting for Clarification/Missing Data
+    • Sent for Modification
+    • Approved
+    • Cancelled
+    • Completed
+    • Payment Overview
+
+4. Case Clarification Communication System
+4.1 Purpose
+A centralized clarification system will allow Coordinator, Designer, QC, and Consultant teams to communicate with doctors.
+4.2 Workflow
+When missing information is found:
+    1. User creates clarification request
+    2. System generates clarification against Case ID
+    3. Doctor receives:
+Email Notification:
+"Clarification Required for Case ID: XYZ"
+Email contains:
+    • Case details
+    • Required information
+    • Portal login/link
+    4. Doctor responds through portal
+    5. Internal team receives:
+Portal notification:
+"Reply received for Case ID XYZ"
+Email notification:
+"Doctor has responded to clarification"
+All communication should remain linked with Case ID.
+
+5. Admin Portal (Management / Owner)
+Purpose
+Admin portal will provide complete control over operations.
+Admin can:
+    • Manage users (Add/Remove/Transfer, Team Members, Supervisors, QC, Consultants)
+    • Assign permissions
+    • Manage departments (Add/Remove/Transfer, Team Members, Supervisors, QC, Consultants)
+    • Add/Remove any County Cases for Team/Individual
+    • View all cases
+    • Monitor workflow
+    • Check productivity
+    • Review delays
+    • View reports
+    • Manage case priorities (May give Urgent Priority to any expedite requirement)
+    • Monitor complaints and ratings
+    • Delete any record (Double Alert upon Deletion)
+    • Log of Deleted Record with Notes/Reason and Case ID
+
+6. Coordinator Portal
+Purpose
+Coordinator is responsible for initial case validation and routing.
+Responsibilities
+Coordinator will:
+    • Receive new submitted cases
+    • Verify required information
+    • Check file accessibility
+    • Validate completeness
+If information is missing:
+    • Create clarification request
+    • Communicate with doctor
+    • Track response
+If complete:
+    • Validation Mark
+    • Assign to relevant Team/Sent in Auto Case Pick Queue
+Manage Priority:
+    • Manage case priorities (May give Urgent Priority to any expedite requirement)
+Coordinator Dashboard
+Should display:
+    • New cases
+    • Pending validation
+    • Waiting for doctor response
+    • Ready for assignment
+    • Assigned cases
+    • Review Delays – Colour Bar ( Green , Yellow , Blue , Red )
+
+7. Designer Portal
+Purpose
+Designer will process assigned cases.
+Functions:
+Designer can:
+    • View assigned cases
+    • Download case files
+    • Review instructions
+    • Start production
+If information is missing:
+Designer can:
+    • Send clarification request
+    • Add comments
+    • Request additional information
+    • View Monthly Performance (Total Cases, Total Modifications, Month wise data (Maximum Available for 3 months, select a month to review performance)
+Communication workflow remains same as Coordinator.
+Case Completion
+After completing case:
+Designer submits case to QC queue.
+Case status:
+"Waiting for Quality Review"
+QC Rejected
+Process According to instruction:
+Submit again for QC Queue (After 2 QC Rejections – Case will also visible to Consultant & Supervisor Queue)
+
+8. QC Portal
+Purpose
+QC team will review completed cases before sending to customer.
+QC Functions:
+QC can:
+    • Open case files
+    • Review design/treatment
+    • Check quality standards
+    • Add comments
+    • Approve case
+    • Send back to designer
+QC Rejection Workflow
+If rejected:
+QC selects:
+    • Error Code
+    • Comments
+    • Required changes
+Case returns to Designer queue.
+Cycle continues until QC approval.
+Performance View:
+QC Cases Count, QC Reverted Count, Error Trends – (3 Months Data view – Check by selecting month or Check Complete Quarter Report)
+9. Case Delivery to Doctor
+After QC approval:
+QC uploads:
+    • Video explanation file
+OR
+    • HTML/View link
+Doctor receives notification.
+Doctor can:
+    1. Approve case
+    2. Request modification
+    3. Cancel case
+    4. Keep under review
+
+10. Doctor Review Tracking
+System should record:
+    • Doctor opened case date/time
+    • Doctor viewed video date/time
+    • Doctor response
+    • Doctor downloaded files after approval
+Even if doctor does not select any option but viewed the case:
+System should notify:
+"Doctor has viewed Case ID XYZ" (“Viewed” in report)
+
+11. Orthodontist / Consultant Portal
+Purpose
+Consultant provides clinical guidance.
+Consultant can:
+    • View assigned cases
+    • Review treatment plan
+    • Add clinical remarks
+    • Guide designer/QC team
+Visibility Features
+Cases with consultant comments should have:
+Color indicator:
+Example:
+Green:
+Consultant Reviewed
+Yellow:
+Consultant Remarks Available
+Red:
+Attention Required
+
+Consultant QC Role
+Consultant may also act as QC.
+Functions:
+    • Provide clinical feedback
+    • Review cases
+    • Reject with Error Code (Cycle Continue till Completion)
+    • Approve
+Consultant uploads:
+    • Video explanation file
+OR
+    • HTML/View link
+Consultant Performance:
+    • Monthly Performance View: Consultant Review count, Consultant QC reverted Count, Error Trend, Consultant Consultation Count) – (3 Months Data view – Check by selecting month or Check Complete Quarter Report)
+
+12. Supervisor Portal
+Purpose
+Supervisor manages team performance.
+Supervisor can monitor:
+Designer queue:
+    • Pending cases
+    • Active cases
+    • Completed cases
+QC queue:
+    • Pending reviews
+    • Running reviews
+    • Returned cases
+    • Completed QC
+Consultant queue:
+    • Pending consultation
+    • Running QC Review
+    • Pending QC Review
+    • Returned Cases
+    • Completed consultation
+Supervisor can:
+    • View workload
+    • Identify delays
+    • Monitor productivity
+    • Check Team Performance (Month wise Review: Total Cases of Team, Total Modification of Team, Individual Performance of Team Members, QC Cases Count, QC Reverted Count, Consultant Review count, Consultant QC reverted Count, Consultant Consultation Count) – (3 Months Data view – Check by selecting month or Check Complete Quarter Report)
+Add Remove Team Members, QC & Consultant
+
+13. Reporting Portal
+Dashboard Reports
+System should provide:
+Case Reports
+    • Total cases
+    • New cases
+    • Unassigned cases
+    • Assigned cases
+    • Production cases
+    • QC pending
+    • QC running
+    • QC rejected
+    • Completed cases
+Department Reports
+Designer:
+    • Assigned cases
+    • Completed cases
+    • Average completion time
+    • Revisions
+QC:
+    • Reviewed cases
+    • Rejected cases
+    • Error trends
+Consultant:
+    • Reviewed cases
+    • Rejected Cases
+    • Error Trends
+    • Remarks provided Trend (Count of: Green, Yellow, Red)
+Supervisor: (Team wise and Team Member Wise)
+    • Designer Assigned cases
+    • Designer Completed cases
+    • Designer Average completion time
+    • Designer Modifications
+    • Designer QC Rejections
+    • Designer Consultant Rejections 
+    • QC Reviewed cases
+    • QC Rejected cases
+    • QC Error trends
+    • Consultant Reviewed cases
+    • Consultant Rejected Cases
+    • Consultant Error Trends
+    • Consultant Remarks provided Trend (Count of: Green, Yellow, Red)
+Overall Department Performance: 
+Supervisors Wise Performance
+QC Wise Performance
+Consultants Wise Performance 
+Designers Wise Performance
+
+14. Doctor Performance & Feedback Reports
+System should maintain:
+Doctor rating:
+    • Satisfaction score
+    • Approval rate (Approved Cases/Total Viewed Cases*100)
+    • Rejection rate (Modification Count/Total Viewed Cases*100)
+Doctor complaints:
+    • Complaint Code 
+    • Complaint details
+    • Case ID
+    • Responsible employee
+    • Responsible QC
+    • Responsible Consultant
+    • Responsible Supervisor
+    • Type of Complaint
+    • Resolution status
+    • Additional Comments
+
+15. Notification System
+Notifications through:
+    • Portal alerts
+    • Email notifications
+Events:
+    • New case submitted
+    • Case assigned
+    • Clarification received
+    • Clarification answered
+    • Case completed
+    • Case rejected
+    • Case approved
+    • Doctor viewed case
+
+16. File Management Requirements
+System should support:
+    • Large file upload
+    • Secure storage
+    • Download permissions
+    • File history
+    • Version control
+Supported files:
+    • STL
+    • OBJ
+    • Images (JPG, JPEG, Other supported extensions – mention them)s
+    • PDF
+    • Videos
+    • HTML links
+
+17. Security Requirements
+System should include:
+    • Role-based access control
+    • User authentication
+    • Password management
+    • Activity logs
+    • Secure file access
+    • Data backup
+
+18. Future Enhancement Possibilities
+    • Mobile application (For Clarification/Communication with Doctor, Employee Attendance System)
+    • AI case validation
+    • Automatic file checking
+    • SLA monitoring
+    • Automated reminders
+    • Performance scoring
+    • Integration with dental software
+

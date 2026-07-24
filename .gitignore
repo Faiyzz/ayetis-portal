@@ -1,0 +1,11 @@
+.tools/
+
+dist/
+build/
+.env
+.env.local
+*.log
+.DS_Store
+coverage/
+.vite/
+*.tsbuildinfo
