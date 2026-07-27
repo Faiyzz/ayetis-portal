@@ -8,6 +8,7 @@ import {
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { toast } from '@/features/notifications/toastStore';
 import * as usersApi from '@/features/users/api';
 import { getErrorMessage } from '@/lib/api';
 
@@ -35,12 +36,15 @@ export function CreateUserPage() {
     setLoading(true);
     try {
       const created = await usersApi.createUser(form);
+      toast().success(`${created.email} created`, 'User created');
       navigate(`/app/users/${created.id}/permissions`, {
         replace: true,
         state: { created: true },
       });
     } catch (err) {
-      setError(getErrorMessage(err, 'Unable to create user'));
+      const message = getErrorMessage(err, 'Unable to create user');
+      setError(message);
+      toast().error(message);
     } finally {
       setLoading(false);
     }

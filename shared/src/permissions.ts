@@ -44,6 +44,9 @@ export const PERMISSIONS = {
 
   // Departments / teams
   DEPARTMENT_MANAGE: 'department:manage',
+
+  // Audit
+  AUDIT_VIEW: 'audit:view',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -79,6 +82,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.REPORT_VIEW_TEAM]: 'View team reports',
   [PERMISSIONS.REPORT_VIEW_ALL]: 'View all reports',
   [PERMISSIONS.DEPARTMENT_MANAGE]: 'Manage departments',
+  [PERMISSIONS.AUDIT_VIEW]: 'View activity logs',
 };
 
 export type PermissionGroup =
@@ -87,7 +91,8 @@ export type PermissionGroup =
   | 'Roles'
   | 'Cases'
   | 'Reports'
-  | 'Departments';
+  | 'Departments'
+  | 'Audit';
 
 export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
   [PERMISSIONS.USER_VIEW_OWN]: 'Account',
@@ -118,6 +123,7 @@ export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
   [PERMISSIONS.REPORT_VIEW_TEAM]: 'Reports',
   [PERMISSIONS.REPORT_VIEW_ALL]: 'Reports',
   [PERMISSIONS.DEPARTMENT_MANAGE]: 'Departments',
+  [PERMISSIONS.AUDIT_VIEW]: 'Audit',
 };
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {

@@ -47,6 +47,11 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
         description: 'Grant or deny extras per role',
         to: '/app/roles',
       },
+      {
+        label: 'Activity log',
+        description: 'Audit logins and system activity',
+        to: '/app/activity',
+      },
     ],
   },
   [ROLES.DOCTOR]: {

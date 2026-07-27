@@ -2,6 +2,7 @@ import { ROLE_LABELS, ROLES, type Permission, type PublicUser } from '@ayetis/sh
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Alert, AuthButton } from '@/features/auth/components/AuthUI';
+import { toast } from '@/features/notifications/toastStore';
 import { PermissionEditor } from '@/features/users/components/PermissionEditor';
 import * as usersApi from '@/features/users/api';
 import { roleDefaultsFor } from '@/features/users/permissionState';
@@ -14,7 +15,6 @@ export function UserPermissionsPage() {
   const [grants, setGrants] = useState<Permission[]>([]);
   const [denies, setDenies] = useState<Permission[]>([]);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -32,7 +32,9 @@ export function UserPermissionsPage() {
         setGrants(nextUser.permissionGrants);
         setDenies(nextUser.permissionDenies);
       } catch (err) {
-        setError(getErrorMessage(err, 'Unable to load user permissions'));
+        const message = getErrorMessage(err, 'Unable to load user permissions');
+        setError(message);
+        toast().error(message);
       } finally {
         setLoading(false);
       }
@@ -45,15 +47,16 @@ export function UserPermissionsPage() {
     if (!user) return;
     setSaving(true);
     setError('');
-    setSuccess('');
     try {
       const updated = await usersApi.updateUserPermissions(user.id, grants, denies);
       setUser(updated);
       setGrants(updated.permissionGrants);
       setDenies(updated.permissionDenies);
-      setSuccess('User permissions saved');
+      toast().success('User permissions saved');
     } catch (err) {
-      setError(getErrorMessage(err, 'Unable to save permissions'));
+      const message = getErrorMessage(err, 'Unable to save permissions');
+      setError(message);
+      toast().error(message);
     } finally {
       setSaving(false);
     }
@@ -91,7 +94,6 @@ export function UserPermissionsPage() {
       </div>
 
       {error ? <Alert>{error}</Alert> : null}
-      {success ? <Alert tone="success">{success}</Alert> : null}
 
       <PermissionEditor
         catalog={catalog}

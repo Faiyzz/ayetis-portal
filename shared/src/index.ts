@@ -2,3 +2,4 @@ export * from './roles';
 export * from './permissions';
 export * from './types';
 export * from './portals';
+export * from './audit';

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { changePassword } from '@/features/auth/api';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
 export function ChangePasswordPage() {
@@ -8,28 +9,30 @@ export function ChangePasswordPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError('');
-    setSuccess('');
 
     if (newPassword !== confirm) {
-      setError('New passwords do not match.');
+      const message = 'New passwords do not match.';
+      setError(message);
+      toast().warning(message);
       return;
     }
 
     setLoading(true);
     try {
       const result = await changePassword(currentPassword, newPassword);
-      setSuccess(result.message);
+      toast().success(result.message);
       setCurrentPassword('');
       setNewPassword('');
       setConfirm('');
     } catch (err) {
-      setError(getErrorMessage(err, 'Unable to change password'));
+      const message = getErrorMessage(err, 'Unable to change password');
+      setError(message);
+      toast().error(message);
     } finally {
       setLoading(false);
     }
@@ -44,7 +47,6 @@ export function ChangePasswordPage() {
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-4">
         {error ? <Alert>{error}</Alert> : null}
-        {success ? <Alert tone="success">{success}</Alert> : null}
 
         <TextField
           label="Current password"

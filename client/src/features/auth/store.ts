@@ -13,7 +13,7 @@ interface AuthState {
   bootstrap: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   register: (payload: authApi.RegisterPayload) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -57,7 +57,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     get().setSession(payload.user, payload.tokens.accessToken);
   },
 
-  logout: () => {
-    get().clearSession();
+  logout: async () => {
+    try {
+      if (get().token) {
+        await authApi.logout();
+      }
+    } catch {
+      // Still clear local session even if audit logout fails.
+    } finally {
+      get().clearSession();
+    }
   },
 }));

@@ -1,7 +1,15 @@
 import type { NextFunction, Response } from 'express';
 import type { Role } from '@ayetis/shared';
 import type { AuthenticatedRequest } from '../../middleware/auth';
+import { getRequestAuditContext } from '../audit/audit.service';
 import * as usersService from './users.service';
+
+function actorAudit(req: AuthenticatedRequest) {
+  return {
+    actorId: req.user!.id,
+    ...getRequestAuditContext(req),
+  };
+}
 
 export async function listPermissions(
   _req: AuthenticatedRequest,
@@ -16,7 +24,7 @@ export async function listPermissions(
   }
 }
 
-export async function listRoles(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+export async function listRoles(_req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const data = await usersService.listRolePermissionConfigs();
     res.json({ success: true, data });
@@ -40,7 +48,11 @@ export async function updateRolePermissions(
   next: NextFunction,
 ) {
   try {
-    const data = await usersService.updateRolePermissionConfig(req.params.role as Role, req.body);
+    const data = await usersService.updateRolePermissionConfig(
+      req.params.role as Role,
+      req.body,
+      actorAudit(req),
+    );
     res.json({
       success: true,
       data,
@@ -71,7 +83,7 @@ export async function getUser(req: AuthenticatedRequest, res: Response, next: Ne
 
 export async function createUser(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const data = await usersService.createUser(req.body);
+    const data = await usersService.createUser(req.body, actorAudit(req));
     res.status(201).json({
       success: true,
       data,
@@ -84,7 +96,12 @@ export async function createUser(req: AuthenticatedRequest, res: Response, next:
 
 export async function updateUser(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const data = await usersService.updateUser(req.params.userId, req.user!.id, req.body);
+    const data = await usersService.updateUser(
+      req.params.userId,
+      req.user!.id,
+      req.body,
+      getRequestAuditContext(req),
+    );
     res.json({
       success: true,
       data,
@@ -101,7 +118,11 @@ export async function updateUserPermissions(
   next: NextFunction,
 ) {
   try {
-    const data = await usersService.updateUserPermissions(req.params.userId, req.body);
+    const data = await usersService.updateUserPermissions(
+      req.params.userId,
+      req.body,
+      actorAudit(req),
+    );
     res.json({
       success: true,
       data,
@@ -114,7 +135,11 @@ export async function updateUserPermissions(
 
 export async function deleteUser(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const data = await usersService.deleteUser(req.params.userId, req.user!.id);
+    const data = await usersService.deleteUser(
+      req.params.userId,
+      req.user!.id,
+      getRequestAuditContext(req),
+    );
     res.json({
       success: true,
       data,

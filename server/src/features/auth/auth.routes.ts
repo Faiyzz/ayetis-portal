@@ -39,6 +39,7 @@ router.post(
   authController.resetPassword,
 );
 router.get('/me', authenticate, authController.me);
+router.post('/logout', authenticate, authController.logout);
 router.post(
   '/change-password',
   authenticate,

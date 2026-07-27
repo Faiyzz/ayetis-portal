@@ -7,6 +7,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Alert, AuthButton } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
+import { toast } from '@/features/notifications/toastStore';
 import { PermissionEditor } from '@/features/users/components/PermissionEditor';
 import * as usersApi from '@/features/users/api';
 import { getErrorMessage } from '@/lib/api';
@@ -19,7 +20,6 @@ export function RolePermissionsPage() {
   const [grants, setGrants] = useState<Permission[]>([]);
   const [denies, setDenies] = useState<Permission[]>([]);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -44,7 +44,9 @@ export function RolePermissionsPage() {
         setDenies(initial.denies);
       }
     } catch (err) {
-      setError(getErrorMessage(err, 'Unable to load role permissions'));
+      const message = getErrorMessage(err, 'Unable to load role permissions');
+      setError(message);
+      toast().error(message);
     } finally {
       setLoading(false);
     }
@@ -62,7 +64,6 @@ export function RolePermissionsPage() {
     setSelectedRole(role);
     setGrants(config.grants);
     setDenies(config.denies);
-    setSuccess('');
     setError('');
   }
 
@@ -70,15 +71,16 @@ export function RolePermissionsPage() {
     if (!selectedRole) return;
     setSaving(true);
     setError('');
-    setSuccess('');
     try {
       const updated = await usersApi.updateRolePermissions(selectedRole, grants, denies);
       setRoles((prev) => prev.map((role) => (role.role === updated.role ? updated : role)));
       setGrants(updated.grants);
       setDenies(updated.denies);
-      setSuccess(`${ROLE_LABELS[updated.role]} permissions saved`);
+      toast().success(`${ROLE_LABELS[updated.role]} permissions saved`);
     } catch (err) {
-      setError(getErrorMessage(err, 'Unable to save role permissions'));
+      const message = getErrorMessage(err, 'Unable to save role permissions');
+      setError(message);
+      toast().error(message);
     } finally {
       setSaving(false);
     }
@@ -99,7 +101,6 @@ export function RolePermissionsPage() {
       </div>
 
       {error ? <Alert>{error}</Alert> : null}
-      {success ? <Alert tone="success">{success}</Alert> : null}
 
       {loading ? (
         <p className="text-sm text-muted">Loading roles…</p>

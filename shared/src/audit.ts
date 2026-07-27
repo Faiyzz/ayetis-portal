@@ -1,0 +1,71 @@
+export const AUDIT_ACTIONS = {
+  AUTH_LOGIN_SUCCESS: 'auth.login.success',
+  AUTH_LOGIN_FAILED: 'auth.login.failed',
+  AUTH_LOGOUT: 'auth.logout',
+  AUTH_REGISTER: 'auth.register',
+  AUTH_PASSWORD_CHANGE: 'auth.password.change',
+  AUTH_PASSWORD_RESET: 'auth.password.reset',
+  AUTH_PASSWORD_FORGOT: 'auth.password.forgot',
+  USER_CREATE: 'user.create',
+  USER_UPDATE: 'user.update',
+  USER_DELETE: 'user.delete',
+  USER_PERMISSIONS_UPDATE: 'user.permissions.update',
+  ROLE_PERMISSIONS_UPDATE: 'role.permissions.update',
+} as const;
+
+export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
+
+export const ALL_AUDIT_ACTIONS: AuditAction[] = Object.values(AUDIT_ACTIONS);
+
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  [AUDIT_ACTIONS.AUTH_LOGIN_SUCCESS]: 'Login successful',
+  [AUDIT_ACTIONS.AUTH_LOGIN_FAILED]: 'Login failed',
+  [AUDIT_ACTIONS.AUTH_LOGOUT]: 'Logged out',
+  [AUDIT_ACTIONS.AUTH_REGISTER]: 'Account registered',
+  [AUDIT_ACTIONS.AUTH_PASSWORD_CHANGE]: 'Password changed',
+  [AUDIT_ACTIONS.AUTH_PASSWORD_RESET]: 'Password reset',
+  [AUDIT_ACTIONS.AUTH_PASSWORD_FORGOT]: 'Password reset requested',
+  [AUDIT_ACTIONS.USER_CREATE]: 'User created',
+  [AUDIT_ACTIONS.USER_UPDATE]: 'User updated',
+  [AUDIT_ACTIONS.USER_DELETE]: 'User deleted',
+  [AUDIT_ACTIONS.USER_PERMISSIONS_UPDATE]: 'User permissions updated',
+  [AUDIT_ACTIONS.ROLE_PERMISSIONS_UPDATE]: 'Role permissions updated',
+};
+
+export type AuditTargetType = 'user' | 'role' | 'auth' | 'system';
+
+export interface ActivityLogDto {
+  id: string;
+  action: AuditAction;
+  actionLabel: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  actorName: string | null;
+  actorRole: string | null;
+  targetType: AuditTargetType;
+  targetId: string | null;
+  summary: string;
+  metadata: Record<string, unknown>;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
+
+export interface ActivityLogListResult {
+  items: ActivityLogDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ActivityLogQuery {
+  page?: number;
+  pageSize?: number;
+  action?: AuditAction;
+  actorEmail?: string;
+  q?: string;
+}
+
+export function isAuditAction(value: string): value is AuditAction {
+  return (ALL_AUDIT_ACTIONS as string[]).includes(value);
+}

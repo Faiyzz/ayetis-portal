@@ -1,5 +1,6 @@
 import {
   ALL_PERMISSIONS,
+  AUDIT_ACTIONS,
   ROLES,
   ROLE_LABELS,
   getPermissionCatalog,
@@ -19,7 +20,25 @@ import {
 } from '../../models/RolePermissionConfig';
 import { User, type IUser, resolveUserPermissions } from '../../models/User';
 import { AppError } from '../../utils/AppError';
+import {
+  recordActivity,
+  type RequestAuditContext,
+} from '../audit/audit.service';
 
+export type ActorAuditContext = RequestAuditContext & {
+  actorId: string;
+};
+
+async function resolveActor(actorId: string) {
+  const actor = await User.findById(actorId);
+  if (!actor) return null;
+  return {
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: `${actor.firstName} ${actor.lastName}`,
+    actorRole: actor.role,
+  };
+}
 function uniquePermissions(values: Permission[]): Permission[] {
   return ALL_PERMISSIONS.filter((permission) => values.includes(permission));
 }
@@ -109,6 +128,7 @@ export async function getRolePermissionConfig(role: Role) {
 export async function updateRolePermissionConfig(
   role: Role,
   input: { grants: string[]; denies: string[] },
+  audit?: ActorAuditContext,
 ) {
   if (isRoleLocked(role)) {
     throw new AppError('Admin role permissions cannot be modified', 400);
@@ -123,6 +143,20 @@ export async function updateRolePermissionConfig(
     { grants, denies },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
+
+  if (audit) {
+    const actor = await resolveActor(audit.actorId);
+    await recordActivity({
+      action: AUDIT_ACTIONS.ROLE_PERMISSIONS_UPDATE,
+      summary: `${actor?.actorEmail ?? 'Admin'} updated ${ROLE_LABELS[role]} role permissions`,
+      ...(actor ?? {}),
+      targetType: 'role',
+      targetId: role,
+      metadata: { grants, denies },
+      ipAddress: audit.ipAddress,
+      userAgent: audit.userAgent,
+    });
+  }
 
   return buildRolePermissionDto(role, config);
 }
@@ -143,37 +177,30 @@ export async function getUserById(userId: string) {
   return toPublicUserAsync(user);
 }
 
-export async function createUser(input: {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  role: Role;
-  permissionGrants?: string[];
-  permissionDenies?: string[];
-}) {
+export async function createUser(
+  input: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    role: Role;
+    permissionGrants?: string[];
+    permissionDenies?: string[];
+  },
+  audit?: ActorAuditContext,
+) {
   const existing = await User.findOne({ email: input.email.toLowerCase() });
   if (existing) {
     throw new AppError('An account with this email already exists', 409);
   }
 
-  if (input.role === ROLES.ADMIN) {
-    // Allow creating admin users, but never with custom overrides.
-    const user = await User.create({
-      email: input.email,
-      password: input.password,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      role: ROLES.ADMIN,
-      permissionGrants: [],
-      permissionDenies: [],
-    });
-    return toPublicUserAsync(user);
+  const grants =
+    input.role === ROLES.ADMIN ? [] : assertValidPermissions(input.permissionGrants ?? []);
+  const denies =
+    input.role === ROLES.ADMIN ? [] : assertValidPermissions(input.permissionDenies ?? []);
+  if (input.role !== ROLES.ADMIN) {
+    assertNoOverlap(grants, denies);
   }
-
-  const grants = assertValidPermissions(input.permissionGrants ?? []);
-  const denies = assertValidPermissions(input.permissionDenies ?? []);
-  assertNoOverlap(grants, denies);
 
   const user = await User.create({
     email: input.email,
@@ -184,6 +211,20 @@ export async function createUser(input: {
     permissionGrants: grants,
     permissionDenies: denies,
   });
+
+  if (audit) {
+    const actor = await resolveActor(audit.actorId);
+    await recordActivity({
+      action: AUDIT_ACTIONS.USER_CREATE,
+      summary: `${actor?.actorEmail ?? 'Admin'} created user ${user.email} (${user.role})`,
+      ...(actor ?? {}),
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { role: user.role, email: user.email },
+      ipAddress: audit.ipAddress,
+      userAgent: audit.userAgent,
+    });
+  }
 
   return toPublicUserAsync(user);
 }
@@ -197,6 +238,7 @@ export async function updateUser(
     role?: Role;
     isActive?: boolean;
   },
+  audit?: RequestAuditContext,
 ) {
   const user = await User.findById(userId);
   if (!user) {
@@ -207,6 +249,13 @@ export async function updateUser(
     throw new AppError('You cannot deactivate your own account', 400);
   }
 
+  const before = {
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    isActive: user.isActive,
+  };
+
   if (input.role && input.role !== user.role) {
     if (user.role === ROLES.ADMIN && user.id === actorId) {
       throw new AppError('You cannot change your own admin role', 400);
@@ -214,7 +263,6 @@ export async function updateUser(
 
     user.role = input.role;
 
-    // Reset overrides when role changes — they are role-context specific.
     if (input.role === ROLES.ADMIN) {
       user.permissionGrants = [];
       user.permissionDenies = [];
@@ -226,12 +274,26 @@ export async function updateUser(
   if (input.isActive !== undefined) user.isActive = input.isActive;
 
   await user.save();
+
+  const actor = await resolveActor(actorId);
+  await recordActivity({
+    action: AUDIT_ACTIONS.USER_UPDATE,
+    summary: `${actor?.actorEmail ?? 'Admin'} updated user ${user.email}`,
+    ...(actor ?? {}),
+    targetType: 'user',
+    targetId: user.id,
+    metadata: { before, after: input },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
   return toPublicUserAsync(user);
 }
 
 export async function updateUserPermissions(
   userId: string,
   input: { grants: string[]; denies: string[] },
+  audit?: ActorAuditContext,
 ) {
   const user = await User.findById(userId);
   if (!user) {
@@ -250,10 +312,28 @@ export async function updateUserPermissions(
   user.permissionDenies = denies;
   await user.save();
 
+  if (audit) {
+    const actor = await resolveActor(audit.actorId);
+    await recordActivity({
+      action: AUDIT_ACTIONS.USER_PERMISSIONS_UPDATE,
+      summary: `${actor?.actorEmail ?? 'Admin'} updated permissions for ${user.email}`,
+      ...(actor ?? {}),
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { grants, denies },
+      ipAddress: audit.ipAddress,
+      userAgent: audit.userAgent,
+    });
+  }
+
   return toPublicUserAsync(user);
 }
 
-export async function deleteUser(userId: string, actorId: string) {
+export async function deleteUser(
+  userId: string,
+  actorId: string,
+  audit?: RequestAuditContext,
+) {
   if (userId === actorId) {
     throw new AppError('You cannot delete your own account', 400);
   }
@@ -270,7 +350,22 @@ export async function deleteUser(userId: string, actorId: string) {
     }
   }
 
+  const deletedEmail = user.email;
+  const deletedRole = user.role;
   await user.deleteOne();
+
+  const actor = await resolveActor(actorId);
+  await recordActivity({
+    action: AUDIT_ACTIONS.USER_DELETE,
+    summary: `${actor?.actorEmail ?? 'Admin'} deleted user ${deletedEmail}`,
+    ...(actor ?? {}),
+    targetType: 'user',
+    targetId: userId,
+    metadata: { email: deletedEmail, role: deletedRole },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
   return { id: userId };
 }
 

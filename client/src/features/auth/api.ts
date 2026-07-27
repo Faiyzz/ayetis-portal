@@ -28,6 +28,10 @@ export async function fetchMe(): Promise<PublicUser> {
   return data.data;
 }
 
+export async function logout(): Promise<void> {
+  await api.post('/auth/logout');
+}
+
 export async function forgotPassword(email: string): Promise<{ message: string; resetUrl?: string }> {
   const { data } = await api.post('/auth/forgot-password', { email });
   return data.data;

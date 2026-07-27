@@ -109,6 +109,13 @@ function buildNavItems(dashboardPath: string): NavItem[] {
       isActive: (pathname) => pathname.startsWith('/app/roles'),
     },
     {
+      id: 'activity',
+      label: 'Activity log',
+      to: '/app/activity',
+      permission: PERMISSIONS.AUDIT_VIEW,
+      isActive: (pathname) => pathname.startsWith('/app/activity'),
+    },
+    {
       id: 'password',
       label: 'Password',
       to: '/app/change-password',
@@ -186,7 +193,9 @@ export function AppShell() {
           </div>
           <button
             type="button"
-            onClick={logout}
+            onClick={() => {
+              void logout();
+            }}
             className="mt-2 w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-muted transition hover:bg-red-50 hover:text-red-600"
           >
             Log out

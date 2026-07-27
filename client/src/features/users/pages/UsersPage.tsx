@@ -1,25 +1,22 @@
 import { ROLE_LABELS, type PublicUser } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Alert } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
+import { toast } from '@/features/notifications/toastStore';
 import * as usersApi from '@/features/users/api';
 import { getErrorMessage } from '@/lib/api';
 
 export function UsersPage() {
   const { can, PERMISSIONS } = usePermissions();
   const [users, setUsers] = useState<PublicUser[]>([]);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
 
   async function load() {
     setLoading(true);
-    setError('');
     try {
       setUsers(await usersApi.fetchUsers());
     } catch (err) {
-      setError(getErrorMessage(err, 'Unable to load users'));
+      toast().error(getErrorMessage(err, 'Unable to load users'));
     } finally {
       setLoading(false);
     }
@@ -30,27 +27,23 @@ export function UsersPage() {
   }, []);
 
   async function toggleActive(user: PublicUser) {
-    setError('');
-    setSuccess('');
     try {
       await usersApi.updateUser(user.id, { isActive: !user.isActive });
-      setSuccess(`${user.email} ${user.isActive ? 'deactivated' : 'activated'}`);
+      toast().success(`${user.email} ${user.isActive ? 'deactivated' : 'activated'}`);
       await load();
     } catch (err) {
-      setError(getErrorMessage(err, 'Unable to update user'));
+      toast().error(getErrorMessage(err, 'Unable to update user'));
     }
   }
 
   async function handleDelete(user: PublicUser) {
     if (!window.confirm(`Delete ${user.email}? This cannot be undone.`)) return;
-    setError('');
-    setSuccess('');
     try {
       await usersApi.deleteUser(user.id);
-      setSuccess('User deleted');
+      toast().success('User deleted');
       await load();
     } catch (err) {
-      setError(getErrorMessage(err, 'Unable to delete user'));
+      toast().error(getErrorMessage(err, 'Unable to delete user'));
     }
   }
 
@@ -75,10 +68,7 @@ export function UsersPage() {
         ) : null}
       </div>
 
-      {error ? <Alert>{error}</Alert> : null}
-      {success ? <Alert tone="success">{success}</Alert> : null}
-
-      <section className="overflow-hidden rounded-2xl border border-line bg-white">
+      <section className="overflow-hidden rounded-xl border border-line bg-white">
         <header className="border-b border-line px-5 py-4">
           <h2 className="text-lg font-semibold text-ink">Directory</h2>
         </header>

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getDashboardPath } from '@ayetis/shared';
 import { Alert, AuthButton, AuthCard, TextField } from '@/features/auth/components/AuthUI';
 import { useAuthStore } from '@/features/auth/store';
+import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
 export function LoginPage() {
@@ -20,9 +21,12 @@ export function LoginPage() {
     try {
       await login(email, password);
       const user = useAuthStore.getState().user;
+      toast().success('Welcome back', 'Signed in');
       navigate(user ? getDashboardPath(user.role) : '/app', { replace: true });
     } catch (err) {
-      setError(getErrorMessage(err, 'Unable to log in'));
+      const message = getErrorMessage(err, 'Unable to log in');
+      setError(message);
+      toast().error(message);
     } finally {
       setLoading(false);
     }

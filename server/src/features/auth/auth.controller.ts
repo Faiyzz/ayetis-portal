@@ -1,10 +1,11 @@
 import type { NextFunction, Response } from 'express';
 import type { AuthenticatedRequest } from '../../middleware/auth';
 import * as authService from './auth.service';
+import { getRequestAuditContext } from '../audit/audit.service';
 
 export async function register(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const data = await authService.registerDoctor(req.body);
+    const data = await authService.registerDoctor(req.body, getRequestAuditContext(req));
     res.status(201).json({
       success: true,
       data,
@@ -17,11 +18,24 @@ export async function register(req: AuthenticatedRequest, res: Response, next: N
 
 export async function login(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const data = await authService.login(req.body);
+    const data = await authService.login(req.body, getRequestAuditContext(req));
     res.json({
       success: true,
       data,
       message: 'Logged in successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function logout(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await authService.logout(req.user!.id, getRequestAuditContext(req));
+    res.json({
+      success: true,
+      data,
+      message: data.message,
     });
   } catch (error) {
     next(error);
@@ -46,7 +60,7 @@ export async function forgotPassword(
   next: NextFunction,
 ) {
   try {
-    const data = await authService.forgotPassword(req.body);
+    const data = await authService.forgotPassword(req.body, getRequestAuditContext(req));
     res.json({
       success: true,
       data,
@@ -63,7 +77,7 @@ export async function resetPassword(
   next: NextFunction,
 ) {
   try {
-    const data = await authService.resetPassword(req.body);
+    const data = await authService.resetPassword(req.body, getRequestAuditContext(req));
     res.json({
       success: true,
       data,
@@ -80,7 +94,11 @@ export async function changePassword(
   next: NextFunction,
 ) {
   try {
-    const data = await authService.changePassword(req.user!.id, req.body);
+    const data = await authService.changePassword(
+      req.user!.id,
+      req.body,
+      getRequestAuditContext(req),
+    );
     res.json({
       success: true,
       data,

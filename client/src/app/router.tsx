@@ -6,6 +6,7 @@ import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 import { ResetPasswordPage } from '@/features/auth/pages/ResetPasswordPage';
+import { ActivityLogPage } from '@/features/audit/pages/ActivityLogPage';
 import { CreateUserPage } from '@/features/users/pages/CreateUserPage';
 import { RolePermissionsPage } from '@/features/users/pages/RolePermissionsPage';
 import { UserPermissionsPage } from '@/features/users/pages/UserPermissionsPage';
@@ -49,6 +50,10 @@ export function AppRouter() {
 
           <Route element={<RequirePermission permission={PERMISSIONS.ROLE_VIEW_PERMISSIONS} />}>
             <Route path="roles" element={<RolePermissionsPage />} />
+          </Route>
+
+          <Route element={<RequirePermission permission={PERMISSIONS.AUDIT_VIEW} />}>
+            <Route path="activity" element={<ActivityLogPage />} />
           </Route>
         </Route>
       </Route>
