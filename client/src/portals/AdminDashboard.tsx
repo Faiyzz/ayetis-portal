@@ -1,19 +1,14 @@
 import {
-  ALL_COMPLAINT_STATUSES,
-  ALL_COMPLAINT_TYPES,
   ALL_DEPARTMENT_TYPES,
-  COMPLAINT_STATUS_LABELS,
-  COMPLAINT_TYPE_LABELS,
   DELETE_REQUEST_STATUS_LABELS,
   DEPARTMENT_TYPE_LABELS,
-  type ComplaintDto,
   type DeleteRequestDto,
   type DepartmentDto,
-  type RatingsOverviewDto,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { ComplaintsWorkspace } from '@/features/complaints/pages/ComplaintsPage';
 import { toast } from '@/features/notifications/toastStore';
 import api, { getErrorMessage } from '@/lib/api';
 
@@ -82,7 +77,9 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
       ) : null}
 
       {tab === 'departments' ? <DepartmentsPanel /> : null}
-      {tab === 'complaints' ? <ComplaintsPanel /> : null}
+      {tab === 'complaints' ? (
+        <ComplaintsWorkspace showReports embedded title="Complaints & ratings" />
+      ) : null}
       {tab === 'deletions' ? <DeletionsPanel /> : null}
     </div>
   );
@@ -251,162 +248,6 @@ function DepartmentsPanel() {
               >
                 Request delete
               </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
-  );
-}
-
-function ComplaintsPanel() {
-  const [items, setItems] = useState<ComplaintDto[]>([]);
-  const [ratings, setRatings] = useState<RatingsOverviewDto | null>(null);
-  const [form, setForm] = useState({
-    details: '',
-    caseId: '',
-    type: 'quality',
-    rating: '',
-  });
-  const [busy, setBusy] = useState(false);
-
-  async function load() {
-    try {
-      const [list, overview] = await Promise.all([
-        api.get('/complaints'),
-        api.get('/complaints/ratings'),
-      ]);
-      setItems(list.data.data);
-      setRatings(overview.data.data);
-    } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to load complaints'));
-    }
-  }
-
-  useEffect(() => {
-    void load();
-  }, []);
-
-  async function handleCreate(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      await api.post('/complaints', {
-        details: form.details,
-        caseId: form.caseId || undefined,
-        type: form.type,
-        rating: form.rating ? Number(form.rating) : null,
-      });
-      toast().success('Complaint filed');
-      setForm({ details: '', caseId: '', type: 'quality', rating: '' });
-      await load();
-    } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to file complaint'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function setStatus(id: string, status: string) {
-    try {
-      await api.patch(`/complaints/${id}`, { status });
-      toast().success('Complaint updated');
-      await load();
-    } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to update complaint'));
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      {ratings ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ['Avg satisfaction', ratings.averageSatisfaction ?? '—'],
-            ['Approval rate', ratings.approvalRate != null ? `${ratings.approvalRate}%` : '—'],
-            ['Modification rate', ratings.rejectionRate != null ? `${ratings.rejectionRate}%` : '—'],
-            ['Open complaints', ratings.complaintsOpen],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-xl border border-line bg-white px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
-              <p className="mt-1 text-2xl font-bold text-ink">{value}</p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      <form onSubmit={handleCreate} className="space-y-3 rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-ink">File complaint / rating</h2>
-        <TextField
-          label="Case ID (optional)"
-          value={form.caseId}
-          onChange={(e) => setForm((s) => ({ ...s, caseId: e.target.value }))}
-        />
-        <label className="block space-y-1.5 text-sm">
-          <span className="font-medium text-ink">Type</span>
-          <select
-            value={form.type}
-            onChange={(e) => setForm((s) => ({ ...s, type: e.target.value }))}
-            className="w-full rounded-xl border border-line px-3 py-2.5"
-          >
-            {ALL_COMPLAINT_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {COMPLAINT_TYPE_LABELS[type]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <TextField
-          label="Rating 1–5 (optional)"
-          value={form.rating}
-          onChange={(e) => setForm((s) => ({ ...s, rating: e.target.value }))}
-        />
-        <label className="block space-y-1.5 text-sm">
-          <span className="font-medium text-ink">Details</span>
-          <textarea
-            required
-            rows={3}
-            value={form.details}
-            onChange={(e) => setForm((s) => ({ ...s, details: e.target.value }))}
-            className="w-full rounded-xl border border-line px-3 py-2.5"
-          />
-        </label>
-        <AuthButton loading={busy}>Submit</AuthButton>
-      </form>
-
-      <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-ink">All complaints</h2>
-        <ul className="mt-3 divide-y divide-line">
-          {items.map((item) => (
-            <li key={item.id} className="space-y-2 py-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-ink">{item.complaintCode}</span>
-                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs">
-                  {COMPLAINT_TYPE_LABELS[item.type]}
-                </span>
-                <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs text-amber-900">
-                  {COMPLAINT_STATUS_LABELS[item.status]}
-                </span>
-                {item.caseId ? (
-                  <Link to={`/app/cases/${item.caseId}`} className="text-xs text-brand-700">
-                    {item.caseId}
-                  </Link>
-                ) : null}
-                {item.rating ? <span className="text-xs text-muted">★ {item.rating}</span> : null}
-              </div>
-              <p className="text-sm text-ink whitespace-pre-wrap">{item.details}</p>
-              <div className="flex flex-wrap gap-2">
-                {ALL_COMPLAINT_STATUSES.map((status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() => void setStatus(item.id, status)}
-                    className="rounded-lg border border-line px-2 py-1 text-xs font-semibold"
-                  >
-                    {COMPLAINT_STATUS_LABELS[status]}
-                  </button>
-                ))}
-              </div>
             </li>
           ))}
         </ul>

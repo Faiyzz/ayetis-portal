@@ -7,6 +7,14 @@ import {
 } from '@ayetis/shared';
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
 
+export interface IComplaintComment {
+  _id: Types.ObjectId;
+  text: string;
+  authorId: Types.ObjectId;
+  authorName: string;
+  createdAt: Date;
+}
+
 export interface IComplaint extends Document {
   complaintCode: string;
   details: string;
@@ -25,11 +33,22 @@ export interface IComplaint extends Document {
   status: ComplaintStatus;
   rating?: number;
   additionalComments: string;
+  comments: IComplaintComment[];
   createdById: Types.ObjectId;
   createdByName: string;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const complaintCommentSchema = new Schema<IComplaintComment>(
+  {
+    text: { type: String, required: true, trim: true },
+    authorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    authorName: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: true },
+);
 
 const complaintSchema = new Schema<IComplaint>(
   {
@@ -55,11 +74,15 @@ const complaintSchema = new Schema<IComplaint>(
     },
     rating: { type: Number, min: 1, max: 5 },
     additionalComments: { type: String, default: '', trim: true },
+    comments: { type: [complaintCommentSchema], default: [] },
     createdById: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     createdByName: { type: String, required: true },
   },
   { timestamps: true },
 );
+
+complaintSchema.index({ createdAt: -1 });
+complaintSchema.index({ doctorId: 1, createdAt: -1 });
 
 export const Complaint: Model<IComplaint> =
   mongoose.models.Complaint ?? mongoose.model<IComplaint>('Complaint', complaintSchema);

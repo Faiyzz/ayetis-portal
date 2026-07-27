@@ -155,6 +155,17 @@ function buildNavItems(dashboardPath: string): NavItem[] {
       isActive: (pathname) => pathname.startsWith('/app/roles'),
     },
     {
+      id: 'complaints',
+      label: 'Complaints',
+      to: '/app/complaints',
+      anyOf: [
+        PERMISSIONS.COMPLAINT_CREATE,
+        PERMISSIONS.COMPLAINT_VIEW,
+        PERMISSIONS.COMPLAINT_MANAGE,
+      ],
+      isActive: (pathname) => pathname.startsWith('/app/complaints'),
+    },
+    {
       id: 'activity',
       label: 'Activity log',
       to: '/app/activity',

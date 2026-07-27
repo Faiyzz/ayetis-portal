@@ -11,6 +11,7 @@ import { CaseDetailPage } from '@/features/cases/pages/CaseDetailPage';
 import { CasesPage } from '@/features/cases/pages/CasesPage';
 import { CreateCasePage } from '@/features/cases/pages/CreateCasePage';
 import { EditCasePage } from '@/features/cases/pages/EditCasePage';
+import { ComplaintsPage } from '@/features/complaints/pages/ComplaintsPage';
 import { CreateUserPage } from '@/features/users/pages/CreateUserPage';
 import { RolePermissionsPage } from '@/features/users/pages/RolePermissionsPage';
 import { UserPermissionsPage } from '@/features/users/pages/UserPermissionsPage';
@@ -85,6 +86,20 @@ export function AppRouter() {
 
           <Route element={<RequirePermission permission={PERMISSIONS.ROLE_VIEW_PERMISSIONS} />}>
             <Route path="roles" element={<RolePermissionsPage />} />
+          </Route>
+
+          <Route
+            element={
+              <RequireAnyPermission
+                permissions={[
+                  PERMISSIONS.COMPLAINT_CREATE,
+                  PERMISSIONS.COMPLAINT_VIEW,
+                  PERMISSIONS.COMPLAINT_MANAGE,
+                ]}
+              />
+            }
+          >
+            <Route path="complaints" element={<ComplaintsPage />} />
           </Route>
 
           <Route element={<RequirePermission permission={PERMISSIONS.AUDIT_VIEW} />}>

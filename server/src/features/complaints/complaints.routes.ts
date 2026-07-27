@@ -35,6 +35,7 @@ const updateSchema = z.object({
     .string()
     .optional()
     .refine((v) => !v || isComplaintStatus(v), { message: 'Invalid status' }),
+  comment: z.string().trim().min(1).max(2000).optional(),
   additionalComments: z.string().trim().max(2000).optional(),
   responsibleEmployeeId: z.string().trim().nullable().optional(),
   responsibleQcId: z.string().trim().nullable().optional(),
@@ -49,24 +50,48 @@ router.get(
   requireAnyPermission(
     PERMISSIONS.COMPLAINT_VIEW,
     PERMISSIONS.COMPLAINT_MANAGE,
+    PERMISSIONS.COMPLAINT_CREATE,
     PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.REPORT_VIEW_ALL,
   ),
   complaintsController.list,
 );
 
 router.get(
+  '/staff',
+  requireAnyPermission(
+    PERMISSIONS.COMPLAINT_CREATE,
+    PERMISSIONS.COMPLAINT_MANAGE,
+    PERMISSIONS.COMPLAINT_VIEW,
+  ),
+  complaintsController.staff,
+);
+
+router.get(
   '/ratings',
-  requireAnyPermission(PERMISSIONS.COMPLAINT_VIEW, PERMISSIONS.CASE_VIEW_ALL),
+  requireAnyPermission(
+    PERMISSIONS.COMPLAINT_VIEW,
+    PERMISSIONS.COMPLAINT_MANAGE,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.REPORT_VIEW_ALL,
+  ),
   complaintsController.ratings,
+);
+
+router.get(
+  '/reports',
+  requireAnyPermission(
+    PERMISSIONS.COMPLAINT_VIEW,
+    PERMISSIONS.COMPLAINT_MANAGE,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.REPORT_VIEW_ALL,
+  ),
+  complaintsController.reports,
 );
 
 router.post(
   '/',
-  requireAnyPermission(
-    PERMISSIONS.COMPLAINT_MANAGE,
-    PERMISSIONS.CASE_VIEW_OWN,
-    PERMISSIONS.CASE_VIEW_ALL,
-  ),
+  requireAnyPermission(PERMISSIONS.COMPLAINT_CREATE, PERMISSIONS.COMPLAINT_MANAGE),
   validate(createSchema),
   complaintsController.create,
 );

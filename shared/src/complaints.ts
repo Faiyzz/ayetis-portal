@@ -44,6 +44,14 @@ export function isComplaintStatus(value: string): value is ComplaintStatus {
   return (ALL_COMPLAINT_STATUSES as string[]).includes(value);
 }
 
+export interface ComplaintCommentDto {
+  id: string;
+  text: string;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+}
+
 export interface ComplaintDto {
   id: string;
   complaintCode: string;
@@ -61,8 +69,10 @@ export interface ComplaintDto {
   responsibleSupervisorName: string | null;
   type: ComplaintType;
   status: ComplaintStatus;
+  /** Explicit 1–5 rating when logged with the complaint; not a derived score. */
   rating: number | null;
   additionalComments: string;
+  comments: ComplaintCommentDto[];
   createdById: string;
   createdByName: string;
   createdAt: string;
@@ -83,6 +93,8 @@ export interface CreateComplaintInput {
 
 export interface UpdateComplaintInput {
   status?: ComplaintStatus;
+  /** Appended as a resolution note (does not replace prior comments). */
+  comment?: string;
   additionalComments?: string;
   responsibleEmployeeId?: string | null;
   responsibleQcId?: string | null;
@@ -92,9 +104,60 @@ export interface UpdateComplaintInput {
 
 export interface RatingsOverviewDto {
   totalRatings: number;
-  averageSatisfaction: number | null;
+  /**
+   * Mean of explicit 1–5 ratings filed on complaints.
+   * Null when no ratings exist — not a synthetic composite score.
+   */
+  averageRating: number | null;
+  /** Share of doctor decisions that are "approve". */
   approvalRate: number | null;
+  /** Share of doctor decisions that are "request_modification". */
   rejectionRate: number | null;
+  decisionsTotal: number;
   complaintsOpen: number;
   complaintsTotal: number;
+}
+
+export interface DoctorComplaintMetricsDto {
+  doctorId: string;
+  doctorName: string;
+  decisionsTotal: number;
+  approvedCount: number;
+  modificationCount: number;
+  cancelCount: number;
+  approvalRate: number | null;
+  rejectionRate: number | null;
+  ratingsCount: number;
+  /** Mean of explicit complaint ratings for this doctor; null if none. */
+  averageRating: number | null;
+  complaintsCount: number;
+  openComplaints: number;
+}
+
+export interface ComplaintTrendMonthDto {
+  key: string;
+  label: string;
+  complaintsTotal: number;
+  complaintsOpen: number;
+  complaintsResolved: number;
+  byType: Record<ComplaintType, number>;
+  ratingsCount: number;
+  averageRating: number | null;
+  decisionsTotal: number;
+  approvalRate: number | null;
+  rejectionRate: number | null;
+}
+
+export interface ComplaintReportsDto {
+  overview: RatingsOverviewDto;
+  months: ComplaintTrendMonthDto[];
+  byDoctor: DoctorComplaintMetricsDto[];
+}
+
+export interface ComplaintStaffOptionDto {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
 }

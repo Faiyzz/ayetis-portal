@@ -58,6 +58,11 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
         to: '/app/admin',
       },
       {
+        label: 'Complaint reports',
+        description: 'Trends, ratings, and per-doctor decision rates',
+        to: '/app/complaints',
+      },
+      {
         label: 'Activity log',
         description: 'Audit logins and system activity',
         to: '/app/activity',

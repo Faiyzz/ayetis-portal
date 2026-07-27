@@ -1,10 +1,20 @@
 import {
+  ALL_COMPLAINT_TYPES,
+  ALL_COMPLAINT_STATUSES,
   AUDIT_ACTIONS,
   COMPLAINT_STATUSES,
+  COMPLAINT_TYPES,
+  DOCTOR_DECISIONS,
   PERMISSIONS,
+  ROLES,
   permissionsInclude,
   type ComplaintDto,
+  type ComplaintReportsDto,
+  type ComplaintStaffOptionDto,
+  type ComplaintTrendMonthDto,
+  type ComplaintType,
   type CreateComplaintInput,
+  type DoctorComplaintMetricsDto,
   type RatingsOverviewDto,
   type UpdateComplaintInput,
 } from '@ayetis/shared';
@@ -26,6 +36,63 @@ interface Actor {
 
 function actorName(actor: Actor) {
   return `${actor.firstName} ${actor.lastName}`.trim();
+}
+
+function canViewComplaints(actor: Actor) {
+  return (
+    permissionsInclude(actor.permissions as never, PERMISSIONS.COMPLAINT_VIEW) ||
+    permissionsInclude(actor.permissions as never, PERMISSIONS.COMPLAINT_MANAGE) ||
+    permissionsInclude(actor.permissions as never, PERMISSIONS.CASE_VIEW_ALL) ||
+    permissionsInclude(actor.permissions as never, PERMISSIONS.REPORT_VIEW_ALL)
+  );
+}
+
+function canCreateComplaint(actor: Actor) {
+  return (
+    permissionsInclude(actor.permissions as never, PERMISSIONS.COMPLAINT_CREATE) ||
+    permissionsInclude(actor.permissions as never, PERMISSIONS.COMPLAINT_MANAGE)
+  );
+}
+
+function emptyByType(): Record<ComplaintType, number> {
+  return Object.fromEntries(ALL_COMPLAINT_TYPES.map((type) => [type, 0])) as Record<
+    ComplaintType,
+    number
+  >;
+}
+
+function monthKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(key: string) {
+  const [year, month] = key.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+function recentMonthKeys(count: number): string[] {
+  const keys: string[] = [];
+  const now = new Date();
+  for (let i = 0; i < count; i += 1) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    keys.push(monthKey(d));
+  }
+  return keys.reverse();
+}
+
+function rate(part: number, total: number): number | null {
+  if (total <= 0) return null;
+  return Number(((part / total) * 100).toFixed(1));
+}
+
+function average(values: number[]): number | null {
+  if (!values.length) return null;
+  const sum = values.reduce((acc, value) => acc + value, 0);
+  return Number((sum / values.length).toFixed(2));
 }
 
 function toDto(doc: InstanceType<typeof Complaint>): ComplaintDto {
@@ -54,6 +121,13 @@ function toDto(doc: InstanceType<typeof Complaint>): ComplaintDto {
     status: doc.status,
     rating: doc.rating ?? null,
     additionalComments: doc.additionalComments || '',
+    comments: (doc.comments ?? []).map((comment) => ({
+      id: String(comment._id),
+      text: comment.text,
+      authorId: String(comment.authorId),
+      authorName: comment.authorName,
+      createdAt: comment.createdAt.toISOString(),
+    })),
     createdById: String(doc.createdById),
     createdByName: doc.createdByName,
     createdAt: doc.createdAt.toISOString(),
@@ -77,24 +151,73 @@ async function nextComplaintCode() {
   return `CMP-${stamp}-${String(count + 1).padStart(4, '0')}`;
 }
 
+function computeOverview(
+  rated: Array<{ rating?: number }>,
+  decisions: Array<{ doctorDecision?: string | null }>,
+  complaintsOpen: number,
+  complaintsTotal: number,
+): RatingsOverviewDto {
+  const ratingValues = rated
+    .map((item) => item.rating)
+    .filter((value): value is number => typeof value === 'number' && value >= 1);
+  const decided = decisions.filter((c) => Boolean(c.doctorDecision));
+  const approved = decided.filter((c) => c.doctorDecision === DOCTOR_DECISIONS.APPROVE).length;
+  const modifications = decided.filter(
+    (c) => c.doctorDecision === DOCTOR_DECISIONS.REQUEST_MODIFICATION,
+  ).length;
+
+  return {
+    totalRatings: ratingValues.length,
+    averageRating: average(ratingValues),
+    approvalRate: rate(approved, decided.length),
+    rejectionRate: rate(modifications, decided.length),
+    decisionsTotal: decided.length,
+    complaintsOpen,
+    complaintsTotal,
+  };
+}
+
 export async function listComplaints(actor: Actor) {
-  if (
-    !permissionsInclude(actor.permissions as never, PERMISSIONS.COMPLAINT_VIEW) &&
-    !permissionsInclude(actor.permissions as never, PERMISSIONS.COMPLAINT_MANAGE) &&
-    !permissionsInclude(actor.permissions as never, PERMISSIONS.CASE_VIEW_ALL)
-  ) {
+  if (!canViewComplaints(actor) && !canCreateComplaint(actor)) {
     throw new AppError('You do not have permission to view complaints', 403);
   }
 
-  const items = await Complaint.find().sort({ createdAt: -1 }).limit(200);
+  // Creators without view can only see complaints they filed.
+  const filter =
+    canViewComplaints(actor)
+      ? {}
+      : { createdById: new Types.ObjectId(actor.id) };
+
+  const items = await Complaint.find(filter).sort({ createdAt: -1 }).limit(200);
   return items.map(toDto);
 }
 
+export async function listComplaintStaff(actor: Actor): Promise<ComplaintStaffOptionDto[]> {
+  if (!canCreateComplaint(actor) && !canViewComplaints(actor)) {
+    throw new AppError('You do not have permission to list staff for complaints', 403);
+  }
+
+  const users = await User.find({
+    isActive: true,
+    role: {
+      $in: [ROLES.DESIGNER, ROLES.QC, ROLES.ORTHODONTIST, ROLES.SUPERVISOR, ROLES.COORDINATOR],
+    },
+  })
+    .select('email firstName lastName role')
+    .sort({ lastName: 1, firstName: 1 })
+    .limit(500);
+
+  return users.map((user) => ({
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+  }));
+}
+
 export async function getRatingsOverview(actor: Actor): Promise<RatingsOverviewDto> {
-  if (
-    !permissionsInclude(actor.permissions as never, PERMISSIONS.COMPLAINT_VIEW) &&
-    !permissionsInclude(actor.permissions as never, PERMISSIONS.CASE_VIEW_ALL)
-  ) {
+  if (!canViewComplaints(actor)) {
     throw new AppError('You do not have permission to view ratings', 403);
   }
 
@@ -103,29 +226,196 @@ export async function getRatingsOverview(actor: Actor): Promise<RatingsOverviewD
     Case.find({
       doctorDecision: { $exists: true, $ne: null },
       isDeleted: false,
-    }).select('doctorDecision doctorEngagement'),
+    }).select('doctorDecision'),
     Complaint.countDocuments({
       status: { $in: [COMPLAINT_STATUSES.OPEN, COMPLAINT_STATUSES.IN_PROGRESS] },
     }),
     Complaint.countDocuments(),
   ]);
 
-  const ratingSum = rated.reduce((sum, item) => sum + (item.rating ?? 0), 0);
-  const viewed = decisions.filter((c) => c.doctorEngagement?.openedAt || c.doctorDecision);
-  const approved = decisions.filter((c) => c.doctorDecision === 'approve').length;
-  const modifications = decisions.filter(
-    (c) => c.doctorDecision === 'request_modification',
-  ).length;
-  const viewedCount = Math.max(viewed.length, 1);
+  return computeOverview(rated, decisions, complaintsOpen, complaintsTotal);
+}
 
-  return {
-    totalRatings: rated.length,
-    averageSatisfaction: rated.length ? Number((ratingSum / rated.length).toFixed(2)) : null,
-    approvalRate: Number(((approved / viewedCount) * 100).toFixed(1)),
-    rejectionRate: Number(((modifications / viewedCount) * 100).toFixed(1)),
-    complaintsOpen,
-    complaintsTotal,
-  };
+export async function getComplaintReports(
+  actor: Actor,
+  options: { months?: number } = {},
+): Promise<ComplaintReportsDto> {
+  if (!canViewComplaints(actor)) {
+    throw new AppError('You do not have permission to view complaint reports', 403);
+  }
+
+  const monthCount = Math.min(Math.max(options.months ?? 6, 3), 12);
+  const keys = recentMonthKeys(monthCount);
+  const start = new Date(`${keys[0]}-01T00:00:00.000Z`);
+
+  const [complaints, decisions, overview] = await Promise.all([
+    Complaint.find({ createdAt: { $gte: start } }),
+    Case.find({
+      isDeleted: false,
+      doctorDecision: { $exists: true, $ne: null },
+      doctorDecisionAt: { $gte: start },
+    }).select('doctorId doctorName doctorDecision doctorDecisionAt'),
+    getRatingsOverview(actor),
+  ]);
+
+  const monthMap = new Map<string, ComplaintTrendMonthDto>();
+  for (const key of keys) {
+    monthMap.set(key, {
+      key,
+      label: monthLabel(key),
+      complaintsTotal: 0,
+      complaintsOpen: 0,
+      complaintsResolved: 0,
+      byType: emptyByType(),
+      ratingsCount: 0,
+      averageRating: null,
+      decisionsTotal: 0,
+      approvalRate: null,
+      rejectionRate: null,
+    });
+  }
+
+  const monthRatings = new Map<string, number[]>();
+  const monthApproved = new Map<string, number>();
+  const monthMods = new Map<string, number>();
+  const monthDecisions = new Map<string, number>();
+
+  for (const key of keys) {
+    monthRatings.set(key, []);
+    monthApproved.set(key, 0);
+    monthMods.set(key, 0);
+    monthDecisions.set(key, 0);
+  }
+
+  for (const complaint of complaints) {
+    const key = monthKey(complaint.createdAt);
+    const bucket = monthMap.get(key);
+    if (!bucket) continue;
+    bucket.complaintsTotal += 1;
+    if (
+      complaint.status === COMPLAINT_STATUSES.OPEN ||
+      complaint.status === COMPLAINT_STATUSES.IN_PROGRESS
+    ) {
+      bucket.complaintsOpen += 1;
+    }
+    if (
+      complaint.status === COMPLAINT_STATUSES.RESOLVED ||
+      complaint.status === COMPLAINT_STATUSES.CLOSED
+    ) {
+      bucket.complaintsResolved += 1;
+    }
+    if (ALL_COMPLAINT_TYPES.includes(complaint.type)) {
+      bucket.byType[complaint.type] += 1;
+    }
+    if (typeof complaint.rating === 'number' && complaint.rating >= 1) {
+      monthRatings.get(key)?.push(complaint.rating);
+    }
+  }
+
+  for (const decision of decisions) {
+    if (!decision.doctorDecisionAt) continue;
+    const key = monthKey(decision.doctorDecisionAt);
+    if (!monthDecisions.has(key)) continue;
+    monthDecisions.set(key, (monthDecisions.get(key) ?? 0) + 1);
+    if (decision.doctorDecision === DOCTOR_DECISIONS.APPROVE) {
+      monthApproved.set(key, (monthApproved.get(key) ?? 0) + 1);
+    }
+    if (decision.doctorDecision === DOCTOR_DECISIONS.REQUEST_MODIFICATION) {
+      monthMods.set(key, (monthMods.get(key) ?? 0) + 1);
+    }
+  }
+
+  const months = keys.map((key) => {
+    const bucket = monthMap.get(key)!;
+    const ratings = monthRatings.get(key) ?? [];
+    const decided = monthDecisions.get(key) ?? 0;
+    bucket.ratingsCount = ratings.length;
+    bucket.averageRating = average(ratings);
+    bucket.decisionsTotal = decided;
+    bucket.approvalRate = rate(monthApproved.get(key) ?? 0, decided);
+    bucket.rejectionRate = rate(monthMods.get(key) ?? 0, decided);
+    return bucket;
+  });
+
+  // Per-doctor metrics from all-time decisions + complaints (bounded).
+  const [allDecisions, allComplaints] = await Promise.all([
+    Case.find({
+      isDeleted: false,
+      doctorDecision: { $exists: true, $ne: null },
+    }).select('doctorId doctorName doctorDecision'),
+    Complaint.find().select(
+      'doctorId doctorName rating status',
+    ),
+  ]);
+
+  const byDoctorMap = new Map<string, DoctorComplaintMetricsDto>();
+
+  function ensureDoctor(id: string, name: string) {
+    let row = byDoctorMap.get(id);
+    if (!row) {
+      row = {
+        doctorId: id,
+        doctorName: name || 'Unknown doctor',
+        decisionsTotal: 0,
+        approvedCount: 0,
+        modificationCount: 0,
+        cancelCount: 0,
+        approvalRate: null,
+        rejectionRate: null,
+        ratingsCount: 0,
+        averageRating: null,
+        complaintsCount: 0,
+        openComplaints: 0,
+      };
+      byDoctorMap.set(id, row);
+    }
+    return row;
+  }
+
+  for (const decision of allDecisions) {
+    const id = String(decision.doctorId);
+    const row = ensureDoctor(id, decision.doctorName || '');
+    row.decisionsTotal += 1;
+    if (decision.doctorDecision === DOCTOR_DECISIONS.APPROVE) row.approvedCount += 1;
+    if (decision.doctorDecision === DOCTOR_DECISIONS.REQUEST_MODIFICATION) {
+      row.modificationCount += 1;
+    }
+    if (decision.doctorDecision === DOCTOR_DECISIONS.CANCEL) row.cancelCount += 1;
+  }
+
+  const doctorRatings = new Map<string, number[]>();
+
+  for (const complaint of allComplaints) {
+    if (!complaint.doctorId) continue;
+    const id = String(complaint.doctorId);
+    const row = ensureDoctor(id, complaint.doctorName || '');
+    row.complaintsCount += 1;
+    if (
+      complaint.status === COMPLAINT_STATUSES.OPEN ||
+      complaint.status === COMPLAINT_STATUSES.IN_PROGRESS
+    ) {
+      row.openComplaints += 1;
+    }
+    if (typeof complaint.rating === 'number' && complaint.rating >= 1) {
+      const list = doctorRatings.get(id) ?? [];
+      list.push(complaint.rating);
+      doctorRatings.set(id, list);
+    }
+  }
+
+  const byDoctor = [...byDoctorMap.values()]
+    .map((row) => {
+      const ratings = doctorRatings.get(row.doctorId) ?? [];
+      row.ratingsCount = ratings.length;
+      row.averageRating = average(ratings);
+      row.approvalRate = rate(row.approvedCount, row.decisionsTotal);
+      row.rejectionRate = rate(row.modificationCount, row.decisionsTotal);
+      return row;
+    })
+    .sort((a, b) => b.decisionsTotal - a.decisionsTotal || b.complaintsCount - a.complaintsCount)
+    .slice(0, 100);
+
+  return { overview, months, byDoctor };
 }
 
 export async function createComplaint(
@@ -133,27 +423,35 @@ export async function createComplaint(
   input: CreateComplaintInput,
   audit?: RequestAuditContext,
 ) {
-  const canCreate =
-    permissionsInclude(actor.permissions as never, PERMISSIONS.COMPLAINT_MANAGE) ||
-    permissionsInclude(actor.permissions as never, PERMISSIONS.CASE_VIEW_OWN) ||
-    permissionsInclude(actor.permissions as never, PERMISSIONS.CASE_VIEW_ALL);
+  if (!canCreateComplaint(actor)) {
+    throw new AppError('You do not have permission to file complaints', 403);
+  }
 
-  if (!canCreate) throw new AppError('You do not have permission to file complaints', 403);
-
-  let doctorId = new Types.ObjectId(actor.id);
-  let doctorName = actorName(actor);
+  let doctorId: Types.ObjectId | undefined;
+  let doctorName: string | undefined;
+  let employeeId = input.responsibleEmployeeId;
+  let qcId = input.responsibleQcId;
+  let consultantId = input.responsibleConsultantId;
+  let supervisorId = input.responsibleSupervisorId;
 
   if (input.caseId) {
-    const caseDoc = await Case.findOne({ caseId: input.caseId, isDeleted: false });
+    const caseDoc = await Case.findOne({ caseId: input.caseId.trim(), isDeleted: false });
     if (!caseDoc) throw new AppError('Case not found', 404);
     doctorId = caseDoc.doctorId;
     doctorName = caseDoc.doctorName;
+    // Prefill responsible parties from the case when not explicitly provided.
+    if (!employeeId && caseDoc.assignedDesignerId) {
+      employeeId = String(caseDoc.assignedDesignerId);
+    }
+    if (!consultantId && caseDoc.assignedConsultantId) {
+      consultantId = String(caseDoc.assignedConsultantId);
+    }
   }
 
-  const employee = await resolveUserName(input.responsibleEmployeeId);
-  const qc = await resolveUserName(input.responsibleQcId);
-  const consultant = await resolveUserName(input.responsibleConsultantId);
-  const supervisor = await resolveUserName(input.responsibleSupervisorId);
+  const employee = await resolveUserName(employeeId);
+  const qc = await resolveUserName(qcId);
+  const consultant = await resolveUserName(consultantId);
+  const supervisor = await resolveUserName(supervisorId);
 
   const doc = await Complaint.create({
     complaintCode: await nextComplaintCode(),
@@ -169,10 +467,11 @@ export async function createComplaint(
     responsibleConsultantName: consultant.name,
     responsibleSupervisorId: supervisor.id,
     responsibleSupervisorName: supervisor.name,
-    type: input.type,
+    type: input.type ?? COMPLAINT_TYPES.OTHER,
     status: COMPLAINT_STATUSES.OPEN,
     rating: input.rating ?? undefined,
     additionalComments: input.additionalComments?.trim() || '',
+    comments: [],
     createdById: new Types.ObjectId(actor.id),
     createdByName: actorName(actor),
   });
@@ -206,9 +505,25 @@ export async function updateComplaint(
   const doc = await Complaint.findById(complaintId);
   if (!doc) throw new AppError('Complaint not found', 404);
 
-  if (input.status !== undefined) doc.status = input.status;
+  if (input.status !== undefined) {
+    if (!ALL_COMPLAINT_STATUSES.includes(input.status)) {
+      throw new AppError('Invalid complaint status', 400);
+    }
+    doc.status = input.status;
+  }
+
   if (input.additionalComments !== undefined) {
     doc.additionalComments = input.additionalComments.trim();
+  }
+
+  if (input.comment?.trim()) {
+    doc.comments.push({
+      _id: new Types.ObjectId(),
+      text: input.comment.trim(),
+      authorId: new Types.ObjectId(actor.id),
+      authorName: actorName(actor),
+      createdAt: new Date(),
+    } as never);
   }
 
   if (input.responsibleEmployeeId !== undefined) {

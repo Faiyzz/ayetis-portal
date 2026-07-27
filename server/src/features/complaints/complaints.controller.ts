@@ -29,9 +29,30 @@ export async function list(req: AuthenticatedRequest, res: Response, next: NextF
   }
 }
 
+export async function staff(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await complaintsService.listComplaintStaff(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function ratings(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const data = await complaintsService.getRatingsOverview(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function reports(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const months = req.query.months ? Number(req.query.months) : undefined;
+    const data = await complaintsService.getComplaintReports(await actor(req), {
+      months: Number.isFinite(months) ? months : undefined,
+    });
     res.json({ success: true, data });
   } catch (error) {
     next(error);
