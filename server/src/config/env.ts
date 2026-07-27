@@ -35,4 +35,8 @@ export const env = {
   s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? process.env.AWS_SECRET_ACCESS_KEY ?? '',
   s3ForcePathStyle: (process.env.S3_FORCE_PATH_STYLE ?? 'true').toLowerCase() !== 'false',
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 500 * 1024 * 1024),
+  /** Days after passwordChangedAt before login requires a change. 0 disables expiry. */
+  passwordExpiryDays: Number(process.env.PASSWORD_EXPIRY_DAYS ?? 90),
+  /** Seconds a signed file download URL remains valid. */
+  signedUrlTtlSeconds: Number(process.env.SIGNED_URL_TTL_SECONDS ?? 300),
 };

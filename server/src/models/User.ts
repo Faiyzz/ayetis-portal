@@ -21,6 +21,8 @@ export interface IUser extends Document {
   permissionDenies: Permission[];
   passwordResetToken?: string;
   passwordResetExpires?: Date;
+  passwordChangedAt?: Date;
+  mustChangePassword: boolean;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
@@ -90,6 +92,14 @@ const userSchema = new Schema<IUser>(
       type: Date,
       select: false,
     },
+    passwordChangedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
@@ -103,6 +113,7 @@ userSchema.pre('save', async function hashPassword(next) {
   }
 
   this.password = await bcrypt.hash(this.password, 12);
+  this.passwordChangedAt = new Date();
   next();
 });
 

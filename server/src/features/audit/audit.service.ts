@@ -87,6 +87,8 @@ export async function listActivityLogs(query: {
   action?: AuditAction;
   actorEmail?: string;
   q?: string;
+  from?: string;
+  to?: string;
 }): Promise<ActivityLogListResult> {
   const page = Math.max(1, query.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 25));
@@ -108,6 +110,25 @@ export async function listActivityLogs(query: {
       { actorName: { $regex: term, $options: 'i' } },
       { targetId: { $regex: term, $options: 'i' } },
     ];
+  }
+
+  const createdAt: Record<string, Date> = {};
+  if (query.from) {
+    const from = new Date(query.from);
+    if (!Number.isNaN(from.getTime())) createdAt.$gte = from;
+  }
+  if (query.to) {
+    const to = new Date(query.to);
+    if (!Number.isNaN(to.getTime())) {
+      // Inclusive end-of-day when only a date is provided
+      if (/^\d{4}-\d{2}-\d{2}$/.test(query.to)) {
+        to.setUTCHours(23, 59, 59, 999);
+      }
+      createdAt.$lte = to;
+    }
+  }
+  if (Object.keys(createdAt).length) {
+    filter.createdAt = createdAt;
   }
 
   const [items, total] = await Promise.all([

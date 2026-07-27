@@ -21,4 +21,12 @@ export const listActivityQuerySchema = z.object({
     .max(120)
     .optional()
     .transform((value) => (value && value.length > 0 ? value : undefined)),
+  from: z
+    .string()
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined)),
+  to: z
+    .string()
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined)),
 });

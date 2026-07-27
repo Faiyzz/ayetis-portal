@@ -23,6 +23,11 @@ export function RequireAuth() {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
+  const mustUpdatePassword = Boolean(user.mustChangePassword || user.passwordExpired);
+  if (mustUpdatePassword && location.pathname !== '/app/change-password') {
+    return <Navigate to="/app/change-password" replace />;
+  }
+
   return <Outlet />;
 }
 

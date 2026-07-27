@@ -90,7 +90,7 @@ export function RegisterPage() {
         required
         value={form.password}
         onChange={(e) => update('password', e.target.value)}
-        placeholder="Min. 8 chars, mixed case + number"
+        placeholder="Min. 8 chars, mixed case, number, special"
       />
 
       <AuthButton loading={loading}>Create account</AuthButton>

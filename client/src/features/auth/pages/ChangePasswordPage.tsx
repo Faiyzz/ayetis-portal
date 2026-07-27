@@ -1,10 +1,18 @@
+import { PASSWORD_POLICY_DESCRIPTION } from '@ayetis/shared';
 import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { changePassword } from '@/features/auth/api';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { useAuthStore } from '@/features/auth/store';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
 export function ChangePasswordPage() {
+  const user = useAuthStore((s) => s.user);
+  const setSession = useAuthStore((s) => s.setSession);
+  const token = useAuthStore((s) => s.token);
+  const navigate = useNavigate();
+  const forced = Boolean(user?.mustChangePassword || user?.passwordExpired);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -26,9 +34,15 @@ export function ChangePasswordPage() {
     try {
       const result = await changePassword(currentPassword, newPassword);
       toast().success(result.message);
+      if (result.user && token) {
+        setSession(result.user, token);
+      }
       setCurrentPassword('');
       setNewPassword('');
       setConfirm('');
+      if (forced) {
+        navigate('/app', { replace: true });
+      }
     } catch (err) {
       const message = getErrorMessage(err, 'Unable to change password');
       setError(message);
@@ -40,10 +54,17 @@ export function ChangePasswordPage() {
 
   return (
     <div className="w-full max-w-md">
-      <h1 className="text-2xl font-bold tracking-tight text-ink">Change password</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-ink">
+        {forced ? 'Password update required' : 'Change password'}
+      </h1>
       <p className="mt-1 text-sm text-muted">
-        Update your password regularly to keep your account secure.
+        {forced
+          ? user?.passwordExpired
+            ? 'Your password has expired. Set a new one to continue.'
+            : 'You must set a new password before using the portal.'
+          : 'Update your password regularly to keep your account secure.'}
       </p>
+      <p className="mt-2 text-xs text-muted">{PASSWORD_POLICY_DESCRIPTION}</p>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-4">
         {error ? <Alert>{error}</Alert> : null}
@@ -78,7 +99,7 @@ export function ChangePasswordPage() {
           onChange={(e) => setConfirm(e.target.value)}
         />
 
-        <AuthButton loading={loading}>Save new password</AuthButton>
+        <AuthButton loading={loading}>{forced ? 'Update and continue' : 'Save password'}</AuthButton>
       </form>
     </div>
   );

@@ -121,24 +121,28 @@ export function caseFileDownloadUrl(caseId: string, fileId: string): string {
 }
 
 export async function downloadCaseFile(caseId: string, fileId: string, filename: string) {
-  const token = localStorage.getItem('ayetis_token');
-  const response = await fetch(caseFileDownloadUrl(caseId, fileId), {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
+  const { data } = await api.get(`/cases/${caseId}/files/${fileId}/signed-url`);
+  const signed = data.data as { url: string };
+  const resolved = signed.url.startsWith('http')
+    ? signed.url
+    : signed.url.startsWith('/api')
+      ? signed.url
+      : `/api${signed.url.startsWith('/') ? '' : '/'}${signed.url}`;
 
+  const response = await fetch(resolved);
   if (!response.ok) {
     throw new Error('Unable to download file');
   }
 
   const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
+  const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
-  anchor.href = url;
+  anchor.href = objectUrl;
   anchor.download = filename;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(objectUrl);
 }
 
 export async function downloadAllCaseFiles(caseId: string) {
@@ -317,10 +321,15 @@ export async function submitDoctorDecision(
 }
 
 export async function downloadDeliveryVideo(caseId: string) {
-  const token = localStorage.getItem('ayetis_token');
-  const response = await fetch(`/api/cases/${caseId}/delivery/video`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
+  const { data } = await api.get(`/cases/${caseId}/delivery/video/signed-url`);
+  const signed = data.data as { url: string };
+  const resolved = signed.url.startsWith('http')
+    ? signed.url
+    : signed.url.startsWith('/api')
+      ? signed.url
+      : `/api${signed.url.startsWith('/') ? '' : '/'}${signed.url}`;
+
+  const response = await fetch(resolved);
   if (!response.ok) throw new Error('Unable to download delivery video');
 
   const disposition = response.headers.get('Content-Disposition') || '';

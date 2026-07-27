@@ -45,7 +45,7 @@ export async function resetPassword(token: string, password: string): Promise<Au
 export async function changePassword(
   currentPassword: string,
   newPassword: string,
-): Promise<{ message: string }> {
+): Promise<{ message: string; user?: PublicUser }> {
   const { data } = await api.post('/auth/change-password', {
     currentPassword,
     newPassword,

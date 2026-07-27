@@ -39,6 +39,8 @@ export function ActivityLogPage() {
   const [pageSize] = useState(25);
   const [action, setAction] = useState<AuditAction | ''>('');
   const [q, setQ] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -51,6 +53,8 @@ export function ActivityLogPage() {
         pageSize,
         action,
         q,
+        from,
+        to,
       });
       setItems(data.items);
       setTotal(data.total);
@@ -88,7 +92,7 @@ export function ActivityLogPage() {
 
       <form
         onSubmit={handleFilter}
-        className="grid gap-3 rounded-xl border border-line bg-white p-4 sm:grid-cols-[1fr_220px_auto]"
+        className="grid gap-3 rounded-xl border border-line bg-white p-4 sm:grid-cols-2 lg:grid-cols-[1fr_220px_160px_160px_auto]"
       >
         <TextField
           label="Search"
@@ -112,6 +116,20 @@ export function ActivityLogPage() {
             ))}
           </select>
         </label>
+        <TextField
+          label="From"
+          name="from"
+          type="date"
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+        />
+        <TextField
+          label="To"
+          name="to"
+          type="date"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+        />
         <div className="flex items-end">
           <AuthButton loading={loading}>Apply</AuthButton>
         </div>

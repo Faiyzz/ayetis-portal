@@ -27,6 +27,10 @@ export interface PublicUser {
   permissionGrants: Permission[];
   permissionDenies: Permission[];
   permissions: Permission[];
+  mustChangePassword: boolean;
+  passwordExpired: boolean;
+  passwordChangedAt: string | null;
+  passwordExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -62,6 +66,10 @@ export interface ManagedUserDto {
   permissionGrants: Permission[];
   permissionDenies: Permission[];
   permissions: Permission[];
+  mustChangePassword: boolean;
+  passwordExpired: boolean;
+  passwordChangedAt: string | null;
+  passwordExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

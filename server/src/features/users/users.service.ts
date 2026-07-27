@@ -5,13 +5,16 @@ import {
   ROLE_LABELS,
   getPermissionCatalog,
   getPermissionsForRole,
+  isPasswordExpired,
   isPermission,
+  passwordExpiresAt,
   permissionsInclude,
   resolveEffectivePermissions,
   type Permission,
   type PublicUser,
   type Role,
 } from '@ayetis/shared';
+import { env } from '../../config/env';
 import {
   RolePermissionConfig,
   buildRolePermissionDto,
@@ -88,6 +91,10 @@ export function toPublicUser(
   user: IUser,
   roleOverrides?: { grants: Permission[]; denies: Permission[] },
 ): PublicUser {
+  const changedAt = user.passwordChangedAt ?? user.createdAt;
+  const expiresAt = passwordExpiresAt(changedAt, env.passwordExpiryDays);
+  const expired = isPasswordExpired(changedAt, env.passwordExpiryDays);
+
   return {
     id: user.id,
     email: user.email,
@@ -100,6 +107,10 @@ export function toPublicUser(
     permissionGrants: user.role === ROLES.ADMIN ? [] : [...(user.permissionGrants ?? [])],
     permissionDenies: user.role === ROLES.ADMIN ? [] : [...(user.permissionDenies ?? [])],
     permissions: resolveUserPermissions(user, roleOverrides),
+    mustChangePassword: Boolean(user.mustChangePassword) || expired,
+    passwordExpired: expired,
+    passwordChangedAt: changedAt ? changedAt.toISOString() : null,
+    passwordExpiresAt: expiresAt ? expiresAt.toISOString() : null,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };
@@ -226,6 +237,8 @@ export async function createUser(
     departmentName,
     permissionGrants: grants,
     permissionDenies: denies,
+    mustChangePassword: true,
+    passwordChangedAt: new Date(),
   });
 
   if (audit) {

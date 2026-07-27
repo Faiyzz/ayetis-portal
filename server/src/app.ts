@@ -10,6 +10,7 @@ import clarificationsRoutes from './features/clarifications/clarifications.route
 import complaintsRoutes from './features/complaints/complaints.routes';
 import deletionsRoutes from './features/deletions/deletions.routes';
 import departmentsRoutes from './features/departments/departments.routes';
+import filesRoutes from './features/files/files.routes';
 import notificationsRoutes from './features/notifications/notifications.routes';
 import reportsRoutes from './features/reports/reports.routes';
 import supervisorRoutes from './features/supervisor/supervisor.routes';
@@ -43,6 +44,7 @@ export function createApp() {
   app.use('/api/users', usersRoutes);
   app.use('/api/activity', auditRoutes);
   app.use('/api/notifications', notificationsRoutes);
+  app.use('/api/files', filesRoutes);
   app.use('/api/cases', casesRoutes);
   app.use('/api/clarifications', clarificationsRoutes);
   app.use('/api/supervisor', supervisorRoutes);

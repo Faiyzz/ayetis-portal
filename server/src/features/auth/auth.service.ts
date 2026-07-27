@@ -222,6 +222,7 @@ export async function resetPassword(input: ResetPasswordInput, ctx: RequestAudit
   user.password = input.password;
   user.passwordResetToken = undefined;
   user.passwordResetExpires = undefined;
+  user.mustChangePassword = false;
   await user.save();
 
   await recordActivity({
@@ -257,6 +258,7 @@ export async function changePassword(
   }
 
   user.password = input.newPassword;
+  user.mustChangePassword = false;
   await user.save();
 
   await recordActivity({
@@ -271,6 +273,7 @@ export async function changePassword(
 
   return {
     message: 'Password updated successfully',
+    user: await toPublicUserAsync(user),
   };
 }
 

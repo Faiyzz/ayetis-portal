@@ -13,6 +13,8 @@ export async function fetchActivityLogs(params: {
   action?: AuditAction | '';
   actorEmail?: string;
   q?: string;
+  from?: string;
+  to?: string;
 }): Promise<ActivityLogListResult> {
   const { data } = await api.get('/activity', {
     params: {
@@ -21,6 +23,8 @@ export async function fetchActivityLogs(params: {
       action: params.action || undefined,
       actorEmail: params.actorEmail || undefined,
       q: params.q || undefined,
+      from: params.from || undefined,
+      to: params.to || undefined,
     },
   });
   return data.data;

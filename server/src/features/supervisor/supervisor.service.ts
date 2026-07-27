@@ -385,6 +385,8 @@ export async function createTeamMember(
     lastName: input.lastName.trim(),
     role: input.role,
     isActive: true,
+    mustChangePassword: true,
+    passwordChangedAt: new Date(),
   });
 
   await recordActivity({

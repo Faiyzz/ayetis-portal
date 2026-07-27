@@ -1,12 +1,13 @@
+import { isPasswordComplex, PASSWORD_POLICY_DESCRIPTION } from '@ayetis/shared';
 import { z } from 'zod';
 
-const passwordSchema = z
+export const passwordSchema = z
   .string()
-  .min(8, 'Password must be at least 8 characters')
-  .max(128, 'Password is too long')
-  .regex(/[A-Z]/, 'Password must include an uppercase letter')
-  .regex(/[a-z]/, 'Password must include a lowercase letter')
-  .regex(/[0-9]/, 'Password must include a number');
+  .min(8)
+  .max(128)
+  .refine((value) => isPasswordComplex(value), {
+    message: PASSWORD_POLICY_DESCRIPTION,
+  });
 
 export const registerSchema = z.object({
   email: z.string().email('Enter a valid email address').toLowerCase().trim(),

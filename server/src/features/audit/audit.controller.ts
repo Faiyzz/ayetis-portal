@@ -15,6 +15,8 @@ export async function listActivity(
       action: req.query.action ? (String(req.query.action) as AuditAction) : undefined,
       actorEmail: req.query.actorEmail ? String(req.query.actorEmail) : undefined,
       q: req.query.q ? String(req.query.q) : undefined,
+      from: req.query.from ? String(req.query.from) : undefined,
+      to: req.query.to ? String(req.query.to) : undefined,
     });
 
     res.json({

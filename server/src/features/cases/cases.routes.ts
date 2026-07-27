@@ -226,6 +226,18 @@ router.get(
 );
 
 router.get(
+  '/:caseId/files/:fileId/signed-url',
+  requireAnyPermission(
+    PERMISSIONS.CASE_VIEW_OWN,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_CONSULT,
+  ),
+  casesController.signedFileUrl,
+);
+
+router.get(
   '/:caseId/files/:fileId',
   requireAnyPermission(
     PERMISSIONS.CASE_VIEW_OWN,
@@ -235,6 +247,18 @@ router.get(
     PERMISSIONS.CASE_CONSULT,
   ),
   casesController.downloadFile,
+);
+
+router.get(
+  '/:caseId/delivery/video/signed-url',
+  requireAnyPermission(
+    PERMISSIONS.CASE_VIEW_OWN,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_CONSULT,
+  ),
+  casesController.signedDeliveryVideoUrl,
 );
 
 router.get(

@@ -320,6 +320,43 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response, nex
   }
 }
 
+export async function signedFileUrl(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.createCaseFileSignedUrl(
+      await actor(req),
+      req.params.caseId,
+      req.params.fileId,
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'Signed download URL issued',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function signedDeliveryVideoUrl(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.createDeliveryVideoSignedUrl(
+      await actor(req),
+      req.params.caseId,
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'Signed delivery video URL issued',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function downloadAllFiles(
   req: AuthenticatedRequest,
   res: Response,

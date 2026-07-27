@@ -1358,6 +1358,33 @@ export async function getCaseFileForDownload(
   };
 }
 
+export async function createCaseFileSignedUrl(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  fileId: string,
+) {
+  const file = await getCaseFileForDownload(actor, caseIdOrMongoId, fileId);
+  const { createSignedFileAccess } = await import('../../services/storage.service');
+  return createSignedFileAccess({
+    storageKey: file.storageKey,
+    originalName: file.originalName,
+    mimeType: file.mimeType,
+  });
+}
+
+export async function createDeliveryVideoSignedUrl(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+) {
+  const file = await getDeliveryVideoForDownload(actor, caseIdOrMongoId);
+  const { createSignedFileAccess } = await import('../../services/storage.service');
+  return createSignedFileAccess({
+    storageKey: file.storageKey,
+    originalName: file.originalName,
+    mimeType: file.mimeType,
+  });
+}
+
 export async function getDeliveryVideoForDownload(
   actor: CaseActor,
   caseIdOrMongoId: string,

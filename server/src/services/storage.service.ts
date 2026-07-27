@@ -10,7 +10,9 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Upload } from '@aws-sdk/lib-storage';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { env } from '../config/env';
 
 export type StorageProvider = 'local' | 's3';
@@ -225,4 +227,91 @@ export async function materializeToTempFile(storageKey: string): Promise<string>
   const { stream } = await openStoredReadStream(storageKey);
   await pipeline(stream, createWriteStream(tempPath));
   return tempPath;
+}
+
+export interface SignedFileAccess {
+  url: string;
+  expiresAt: string;
+  provider: StorageProvider;
+}
+
+function signPayload(payload: string): string {
+  return createHmac('sha256', env.jwtSecret).update(payload).digest('base64url');
+}
+
+/**
+ * Issue a time-limited download URL after permission checks.
+ * S3 → native presigned GET. Local → HMAC token on /api/files/signed.
+ */
+export async function createSignedFileAccess(input: {
+  storageKey: string;
+  originalName: string;
+  mimeType?: string;
+  ttlSeconds?: number;
+}): Promise<SignedFileAccess> {
+  const ttl = Math.max(30, Math.min(input.ttlSeconds ?? env.signedUrlTtlSeconds, 3600));
+  const expiresAtMs = Date.now() + ttl * 1000;
+  const expiresAt = new Date(expiresAtMs).toISOString();
+
+  if (getProvider() === 's3') {
+    const command = new GetObjectCommand({
+      Bucket: env.s3Bucket,
+      Key: input.storageKey,
+      ResponseContentDisposition: `attachment; filename="${encodeURIComponent(input.originalName)}"`,
+      ResponseContentType: input.mimeType || 'application/octet-stream',
+    });
+    const url = await getSignedUrl(getS3(), command, { expiresIn: ttl });
+    return { url, expiresAt, provider: 's3' };
+  }
+
+  const payload = [
+    input.storageKey,
+    String(expiresAtMs),
+    input.originalName,
+    input.mimeType || 'application/octet-stream',
+  ].join('|');
+  const signature = signPayload(payload);
+  const token = Buffer.from(`${payload}|${signature}`).toString('base64url');
+  const apiBase = (process.env.API_PUBLIC_URL || process.env.SERVER_URL || '').replace(/\/$/, '');
+  const url = apiBase
+    ? `${apiBase}/api/files/signed?token=${token}`
+    : `/api/files/signed?token=${token}`;
+
+  return {
+    url,
+    expiresAt,
+    provider: 'local',
+  };
+}
+
+export function verifyLocalSignedToken(token: string): {
+  storageKey: string;
+  originalName: string;
+  mimeType: string;
+  expiresAtMs: number;
+} {
+  let decoded: string;
+  try {
+    decoded = Buffer.from(token, 'base64url').toString('utf8');
+  } catch {
+    throw new Error('Invalid signed token');
+  }
+
+  const parts = decoded.split('|');
+  if (parts.length !== 5) throw new Error('Invalid signed token');
+  const [storageKey, expiresRaw, originalName, mimeType, signature] = parts;
+  const payload = [storageKey, expiresRaw, originalName, mimeType].join('|');
+  const expected = signPayload(payload);
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    throw new Error('Invalid signed token signature');
+  }
+
+  const expiresAtMs = Number(expiresRaw);
+  if (!Number.isFinite(expiresAtMs) || expiresAtMs < Date.now()) {
+    throw new Error('Signed token has expired');
+  }
+
+  return { storageKey, originalName, mimeType, expiresAtMs };
 }
