@@ -14,7 +14,11 @@ import {
   assignCaseSchema,
   createCaseSchema,
   listCasesQuerySchema,
+  performanceQuerySchema,
   productionNotesSchema,
+  qcApproveSchema,
+  qcCommentSchema,
+  qcRejectSchema,
   reasonSchema,
   setPrioritySchema,
   treatmentInstructionsBodySchema,
@@ -34,6 +38,14 @@ const upload = multer({
   },
 });
 
+const deliveryUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 500 * 1024 * 1024,
+    files: 1,
+  },
+});
+
 router.use(authenticate);
 
 router.get(
@@ -42,6 +54,8 @@ router.get(
     PERMISSIONS.CASE_VIEW_OWN,
     PERMISSIONS.CASE_VIEW_ALL,
     PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_CONSULT,
   ),
   validate(listCasesQuerySchema, 'query'),
   casesController.listCases,
@@ -65,6 +79,36 @@ router.get(
 );
 
 router.get(
+  '/dashboard/qc',
+  requirePermission(PERMISSIONS.CASE_QC_REVIEW),
+  casesController.qcDashboard,
+);
+
+router.get(
+  '/dashboard/escalated',
+  requireAnyPermission(
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CASE_CONSULT,
+    PERMISSIONS.CASE_QC_REVIEW,
+  ),
+  casesController.escalatedQueue,
+);
+
+router.get(
+  '/reports/designer/me',
+  requirePermission(PERMISSIONS.CASE_DESIGN),
+  validate(performanceQuerySchema, 'query'),
+  casesController.designerPerformance,
+);
+
+router.get(
+  '/reports/qc/me',
+  requirePermission(PERMISSIONS.CASE_QC_REVIEW),
+  validate(performanceQuerySchema, 'query'),
+  casesController.qcPerformance,
+);
+
+router.get(
   '/assignees/designers',
   requirePermission(PERMISSIONS.CASE_ASSIGN),
   casesController.listDesigners,
@@ -76,6 +120,8 @@ router.get(
     PERMISSIONS.CASE_VIEW_OWN,
     PERMISSIONS.CASE_VIEW_ALL,
     PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_CONSULT,
   ),
   casesController.getCase,
 );
@@ -148,6 +194,7 @@ router.post(
     PERMISSIONS.CASE_VIEW_OWN,
     PERMISSIONS.CASE_VIEW_ALL,
     PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
   ),
   validate(addNoteSchema),
   casesController.addNote,
@@ -167,6 +214,8 @@ router.get(
     PERMISSIONS.CASE_VIEW_OWN,
     PERMISSIONS.CASE_VIEW_ALL,
     PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_CONSULT,
   ),
   casesController.downloadAllFiles,
 );
@@ -177,8 +226,22 @@ router.get(
     PERMISSIONS.CASE_VIEW_OWN,
     PERMISSIONS.CASE_VIEW_ALL,
     PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_CONSULT,
   ),
   casesController.downloadFile,
+);
+
+router.get(
+  '/:caseId/delivery/video',
+  requireAnyPermission(
+    PERMISSIONS.CASE_VIEW_OWN,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_CONSULT,
+  ),
+  casesController.downloadDeliveryVideo,
 );
 
 router.post(
@@ -200,6 +263,28 @@ router.post(
   requirePermission(PERMISSIONS.CASE_DESIGN),
   validate(productionNotesSchema),
   casesController.submitToQc,
+);
+
+router.post(
+  '/:caseId/qc/comments',
+  requirePermission(PERMISSIONS.CASE_QC_REVIEW),
+  validate(qcCommentSchema),
+  casesController.addQcComment,
+);
+
+router.post(
+  '/:caseId/qc/approve',
+  requirePermission(PERMISSIONS.CASE_QC_REVIEW),
+  deliveryUpload.single('video'),
+  validate(qcApproveSchema),
+  casesController.approveQc,
+);
+
+router.post(
+  '/:caseId/qc/reject',
+  requirePermission(PERMISSIONS.CASE_QC_REVIEW),
+  validate(qcRejectSchema),
+  casesController.rejectQc,
 );
 
 router.use('/:caseId/clarifications', caseClarificationsRouter);

@@ -404,3 +404,112 @@ export async function submitToQc(req: AuthenticatedRequest, res: Response, next:
     next(error);
   }
 }
+
+export async function qcDashboard(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.getQcDashboard(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function escalatedQueue(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.getEscalatedCasesQueue(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function addQcComment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.addQcComment(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'QC comment added' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function approveQc(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const video = req.file;
+
+    const data = await casesService.approveQcCase(
+      await actor(req),
+      req.params.caseId,
+      {
+        comments: req.body.comments,
+        deliveryViewLink: req.body.deliveryViewLink,
+      },
+      video,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Case approved by QC' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function rejectQc(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.rejectQcCase(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Case returned to designer' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function designerPerformance(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.getDesignerPerformance(await actor(req), {
+      month: req.query.month ? String(req.query.month) : undefined,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function qcPerformance(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.getQcPerformance(await actor(req), {
+      month: req.query.month ? String(req.query.month) : undefined,
+      view: req.query.view === 'quarter' ? 'quarter' : 'month',
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function downloadDeliveryVideo(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const file = await casesService.getDeliveryVideoForDownload(
+      await actor(req),
+      req.params.caseId,
+    );
+    res.download(file.absolutePath, file.originalName);
+  } catch (error) {
+    next(error);
+  }
+}

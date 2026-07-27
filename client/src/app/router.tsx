@@ -57,6 +57,8 @@ export function AppRouter() {
                   PERMISSIONS.CASE_VIEW_OWN,
                   PERMISSIONS.CASE_VIEW_ALL,
                   PERMISSIONS.CASE_VIEW_ASSIGNED,
+                  PERMISSIONS.CASE_QC_REVIEW,
+                  PERMISSIONS.CASE_CONSULT,
                 ]}
               />
             }

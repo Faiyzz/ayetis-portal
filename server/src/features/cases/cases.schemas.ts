@@ -8,6 +8,7 @@ import {
   isCaseStatus,
   isFileCategory,
   isPaymentStatus,
+  isQcErrorCode,
   type CasePriority,
   type CaseStatus,
 } from '@ayetis/shared';
@@ -183,4 +184,34 @@ export const assignCaseSchema = z
 
 export const productionNotesSchema = z.object({
   notes: z.string().trim().max(5000).optional(),
+});
+
+export const qcCommentSchema = z.object({
+  comments: z.string().trim().min(1, 'Comments are required').max(5000),
+});
+
+export const qcApproveSchema = z.object({
+  comments: z.string().trim().max(5000).optional(),
+  deliveryViewLink: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined)),
+});
+
+export const qcRejectSchema = z.object({
+  errorCode: z
+    .string()
+    .refine((value) => isQcErrorCode(value), { message: 'Invalid QC error code' }),
+  comments: z.string().trim().min(1, 'Comments are required').max(5000),
+  requiredChanges: z.string().trim().min(1, 'Required changes are required').max(5000),
+});
+
+export const performanceQuerySchema = z.object({
+  month: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional(),
+  view: z.enum(['month', 'quarter']).optional(),
 });

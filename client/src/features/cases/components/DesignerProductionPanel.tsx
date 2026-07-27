@@ -2,6 +2,7 @@ import {
   ARCH_OPTION_LABELS,
   CASE_STATUS_LABELS,
   EMPTY_TREATMENT_INSTRUCTIONS,
+  QC_ERROR_CODE_LABELS,
   type ArchOption,
   type CaseDetailDto,
 } from '@ayetis/shared';
@@ -32,9 +33,12 @@ export function DesignerProductionPanel({
   }, [caseData.caseId, caseData.productionNotes]);
 
   const inProduction = caseData.status === 'designer_working';
+  const needsResubmit = caseData.status === 'sent_for_modification';
   const inQc = caseData.status === 'qc_review';
   const waiting = caseData.status === 'waiting_clarification';
   const ti = { ...EMPTY_TREATMENT_INSTRUCTIONS, ...caseData.treatmentInstructions };
+  const canWork =
+    inProduction || needsResubmit || Boolean(caseData.productionStartedAt && !inQc);
 
   async function handleStart() {
     setBusy('start');
@@ -62,11 +66,12 @@ export function DesignerProductionPanel({
   }
 
   async function handleSubmitQc() {
-    if (!window.confirm(`Submit ${caseData.caseId} to the QC queue?`)) return;
+    const label = needsResubmit ? 'Resubmit' : 'Submit';
+    if (!window.confirm(`${label} ${caseData.caseId} to the QC queue?`)) return;
     setBusy('qc');
     try {
       onUpdated(await submitCaseToQc(caseData.caseId, { notes: notes.trim() || undefined }));
-      toast().success('Submitted to QC queue');
+      toast().success(needsResubmit ? 'Resubmitted to QC queue' : 'Submitted to QC queue');
     } catch (err) {
       toast().error(getErrorMessage(err, 'Unable to submit to QC'));
     } finally {
@@ -83,6 +88,30 @@ export function DesignerProductionPanel({
         </p>
       </div>
 
+      {needsResubmit ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-semibold">QC rejected — changes required</p>
+          {caseData.lastQcErrorCode ? (
+            <p className="mt-1">Error: {QC_ERROR_CODE_LABELS[caseData.lastQcErrorCode]}</p>
+          ) : null}
+          {caseData.lastQcComments ? (
+            <p className="mt-1 whitespace-pre-wrap">{caseData.lastQcComments}</p>
+          ) : null}
+          {caseData.lastQcRequiredChanges ? (
+            <p className="mt-2">
+              <span className="font-semibold">Required changes: </span>
+              <span className="whitespace-pre-wrap">{caseData.lastQcRequiredChanges}</span>
+            </p>
+          ) : null}
+          <p className="mt-2 text-xs">
+            Rejection count: {caseData.qcRejectionCount}
+            {caseData.escalatedForOversight
+              ? ' · Escalated to consultant / supervisor queues'
+              : ''}
+          </p>
+        </div>
+      ) : null}
+
       <div className="rounded-lg border border-line bg-surface/50 p-4">
         <p className="text-xs font-medium uppercase tracking-wide text-muted">
           Treatment instructions
@@ -91,10 +120,7 @@ export function DesignerProductionPanel({
           {(
             [
               ['Summary', caseData.treatmentSummary || '—'],
-              [
-                'Arches',
-                ti.arches ? ARCH_OPTION_LABELS[ti.arches as ArchOption] : '—',
-              ],
+              ['Arches', ti.arches ? ARCH_OPTION_LABELS[ti.arches as ArchOption] : '—'],
               ['Appliance', ti.applianceType || '—'],
               ['Retainers', ti.retainers || '—'],
               ['Treatment goal', ti.treatmentGoal || '—'],
@@ -107,9 +133,14 @@ export function DesignerProductionPanel({
             <div
               key={label}
               className={
-                ['Treatment goal', 'Bite details', 'Special requirements', 'Additional notes', 'Free-text instructions', 'Summary'].includes(
-                  label,
-                )
+                [
+                  'Treatment goal',
+                  'Bite details',
+                  'Special requirements',
+                  'Additional notes',
+                  'Free-text instructions',
+                  'Summary',
+                ].includes(label)
                   ? 'sm:col-span-2'
                   : ''
               }
@@ -175,7 +206,7 @@ export function DesignerProductionPanel({
         </label>
 
         <div className="flex flex-wrap gap-2">
-          {!caseData.productionStartedAt && !inQc ? (
+          {!caseData.productionStartedAt && !inQc && !needsResubmit ? (
             <button
               type="button"
               disabled={busy !== null || waiting}
@@ -186,7 +217,7 @@ export function DesignerProductionPanel({
             </button>
           ) : null}
 
-          {(inProduction || caseData.productionStartedAt) && !inQc ? (
+          {canWork && !inQc ? (
             <div className="min-w-[9rem]">
               <AuthButton loading={busy === 'notes'} disabled={waiting}>
                 Update status
@@ -209,7 +240,13 @@ export function DesignerProductionPanel({
               onClick={() => void handleSubmitQc()}
               className="rounded-xl border border-line px-4 py-2.5 text-sm font-semibold text-ink hover:border-brand-300 disabled:opacity-60"
             >
-              {busy === 'qc' ? 'Submitting…' : 'Submit to QC queue'}
+              {busy === 'qc'
+                ? needsResubmit
+                  ? 'Resubmitting…'
+                  : 'Submitting…'
+                : needsResubmit
+                  ? 'Resubmit to QC'
+                  : 'Submit to QC queue'}
             </button>
           ) : null}
         </div>

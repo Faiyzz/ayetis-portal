@@ -5,21 +5,27 @@ import {
   ALL_CASE_STATUSES,
   ALL_FILE_CATEGORIES,
   ALL_PAYMENT_STATUSES,
+  ALL_QC_ERROR_CODES,
   ASSIGNMENT_MODES,
   CASE_PRIORITIES,
   CASE_STATUSES,
   EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORIES,
   PAYMENT_STATUSES,
+  QC_REVIEW_OUTCOMES,
   type ArchOption,
   type AssignmentMode,
   type CasePriority,
   type CaseStatus,
   type FileCategory,
   type PaymentStatus,
+  type QcErrorCode,
+  type QcReviewOutcome,
   type TreatmentInstructions,
 } from '@ayetis/shared';
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
+
+const ALL_QC_REVIEW_OUTCOMES = Object.values(QC_REVIEW_OUTCOMES);
 
 export interface ICaseNote {
   _id: Types.ObjectId;
@@ -64,6 +70,29 @@ export interface ICasePayment {
   updatedAt?: Date;
 }
 
+export interface IQcReview {
+  _id: Types.ObjectId;
+  outcome: QcReviewOutcome;
+  errorCode?: QcErrorCode;
+  comments: string;
+  requiredChanges: string;
+  reviewerId: Types.ObjectId;
+  reviewerName: string;
+  deliveryViewLink?: string;
+  deliveryVideoFilename?: string;
+  deliveryVideoStorageKey?: string;
+  createdAt: Date;
+}
+
+export interface ICaseDelivery {
+  viewLink: string;
+  videoFilename?: string;
+  videoStorageKey?: string;
+  uploadedAt?: Date;
+  uploadedById?: Types.ObjectId;
+  uploadedByName?: string;
+}
+
 export interface ICase extends Document {
   caseId: string;
   doctorId: Types.ObjectId;
@@ -93,6 +122,14 @@ export interface ICase extends Document {
   submittedToQcById?: Types.ObjectId;
   submittedToQcByName?: string;
   productionNotes: string;
+  qcRejectionCount: number;
+  escalatedForOversight: boolean;
+  escalatedAt?: Date;
+  lastQcErrorCode?: QcErrorCode;
+  lastQcComments?: string;
+  lastQcRequiredChanges?: string;
+  delivery?: ICaseDelivery;
+  qcReviews: IQcReview[];
   cancelReason?: string;
   notes: ICaseNote[];
   files: ICaseFile[];
@@ -147,6 +184,41 @@ const caseHistorySchema = new Schema<ICaseHistory>(
     createdAt: { type: Date, default: Date.now },
   },
   { _id: true },
+);
+
+const qcReviewSchema = new Schema<IQcReview>(
+  {
+    outcome: {
+      type: String,
+      enum: ALL_QC_REVIEW_OUTCOMES,
+      required: true,
+    },
+    errorCode: {
+      type: String,
+      enum: ALL_QC_ERROR_CODES,
+    },
+    comments: { type: String, default: '', trim: true },
+    requiredChanges: { type: String, default: '', trim: true },
+    reviewerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    reviewerName: { type: String, required: true },
+    deliveryViewLink: { type: String, trim: true },
+    deliveryVideoFilename: { type: String, trim: true },
+    deliveryVideoStorageKey: { type: String, trim: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: true },
+);
+
+const caseDeliverySchema = new Schema<ICaseDelivery>(
+  {
+    viewLink: { type: String, default: '', trim: true },
+    videoFilename: { type: String, trim: true },
+    videoStorageKey: { type: String, trim: true },
+    uploadedAt: { type: Date },
+    uploadedById: { type: Schema.Types.ObjectId, ref: 'User' },
+    uploadedByName: { type: String },
+  },
+  { _id: false },
 );
 
 const treatmentInstructionsSchema = new Schema<TreatmentInstructions>(
@@ -249,6 +321,14 @@ const caseSchema = new Schema<ICase>(
     submittedToQcById: { type: Schema.Types.ObjectId, ref: 'User' },
     submittedToQcByName: { type: String },
     productionNotes: { type: String, default: '', trim: true },
+    qcRejectionCount: { type: Number, default: 0, min: 0, index: true },
+    escalatedForOversight: { type: Boolean, default: false, index: true },
+    escalatedAt: { type: Date },
+    lastQcErrorCode: { type: String, enum: ALL_QC_ERROR_CODES },
+    lastQcComments: { type: String, trim: true },
+    lastQcRequiredChanges: { type: String, trim: true },
+    delivery: { type: caseDeliverySchema },
+    qcReviews: { type: [qcReviewSchema], default: [] },
     cancelReason: { type: String },
     notes: { type: [caseNoteSchema], default: [] },
     files: { type: [caseFileSchema], default: [] },
@@ -264,6 +344,8 @@ const caseSchema = new Schema<ICase>(
 
 caseSchema.index({ createdAt: -1 });
 caseSchema.index({ status: 1, priority: 1, createdAt: -1 });
+caseSchema.index({ status: 1, submittedToQcAt: -1 });
+caseSchema.index({ escalatedForOversight: 1, updatedAt: -1 });
 
 export const Case: Model<ICase> = mongoose.models.Case ?? mongoose.model<ICase>('Case', caseSchema);
 

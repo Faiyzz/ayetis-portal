@@ -5,6 +5,7 @@ import type {
   CoordinatorQueue,
   DelayLevel,
 } from './coordinator';
+import type { CaseDeliveryDto, QcErrorCode, QcReviewDto } from './qc';
 import type {
   CasePaymentOverview,
   PaymentStatus,
@@ -230,6 +231,14 @@ export interface CaseDetailDto extends CaseListItemDto {
   submittedToQcAt: string | null;
   submittedToQcByName: string | null;
   productionNotes: string;
+  qcRejectionCount: number;
+  escalatedForOversight: boolean;
+  escalatedAt: string | null;
+  lastQcErrorCode: QcErrorCode | null;
+  lastQcComments: string | null;
+  lastQcRequiredChanges: string | null;
+  delivery: CaseDeliveryDto | null;
+  qcReviews: QcReviewDto[];
   notes: CaseNoteDto[];
   files: CaseFileDto[];
   history: CaseHistoryDto[];

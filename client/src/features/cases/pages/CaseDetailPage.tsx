@@ -15,6 +15,7 @@ import {
   addCaseNote,
   cancelCase,
   clearCaseUrgent,
+  downloadDeliveryVideo,
   fetchCase,
   markCaseUrgent,
   softDeleteCase,
@@ -28,6 +29,7 @@ import { CaseStatusTimeline } from '@/features/cases/components/CaseStatusTimeli
 import { CaseValidationAssignPanel } from '@/features/cases/components/CaseValidationAssignPanel';
 import { ClarificationsPanel } from '@/features/cases/components/ClarificationsPanel';
 import { DesignerProductionPanel } from '@/features/cases/components/DesignerProductionPanel';
+import { QcReviewPanel } from '@/features/cases/components/QcReviewPanel';
 import { TreatmentInstructionsPanel } from '@/features/cases/components/TreatmentInstructionsPanel';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
@@ -315,6 +317,51 @@ export function CaseDetailPage() {
                 setSearchParams({ tab: 'clarifications' }, { replace: true })
               }
             />
+          ) : null}
+
+          {can(PERMISSIONS.CASE_QC_REVIEW) && !caseData.isDeleted ? (
+            <QcReviewPanel caseData={caseData} onUpdated={setCaseData} />
+          ) : null}
+
+          {caseData.delivery &&
+          (caseData.status === 'approved' ||
+            caseData.status === 'delivered' ||
+            caseData.status === 'completed') ? (
+            <section className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-5">
+              <h2 className="text-sm font-semibold text-emerald-950">Delivery package</h2>
+              <p className="mt-1 text-sm text-emerald-900/80">
+                QC approved this case
+                {caseData.delivery.uploadedByName
+                  ? ` (${caseData.delivery.uploadedByName})`
+                  : ''}
+                .
+              </p>
+              <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                {caseData.delivery.viewLink ? (
+                  <a
+                    href={caseData.delivery.viewLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold text-brand-700 underline"
+                  >
+                    Open HTML / view link
+                  </a>
+                ) : null}
+                {caseData.delivery.videoFilename ? (
+                  <button
+                    type="button"
+                    className="font-semibold text-brand-700 underline"
+                    onClick={() => {
+                      void downloadDeliveryVideo(caseData.caseId).catch((err) =>
+                        toast().error(getErrorMessage(err, 'Unable to download video')),
+                      );
+                    }}
+                  >
+                    Download {caseData.delivery.videoFilename}
+                  </button>
+                ) : null}
+              </div>
+            </section>
           ) : null}
 
           <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">

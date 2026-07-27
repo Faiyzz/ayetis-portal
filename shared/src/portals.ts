@@ -126,6 +126,11 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
         description: 'Filter and open assigned work',
         to: '/app/cases',
       },
+      {
+        label: 'My performance',
+        description: 'Monthly cases and modifications',
+        to: '/app/designer?tab=performance',
+      },
     ],
   },
   [ROLES.QC]: {
@@ -142,10 +147,12 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
       {
         label: 'QC queue',
         description: 'Cases waiting for quality review',
+        to: '/app/qc',
       },
       {
-        label: 'Error trends',
-        description: 'QC performance reporting coming soon',
+        label: 'Performance',
+        description: 'Case counts, reverts, and error trends',
+        to: '/app/qc?tab=performance',
       },
     ],
   },
@@ -163,10 +170,12 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
       {
         label: 'Consultation queue',
         description: 'Cases needing clinical guidance',
+        to: '/app/orthodontist',
       },
       {
-        label: 'Consultant QC',
-        description: 'Escalated QC reviews will land here',
+        label: 'Escalated QC',
+        description: 'Cases rejected twice by QC',
+        to: '/app/orthodontist?tab=escalated',
       },
     ],
   },
@@ -184,10 +193,12 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
       {
         label: 'Team queues',
         description: 'Designer, QC, and consultant overview',
+        to: '/app/supervisor',
       },
       {
-        label: 'Performance',
-        description: 'Team and member reports coming soon',
+        label: 'Escalated cases',
+        description: 'Cases with repeated QC rejection',
+        to: '/app/supervisor?tab=escalated',
       },
     ],
   },

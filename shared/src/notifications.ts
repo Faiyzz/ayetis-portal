@@ -3,6 +3,9 @@ export const NOTIFICATION_TYPES = {
   CLARIFICATION_REPLIED: 'clarification_replied',
   CLARIFICATION_RESOLVED: 'clarification_resolved',
   CASE_NOTE: 'case_note',
+  CASE_QC_REJECTED: 'case_qc_rejected',
+  CASE_QC_APPROVED: 'case_qc_approved',
+  CASE_ESCALATED: 'case_escalated',
   SYSTEM: 'system',
 } as const;
 
@@ -15,6 +18,9 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   [NOTIFICATION_TYPES.CLARIFICATION_REPLIED]: 'Clarification reply',
   [NOTIFICATION_TYPES.CLARIFICATION_RESOLVED]: 'Clarification resolved',
   [NOTIFICATION_TYPES.CASE_NOTE]: 'Case note',
+  [NOTIFICATION_TYPES.CASE_QC_REJECTED]: 'QC rejected case',
+  [NOTIFICATION_TYPES.CASE_QC_APPROVED]: 'QC approved case',
+  [NOTIFICATION_TYPES.CASE_ESCALATED]: 'Case escalated',
   [NOTIFICATION_TYPES.SYSTEM]: 'System',
 };
 

@@ -211,6 +211,93 @@ export async function fetchCoordinatorDashboard() {
   return data.data as import('@ayetis/shared').CoordinatorDashboardDto;
 }
 
+export async function fetchQcDashboard() {
+  const { data } = await api.get('/cases/dashboard/qc');
+  return data.data as import('@ayetis/shared').QcDashboardDto;
+}
+
+export async function fetchEscalatedQueue() {
+  const { data } = await api.get('/cases/dashboard/escalated');
+  return data.data as import('@ayetis/shared').QcQueueCaseDto[];
+}
+
+export async function addQcComment(
+  caseId: string,
+  payload: { comments: string },
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/qc/comments`, payload);
+  return data.data;
+}
+
+export async function approveQcCase(
+  caseId: string,
+  payload: { comments?: string; deliveryViewLink?: string; video?: File | null },
+): Promise<CaseDetailDto> {
+  const form = new FormData();
+  if (payload.comments?.trim()) form.append('comments', payload.comments.trim());
+  if (payload.deliveryViewLink?.trim()) {
+    form.append('deliveryViewLink', payload.deliveryViewLink.trim());
+  }
+  if (payload.video) form.append('video', payload.video);
+
+  const { data } = await api.post(`/cases/${caseId}/qc/approve`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    transformRequest: [
+      (body, headers) => {
+        if (body instanceof FormData) {
+          delete headers['Content-Type'];
+        }
+        return body;
+      },
+    ],
+  });
+  return data.data;
+}
+
+export async function rejectQcCase(
+  caseId: string,
+  payload: import('@ayetis/shared').RejectQcInput,
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/qc/reject`, payload);
+  return data.data;
+}
+
+export async function fetchDesignerPerformance(month?: string) {
+  const { data } = await api.get('/cases/reports/designer/me', {
+    params: month ? { month } : undefined,
+  });
+  return data.data as import('@ayetis/shared').DesignerPerformanceDto;
+}
+
+export async function fetchQcPerformance(params?: {
+  month?: string;
+  view?: 'month' | 'quarter';
+}) {
+  const { data } = await api.get('/cases/reports/qc/me', { params });
+  return data.data as import('@ayetis/shared').QcPerformanceDto;
+}
+
+export async function downloadDeliveryVideo(caseId: string) {
+  const token = localStorage.getItem('ayetis_token');
+  const response = await fetch(`/api/cases/${caseId}/delivery/video`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!response.ok) throw new Error('Unable to download delivery video');
+
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const match = /filename="?([^"]+)"?/i.exec(disposition);
+  const filename = match?.[1] || `${caseId}-delivery-video`;
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function fetchDesignerAssignees() {
   const { data } = await api.get('/cases/assignees/designers');
   return data.data as import('@ayetis/shared').DesignerAssigneeDto[];

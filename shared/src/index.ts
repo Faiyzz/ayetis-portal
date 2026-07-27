@@ -8,3 +8,4 @@ export * from './treatment';
 export * from './clarifications';
 export * from './notifications';
 export * from './coordinator';
+export * from './qc';
