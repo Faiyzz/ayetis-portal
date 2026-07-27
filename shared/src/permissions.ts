@@ -50,6 +50,14 @@ export const PERMISSIONS = {
 
   // Departments / teams
   DEPARTMENT_MANAGE: 'department:manage',
+  TEAM_MANAGE: 'team:manage',
+
+  // Complaints / feedback
+  COMPLAINT_VIEW: 'complaint:view',
+  COMPLAINT_MANAGE: 'complaint:manage',
+
+  // Delete approval workflow
+  DELETE_REQUEST_REVIEW: 'delete_request:review',
 
   // Audit
   AUDIT_VIEW: 'audit:view',
@@ -92,6 +100,10 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.REPORT_VIEW_TEAM]: 'View team reports',
   [PERMISSIONS.REPORT_VIEW_ALL]: 'View all reports',
   [PERMISSIONS.DEPARTMENT_MANAGE]: 'Manage departments',
+  [PERMISSIONS.TEAM_MANAGE]: 'Manage team members',
+  [PERMISSIONS.COMPLAINT_VIEW]: 'View complaints and ratings',
+  [PERMISSIONS.COMPLAINT_MANAGE]: 'Manage complaints',
+  [PERMISSIONS.DELETE_REQUEST_REVIEW]: 'Approve or reject delete requests',
   [PERMISSIONS.AUDIT_VIEW]: 'View activity logs',
 };
 
@@ -103,6 +115,7 @@ export type PermissionGroup =
   | 'Clarifications'
   | 'Reports'
   | 'Departments'
+  | 'Complaints'
   | 'Audit';
 
 export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
@@ -138,6 +151,10 @@ export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
   [PERMISSIONS.REPORT_VIEW_TEAM]: 'Reports',
   [PERMISSIONS.REPORT_VIEW_ALL]: 'Reports',
   [PERMISSIONS.DEPARTMENT_MANAGE]: 'Departments',
+  [PERMISSIONS.TEAM_MANAGE]: 'Departments',
+  [PERMISSIONS.COMPLAINT_VIEW]: 'Complaints',
+  [PERMISSIONS.COMPLAINT_MANAGE]: 'Complaints',
+  [PERMISSIONS.DELETE_REQUEST_REVIEW]: 'Audit',
   [PERMISSIONS.AUDIT_VIEW]: 'Audit',
 };
 
@@ -219,6 +236,9 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     PERMISSIONS.CLARIFICATION_RESOLVE,
     PERMISSIONS.REPORT_VIEW_TEAM,
     PERMISSIONS.USER_LIST,
+    PERMISSIONS.USER_CREATE,
+    PERMISSIONS.USER_UPDATE,
+    PERMISSIONS.TEAM_MANAGE,
   ],
 
   [ROLES.ANALYTICS]: [

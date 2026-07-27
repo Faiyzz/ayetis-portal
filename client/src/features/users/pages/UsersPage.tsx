@@ -37,13 +37,19 @@ export function UsersPage() {
   }
 
   async function handleDelete(user: PublicUser) {
-    if (!window.confirm(`Delete ${user.email}? This cannot be undone.`)) return;
+    const reason = window.prompt(`Reason for deleting ${user.email}:`);
+    if (!reason || reason.trim().length < 3) {
+      toast().warning('Deletion requires a reason');
+      return;
+    }
+    if (!window.confirm(`Request deletion of ${user.email}?`)) return;
+    if (!window.confirm('Second confirmation: submit delete request to admin?')) return;
     try {
-      await usersApi.deleteUser(user.id);
-      toast().success('User deleted');
+      await usersApi.deleteUser(user.id, reason.trim());
+      toast().success('Delete request submitted for admin approval');
       await load();
     } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to delete user'));
+      toast().error(getErrorMessage(err, 'Unable to submit delete request'));
     }
   }
 

@@ -6,7 +6,7 @@ import {
   resolveEffectivePermissions,
 } from '@ayetis/shared';
 import bcrypt from 'bcryptjs';
-import mongoose, { Schema, type Document, type Model } from 'mongoose';
+import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
 
 export interface IUser extends Document {
   email: string;
@@ -15,6 +15,8 @@ export interface IUser extends Document {
   lastName: string;
   role: Role;
   isActive: boolean;
+  departmentId?: Types.ObjectId;
+  departmentName?: string;
   permissionGrants: Permission[];
   permissionDenies: Permission[];
   passwordResetToken?: string;
@@ -60,6 +62,15 @@ const userSchema = new Schema<IUser>(
       type: Boolean,
       default: true,
       index: true,
+    },
+    departmentId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Department',
+      index: true,
+    },
+    departmentName: {
+      type: String,
+      trim: true,
     },
     permissionGrants: {
       type: [String],

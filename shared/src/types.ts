@@ -22,6 +22,8 @@ export interface PublicUser {
   lastName: string;
   role: Role;
   isActive: boolean;
+  departmentId: string | null;
+  departmentName: string | null;
   permissionGrants: Permission[];
   permissionDenies: Permission[];
   permissions: Permission[];
@@ -55,6 +57,8 @@ export interface ManagedUserDto {
   lastName: string;
   role: Role;
   isActive: boolean;
+  departmentId: string | null;
+  departmentName: string | null;
   permissionGrants: Permission[];
   permissionDenies: Permission[];
   permissions: Permission[];
@@ -68,6 +72,7 @@ export interface CreateUserInput {
   firstName: string;
   lastName: string;
   role: Role;
+  departmentId?: string | null;
   permissionGrants?: Permission[];
   permissionDenies?: Permission[];
 }
@@ -77,6 +82,7 @@ export interface UpdateUserInput {
   lastName?: string;
   role?: Role;
   isActive?: boolean;
+  departmentId?: string | null;
 }
 
 export interface AssignPermissionsInput {

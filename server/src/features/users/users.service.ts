@@ -20,6 +20,7 @@ import {
 } from '../../models/RolePermissionConfig';
 import { User, type IUser, resolveUserPermissions } from '../../models/User';
 import { AppError } from '../../utils/AppError';
+import { Types } from 'mongoose';
 import {
   recordActivity,
   type RequestAuditContext,
@@ -94,6 +95,8 @@ export function toPublicUser(
     lastName: user.lastName,
     role: user.role,
     isActive: user.isActive,
+    departmentId: user.departmentId ? String(user.departmentId) : null,
+    departmentName: user.departmentName ?? null,
     permissionGrants: user.role === ROLES.ADMIN ? [] : [...(user.permissionGrants ?? [])],
     permissionDenies: user.role === ROLES.ADMIN ? [] : [...(user.permissionDenies ?? [])],
     permissions: resolveUserPermissions(user, roleOverrides),
@@ -184,6 +187,7 @@ export async function createUser(
     firstName: string;
     lastName: string;
     role: Role;
+    departmentId?: string | null;
     permissionGrants?: string[];
     permissionDenies?: string[];
   },
@@ -202,12 +206,24 @@ export async function createUser(
     assertNoOverlap(grants, denies);
   }
 
+  let departmentId: Types.ObjectId | undefined;
+  let departmentName: string | undefined;
+  if (input.departmentId) {
+    const { Department } = await import('../../models/Department');
+    const dept = await Department.findOne({ _id: input.departmentId, isDeleted: false });
+    if (!dept) throw new AppError('Department not found', 404);
+    departmentId = dept._id as Types.ObjectId;
+    departmentName = dept.name;
+  }
+
   const user = await User.create({
     email: input.email,
     password: input.password,
     firstName: input.firstName,
     lastName: input.lastName,
     role: input.role,
+    departmentId,
+    departmentName,
     permissionGrants: grants,
     permissionDenies: denies,
   });
@@ -237,6 +253,7 @@ export async function updateUser(
     lastName?: string;
     role?: Role;
     isActive?: boolean;
+    departmentId?: string | null;
   },
   audit?: RequestAuditContext,
 ) {
@@ -254,6 +271,7 @@ export async function updateUser(
     lastName: user.lastName,
     role: user.role,
     isActive: user.isActive,
+    departmentId: user.departmentId ? String(user.departmentId) : null,
   };
 
   if (input.role && input.role !== user.role) {
@@ -272,6 +290,19 @@ export async function updateUser(
   if (input.firstName !== undefined) user.firstName = input.firstName;
   if (input.lastName !== undefined) user.lastName = input.lastName;
   if (input.isActive !== undefined) user.isActive = input.isActive;
+
+  if (input.departmentId !== undefined) {
+    if (!input.departmentId) {
+      user.departmentId = undefined;
+      user.departmentName = undefined;
+    } else {
+      const { Department } = await import('../../models/Department');
+      const dept = await Department.findOne({ _id: input.departmentId, isDeleted: false });
+      if (!dept) throw new AppError('Department not found', 404);
+      user.departmentId = dept._id as Types.ObjectId;
+      user.departmentName = dept.name;
+    }
+  }
 
   await user.save();
 
@@ -332,41 +363,26 @@ export async function updateUserPermissions(
 export async function deleteUser(
   userId: string,
   actorId: string,
+  reason: string,
   audit?: RequestAuditContext,
 ) {
-  if (userId === actorId) {
-    throw new AppError('You cannot delete your own account', 400);
-  }
-
-  const user = await User.findById(userId);
-  if (!user) {
-    throw new AppError('User not found', 404);
-  }
-
-  if (user.role === ROLES.ADMIN) {
-    const adminCount = await User.countDocuments({ role: ROLES.ADMIN, isActive: true });
-    if (adminCount <= 1) {
-      throw new AppError('Cannot delete the last active admin', 400);
-    }
-  }
-
-  const deletedEmail = user.email;
-  const deletedRole = user.role;
-  await user.deleteOne();
-
   const actor = await resolveActor(actorId);
-  await recordActivity({
-    action: AUDIT_ACTIONS.USER_DELETE,
-    summary: `${actor?.actorEmail ?? 'Admin'} deleted user ${deletedEmail}`,
-    ...(actor ?? {}),
-    targetType: 'user',
-    targetId: userId,
-    metadata: { email: deletedEmail, role: deletedRole },
-    ipAddress: audit?.ipAddress,
-    userAgent: audit?.userAgent,
-  });
+  if (!actor) throw new AppError('Actor not found', 401);
 
-  return { id: userId };
+  const { requestUserDelete } = await import('../deletions/deletions.service');
+  return requestUserDelete(
+    {
+      id: actorId,
+      email: actor.actorEmail,
+      firstName: actor.actorName.split(' ')[0] ?? 'User',
+      lastName: actor.actorName.split(' ').slice(1).join(' ') || '',
+      role: actor.actorRole,
+      permissions: await resolvePermissionsForUserId(actorId),
+    },
+    userId,
+    reason,
+    audit,
+  );
 }
 
 export function userHasEffectivePermission(

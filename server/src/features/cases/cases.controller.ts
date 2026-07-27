@@ -244,7 +244,7 @@ export async function softDeleteCase(
     res.json({
       success: true,
       data,
-      message: 'Case deleted',
+      message: 'Delete request submitted for admin approval',
     });
   } catch (error) {
     next(error);

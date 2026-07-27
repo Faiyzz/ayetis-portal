@@ -7,7 +7,11 @@ import auditRoutes from './features/audit/audit.routes';
 import authRoutes from './features/auth/auth.routes';
 import casesRoutes from './features/cases/cases.routes';
 import clarificationsRoutes from './features/clarifications/clarifications.routes';
+import complaintsRoutes from './features/complaints/complaints.routes';
+import deletionsRoutes from './features/deletions/deletions.routes';
+import departmentsRoutes from './features/departments/departments.routes';
 import notificationsRoutes from './features/notifications/notifications.routes';
+import supervisorRoutes from './features/supervisor/supervisor.routes';
 import usersRoutes from './features/users/users.routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
@@ -40,6 +44,10 @@ export function createApp() {
   app.use('/api/notifications', notificationsRoutes);
   app.use('/api/cases', casesRoutes);
   app.use('/api/clarifications', clarificationsRoutes);
+  app.use('/api/supervisor', supervisorRoutes);
+  app.use('/api/departments', departmentsRoutes);
+  app.use('/api/complaints', complaintsRoutes);
+  app.use('/api/deletions', deletionsRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

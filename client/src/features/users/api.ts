@@ -62,6 +62,6 @@ export async function updateUserPermissions(
   return data.data;
 }
 
-export async function deleteUser(userId: string): Promise<void> {
-  await api.delete(`/users/${userId}`);
+export async function deleteUser(userId: string, reason: string): Promise<void> {
+  await api.delete(`/users/${userId}`, { data: { reason } });
 }

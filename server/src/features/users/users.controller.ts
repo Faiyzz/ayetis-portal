@@ -135,15 +135,28 @@ export async function updateUserPermissions(
 
 export async function deleteUser(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
+    const reason =
+      typeof req.body?.reason === 'string' && req.body.reason.trim().length >= 3
+        ? req.body.reason.trim()
+        : '';
+    if (!reason) {
+      res.status(400).json({
+        success: false,
+        message: 'A deletion reason is required (min 3 characters)',
+      });
+      return;
+    }
+
     const data = await usersService.deleteUser(
       req.params.userId,
       req.user!.id,
+      reason,
       getRequestAuditContext(req),
     );
     res.json({
       success: true,
       data,
-      message: 'User deleted',
+      message: 'Delete request submitted for admin approval',
     });
   } catch (error) {
     next(error);

@@ -7,14 +7,13 @@ import {
 } from '@ayetis/shared';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store';
+import { AdminDashboard } from '@/portals/AdminDashboard';
 import { ConsultantDashboard } from '@/portals/ConsultantDashboard';
 import { CoordinatorDashboard } from '@/portals/CoordinatorDashboard';
-import {
-  DesignerDashboard,
-  EscalatedOversightDashboard,
-} from '@/portals/DesignerDashboard';
+import { DesignerDashboard } from '@/portals/DesignerDashboard';
 import { DoctorDashboard } from '@/portals/DoctorDashboard';
 import { QcDashboard } from '@/portals/QcDashboard';
+import { SupervisorDashboard } from '@/portals/SupervisorDashboard';
 
 interface RoleDashboardProps {
   role: Role;
@@ -29,6 +28,10 @@ export function RoleDashboard({ role }: RoleDashboardProps) {
 
   if (user.role !== role) {
     return <Navigate to={getDashboardPath(user.role)} replace />;
+  }
+
+  if (role === ROLES.ADMIN) {
+    return <AdminDashboard firstName={user.firstName} />;
   }
 
   if (role === ROLES.DOCTOR) {
@@ -52,13 +55,7 @@ export function RoleDashboard({ role }: RoleDashboardProps) {
   }
 
   if (role === ROLES.SUPERVISOR) {
-    return (
-      <EscalatedOversightDashboard
-        firstName={user.firstName}
-        title="Supervisor portal"
-        subtitle="Monitor escalated cases and production queues that need extra oversight."
-      />
-    );
+    return <SupervisorDashboard firstName={user.firstName} />;
   }
 
   return <DashboardView config={getDashboardConfig(role)} firstName={user.firstName} />;

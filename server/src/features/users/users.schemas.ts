@@ -22,6 +22,7 @@ export const createUserSchema = z.object({
   firstName: z.string().trim().min(1, 'First name is required').max(80),
   lastName: z.string().trim().min(1, 'Last name is required').max(80),
   role: roleSchema,
+  departmentId: z.string().trim().nullable().optional(),
   permissionGrants: permissionListSchema.optional(),
   permissionDenies: permissionListSchema.optional(),
 });
@@ -32,6 +33,7 @@ export const updateUserSchema = z
     lastName: z.string().trim().min(1).max(80).optional(),
     role: roleSchema.optional(),
     isActive: z.boolean().optional(),
+    departmentId: z.string().trim().nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',

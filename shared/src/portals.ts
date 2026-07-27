@@ -34,7 +34,7 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
     shortcuts: [
       {
         label: 'Cases',
-        description: 'Browse and manage all cases',
+        description: 'Browse, reassign, and set urgent priority',
         to: '/app/cases',
       },
       {
@@ -51,6 +51,11 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
         label: 'Role permissions',
         description: 'Grant or deny extras per role',
         to: '/app/roles',
+      },
+      {
+        label: 'Admin console',
+        description: 'Departments, complaints, delete approvals',
+        to: '/app/admin',
       },
       {
         label: 'Activity log',
@@ -201,9 +206,14 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
         to: '/app/supervisor',
       },
       {
-        label: 'Escalated cases',
-        description: 'Cases with repeated QC rejection',
-        to: '/app/supervisor?tab=escalated',
+        label: 'Performance',
+        description: 'Month-wise team and individual metrics',
+        to: '/app/supervisor?tab=performance',
+      },
+      {
+        label: 'Team members',
+        description: 'Add or remove Designer, QC, Consultant',
+        to: '/app/supervisor?tab=members',
       },
     ],
   },

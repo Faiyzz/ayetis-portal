@@ -1069,6 +1069,23 @@ export async function softDeleteCase(
   reason: string,
   audit?: RequestAuditContext,
 ) {
+  // Deletion requires admin approval — create a pending delete request.
+  const { requestCaseDelete } = await import('../deletions/deletions.service');
+  const request = await requestCaseDelete(actor, caseIdOrMongoId, reason, audit);
+  return {
+    pendingApproval: true as const,
+    request,
+    message: 'Delete request submitted for admin approval',
+  };
+}
+
+/** Called after admin approves a delete request — keep for internal use. */
+export async function executeSoftDeleteCase(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  reason: string,
+  audit?: RequestAuditContext,
+) {
   if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_DELETE)) {
     throw new AppError('You do not have permission to delete cases', 403);
   }

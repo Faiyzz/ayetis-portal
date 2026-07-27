@@ -77,7 +77,7 @@ export async function cancelCase(
 export async function softDeleteCase(
   caseId: string,
   payload: { reason: string },
-): Promise<CaseDetailDto> {
+): Promise<{ pendingApproval: boolean; message?: string }> {
   const { data } = await api.post(`/cases/${caseId}/delete`, payload);
   return data.data;
 }

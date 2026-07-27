@@ -10,3 +10,7 @@ export * from './notifications';
 export * from './coordinator';
 export * from './qc';
 export * from './consultation';
+export * from './supervisor';
+export * from './departments';
+export * from './complaints';
+export * from './deletions';

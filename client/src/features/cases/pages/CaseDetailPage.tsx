@@ -8,7 +8,7 @@ import {
   type CaseDetailDto,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import {
@@ -39,7 +39,6 @@ import { getErrorMessage } from '@/lib/api';
 export function CaseDetailPage() {
   const { caseId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { can, canAny, user } = usePermissions();
   const [caseData, setCaseData] = useState<CaseDetailDto | null>(null);
   const [note, setNote] = useState('');
@@ -133,21 +132,19 @@ export function CaseDetailPage() {
 
   async function handleDelete() {
     if (!caseData) return;
-    const reason = window.prompt('Reason for deleting this case (soft delete):');
+    const reason = window.prompt('Reason for deleting this case (sent to admin for approval):');
     if (!reason || reason.trim().length < 3) {
       toast().warning('Deletion requires a reason');
       return;
     }
-    if (!window.confirm(`Delete case ${caseData.caseId}?`)) return;
-    if (!window.confirm('Final confirmation: soft-delete this case?')) return;
+    if (!window.confirm(`Request deletion of case ${caseData.caseId}?`)) return;
+    if (!window.confirm('Second confirmation: submit this delete request to admin?')) return;
 
     try {
-      const updated = await softDeleteCase(caseData.caseId, { reason: reason.trim() });
-      setCaseData(updated);
-      toast().success('Case soft-deleted');
-      navigate('/app/cases');
+      await softDeleteCase(caseData.caseId, { reason: reason.trim() });
+      toast().success('Delete request submitted for admin approval');
     } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to delete case'));
+      toast().error(getErrorMessage(err, 'Unable to submit delete request'));
     }
   }
 
@@ -247,7 +244,7 @@ export function CaseDetailPage() {
               onClick={() => void handleDelete()}
               className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50"
             >
-              Soft delete
+              Soft delete request
             </button>
           ) : null}
         </div>
