@@ -3,6 +3,7 @@ import {
   ALL_CASE_STATUSES,
   CASE_PRIORITY_LABELS,
   CASE_STATUS_LABELS,
+  PERMISSIONS,
   type CasePriority,
   type CaseStatus,
   type UpdateCaseInput,
@@ -10,6 +11,7 @@ import {
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { usePermissions } from '@/features/auth/permissions';
 import { fetchCase, updateCase } from '@/features/cases/api';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
@@ -17,6 +19,8 @@ import { getErrorMessage } from '@/lib/api';
 export function EditCasePage() {
   const { caseId = '' } = useParams();
   const navigate = useNavigate();
+  const { can } = usePermissions();
+  const canSetPriority = can(PERMISSIONS.CASE_SET_PRIORITY);
   const [form, setForm] = useState<UpdateCaseInput | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -55,7 +59,11 @@ export function EditCasePage() {
     setSaving(true);
     setError('');
     try {
-      const updated = await updateCase(caseId, form);
+      const payload: UpdateCaseInput = { ...form };
+      if (!canSetPriority) {
+        delete payload.priority;
+      }
+      const updated = await updateCase(caseId, payload);
       toast().success(`Case ${updated.caseId} updated`);
       navigate(`/app/cases/${updated.caseId}`, { replace: true });
     } catch (err) {
@@ -123,22 +131,24 @@ export function EditCasePage() {
             value={form.country ?? ''}
             onChange={(e) => setForm((prev) => ({ ...prev!, country: e.target.value }))}
           />
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-ink">Priority</span>
-            <select
-              value={form.priority}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev!, priority: e.target.value as CasePriority }))
-              }
-              className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
-            >
-              {ALL_CASE_PRIORITIES.map((value) => (
-                <option key={value} value={value}>
-                  {CASE_PRIORITY_LABELS[value]}
-                </option>
-              ))}
-            </select>
-          </label>
+          {canSetPriority ? (
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-ink">Priority</span>
+              <select
+                value={form.priority}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev!, priority: e.target.value as CasePriority }))
+                }
+                className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+              >
+                {ALL_CASE_PRIORITIES.map((value) => (
+                  <option key={value} value={value}>
+                    {CASE_PRIORITY_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="block space-y-1.5 sm:col-span-2">
             <span className="text-sm font-medium text-ink">Status</span>
             <select

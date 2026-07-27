@@ -16,6 +16,8 @@ export const AUDIT_ACTIONS = {
   CASE_CANCEL: 'case.cancel',
   CASE_DELETE: 'case.delete',
   CASE_NOTE_ADD: 'case.note.add',
+  CASE_PRIORITY_SET: 'case.priority.set',
+  CASE_FILE_UPLOAD: 'case.file.upload',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
@@ -40,6 +42,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   [AUDIT_ACTIONS.CASE_CANCEL]: 'Case cancelled',
   [AUDIT_ACTIONS.CASE_DELETE]: 'Case deleted',
   [AUDIT_ACTIONS.CASE_NOTE_ADD]: 'Case note added',
+  [AUDIT_ACTIONS.CASE_PRIORITY_SET]: 'Case priority changed',
+  [AUDIT_ACTIONS.CASE_FILE_UPLOAD]: 'Case file uploaded',
 };
 
 export type AuditTargetType = 'user' | 'role' | 'auth' | 'system' | 'case';

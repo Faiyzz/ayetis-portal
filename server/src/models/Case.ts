@@ -1,10 +1,13 @@
 import {
   ALL_CASE_PRIORITIES,
   ALL_CASE_STATUSES,
+  ALL_FILE_CATEGORIES,
   CASE_PRIORITIES,
   CASE_STATUSES,
+  FILE_CATEGORIES,
   type CasePriority,
   type CaseStatus,
+  type FileCategory,
 } from '@ayetis/shared';
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
 
@@ -19,9 +22,14 @@ export interface ICaseNote {
 export interface ICaseFile {
   _id: Types.ObjectId;
   filename: string;
+  originalName: string;
   mimeType: string;
   sizeBytes: number;
+  category: FileCategory;
+  storageKey: string;
+  uploadedById?: Types.ObjectId;
   uploadedByName: string;
+  version: number;
   note?: string;
   createdAt: Date;
 }
@@ -78,9 +86,18 @@ const caseNoteSchema = new Schema<ICaseNote>(
 const caseFileSchema = new Schema<ICaseFile>(
   {
     filename: { type: String, required: true, trim: true },
+    originalName: { type: String, required: true, trim: true },
     mimeType: { type: String, required: true, trim: true },
     sizeBytes: { type: Number, required: true, min: 0 },
+    category: {
+      type: String,
+      enum: ALL_FILE_CATEGORIES,
+      default: FILE_CATEGORIES.OTHER,
+    },
+    storageKey: { type: String, required: true },
+    uploadedById: { type: Schema.Types.ObjectId, ref: 'User' },
     uploadedByName: { type: String, required: true },
+    version: { type: Number, default: 1, min: 1 },
     note: { type: String, trim: true },
     createdAt: { type: Date, default: Date.now },
   },

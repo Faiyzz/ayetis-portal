@@ -68,6 +68,27 @@ export async function updateCase(req: AuthenticatedRequest, res: Response, next:
   }
 }
 
+export async function setPriority(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.setCasePriority(
+      await actor(req),
+      req.params.caseId,
+      req.body.priority,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message:
+        data.priority === 'urgent'
+          ? 'Case marked as Urgent Priority'
+          : 'Case priority updated',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function cancelCase(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const data = await casesService.cancelCase(
@@ -121,6 +142,47 @@ export async function addNote(req: AuthenticatedRequest, res: Response, next: Ne
       data,
       message: 'Note added',
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function uploadFiles(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+    const data = await casesService.uploadCaseFiles(
+      await actor(req),
+      req.params.caseId,
+      files.map((file) => ({
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        buffer: file.buffer,
+      })),
+      {
+        category: typeof req.body.category === 'string' ? req.body.category : undefined,
+        note: typeof req.body.note === 'string' ? req.body.note : undefined,
+      },
+      getRequestAuditContext(req),
+    );
+    res.status(201).json({
+      success: true,
+      data,
+      message: files.length === 1 ? 'File uploaded' : `${files.length} files uploaded`,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function downloadFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const file = await casesService.getCaseFileForDownload(
+      await actor(req),
+      req.params.caseId,
+      req.params.fileId,
+    );
+    res.download(file.absolutePath, file.originalName);
   } catch (error) {
     next(error);
   }
