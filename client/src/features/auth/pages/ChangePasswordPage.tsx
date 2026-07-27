@@ -36,7 +36,7 @@ export function ChangePasswordPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-lg">
+    <div className="w-full max-w-md">
       <h1 className="text-2xl font-bold tracking-tight text-ink">Change password</h1>
       <p className="mt-1 text-sm text-muted">
         Update your password regularly to keep your account secure.

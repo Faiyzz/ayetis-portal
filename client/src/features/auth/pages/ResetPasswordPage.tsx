@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { getDashboardPath } from '@ayetis/shared';
 import { resetPassword } from '@/features/auth/api';
 import { Alert, AuthButton, AuthCard, TextField } from '@/features/auth/components/AuthUI';
 import { useAuthStore } from '@/features/auth/store';
@@ -34,7 +35,7 @@ export function ResetPasswordPage() {
     try {
       const payload = await resetPassword(token, password);
       setSession(payload.user, payload.tokens.accessToken);
-      navigate('/app', { replace: true });
+      navigate(getDashboardPath(payload.user.role), { replace: true });
     } catch (err) {
       setError(getErrorMessage(err, 'Unable to reset password'));
     } finally {

@@ -92,7 +92,7 @@ export function RolePermissionsPage() {
       <div>
         <p className="text-sm font-medium text-brand-600">Administration</p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink">Role permissions</h1>
-        <p className="mt-2 max-w-2xl text-[15px] text-muted">
+        <p className="mt-2 text-[15px] text-muted">
           System roles are fixed. Adjust grants and denies on top of each role&apos;s default
           permission set.
         </p>

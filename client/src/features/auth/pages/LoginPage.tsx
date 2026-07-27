@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { getDashboardPath } from '@ayetis/shared';
 import { Alert, AuthButton, AuthCard, TextField } from '@/features/auth/components/AuthUI';
 import { useAuthStore } from '@/features/auth/store';
 import { getErrorMessage } from '@/lib/api';
@@ -18,7 +19,8 @@ export function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate('/app', { replace: true });
+      const user = useAuthStore.getState().user;
+      navigate(user ? getDashboardPath(user.role) : '/app', { replace: true });
     } catch (err) {
       setError(getErrorMessage(err, 'Unable to log in'));
     } finally {

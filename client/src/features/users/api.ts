@@ -1,16 +1,16 @@
 import type {
+  AssignPermissionsInput,
+  CreateUserInput,
   Permission,
+  PermissionCatalogItem,
   PublicUser,
   Role,
   RolePermissionConfigDto,
+  UpdateUserInput,
 } from '@ayetis/shared';
 import api from '@/lib/api';
 
-export interface PermissionCatalogItem {
-  value: Permission;
-  label: string;
-  group: string;
-}
+export type { PermissionCatalogItem };
 
 export async function fetchPermissionCatalog(): Promise<PermissionCatalogItem[]> {
   const { data } = await api.get('/users/permissions');
@@ -27,7 +27,8 @@ export async function updateRolePermissions(
   grants: Permission[],
   denies: Permission[],
 ): Promise<RolePermissionConfigDto> {
-  const { data } = await api.put(`/users/roles/${role}/permissions`, { grants, denies });
+  const payload: AssignPermissionsInput = { grants, denies };
+  const { data } = await api.put(`/users/roles/${role}/permissions`, payload);
   return data.data;
 }
 
@@ -41,26 +42,12 @@ export async function fetchUser(userId: string): Promise<PublicUser> {
   return data.data;
 }
 
-export async function createUser(payload: {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  role: Role;
-}): Promise<PublicUser> {
+export async function createUser(payload: CreateUserInput): Promise<PublicUser> {
   const { data } = await api.post('/users', payload);
   return data.data;
 }
 
-export async function updateUser(
-  userId: string,
-  payload: Partial<{
-    firstName: string;
-    lastName: string;
-    role: Role;
-    isActive: boolean;
-  }>,
-): Promise<PublicUser> {
+export async function updateUser(userId: string, payload: UpdateUserInput): Promise<PublicUser> {
   const { data } = await api.patch(`/users/${userId}`, payload);
   return data.data;
 }
@@ -70,7 +57,8 @@ export async function updateUserPermissions(
   grants: Permission[],
   denies: Permission[],
 ): Promise<PublicUser> {
-  const { data } = await api.put(`/users/${userId}/permissions`, { grants, denies });
+  const payload: AssignPermissionsInput = { grants, denies };
+  const { data } = await api.put(`/users/${userId}/permissions`, payload);
   return data.data;
 }
 

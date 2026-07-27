@@ -1,7 +1,7 @@
-import { ALL_ROLES, ROLE_LABELS, ROLES, type PublicUser, type Role } from '@ayetis/shared';
-import { useEffect, useState, type FormEvent } from 'react';
+import { ROLE_LABELS, type PublicUser } from '@ayetis/shared';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { Alert } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import * as usersApi from '@/features/users/api';
 import { getErrorMessage } from '@/lib/api';
@@ -12,14 +12,6 @@ export function UsersPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    role: ROLES.DESIGNER as Role,
-  });
 
   async function load() {
     setLoading(true);
@@ -36,29 +28,6 @@ export function UsersPage() {
   useEffect(() => {
     void load();
   }, []);
-
-  async function handleCreate(event: FormEvent) {
-    event.preventDefault();
-    setCreating(true);
-    setError('');
-    setSuccess('');
-    try {
-      await usersApi.createUser(form);
-      setSuccess('User created');
-      setForm({
-        firstName: '',
-        lastName: '',
-        email: '',
-        password: '',
-        role: ROLES.DESIGNER,
-      });
-      await load();
-    } catch (err) {
-      setError(getErrorMessage(err, 'Unable to create user'));
-    } finally {
-      setCreating(false);
-    }
-  }
 
   async function toggleActive(user: PublicUser) {
     setError('');
@@ -86,72 +55,28 @@ export function UsersPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <p className="text-sm font-medium text-brand-600">Administration</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink">Users</h1>
-        <p className="mt-2 max-w-2xl text-[15px] text-muted">
-          Create accounts for fixed system roles, then grant or deny extra permissions per user.
-        </p>
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-brand-600">Administration</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">Users</h1>
+          <p className="mt-1.5 text-[15px] text-muted">
+            Manage accounts for fixed system roles, then refine permissions per user.
+          </p>
+        </div>
+
+        {can(PERMISSIONS.USER_CREATE) ? (
+          <Link
+            to="/app/users/create"
+            className="inline-flex items-center justify-center rounded-xl bg-brand-500 px-4 py-3 text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(103,61,230,0.28)] hover:bg-brand-600"
+          >
+            Create user
+          </Link>
+        ) : null}
       </div>
 
       {error ? <Alert>{error}</Alert> : null}
       {success ? <Alert tone="success">{success}</Alert> : null}
-
-      {can(PERMISSIONS.USER_CREATE) ? (
-        <section className="rounded-2xl border border-line bg-white p-5 sm:p-6">
-          <h2 className="text-lg font-semibold text-ink">Create user</h2>
-          <p className="mt-1 text-sm text-muted">
-            New roles cannot be invented — pick from the system role list.
-          </p>
-
-          <form onSubmit={handleCreate} className="mt-5 grid gap-4 sm:grid-cols-2">
-            <TextField
-              label="First name"
-              required
-              value={form.firstName}
-              onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))}
-            />
-            <TextField
-              label="Last name"
-              required
-              value={form.lastName}
-              onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))}
-            />
-            <TextField
-              label="Email"
-              type="email"
-              required
-              value={form.email}
-              onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-            />
-            <TextField
-              label="Temporary password"
-              type="password"
-              required
-              value={form.password}
-              onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-            />
-            <label className="block space-y-1.5 sm:col-span-2">
-              <span className="text-sm font-medium text-ink">Role</span>
-              <select
-                className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
-                value={form.role}
-                onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value as Role }))}
-              >
-                {ALL_ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {ROLE_LABELS[role]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="sm:col-span-2 sm:max-w-xs">
-              <AuthButton loading={creating}>Create user</AuthButton>
-            </div>
-          </form>
-        </section>
-      ) : null}
 
       <section className="overflow-hidden rounded-2xl border border-line bg-white">
         <header className="border-b border-line px-5 py-4">

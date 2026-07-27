@@ -61,3 +61,31 @@ export interface ManagedUserDto {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface CreateUserInput {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  permissionGrants?: Permission[];
+  permissionDenies?: Permission[];
+}
+
+export interface UpdateUserInput {
+  firstName?: string;
+  lastName?: string;
+  role?: Role;
+  isActive?: boolean;
+}
+
+export interface AssignPermissionsInput {
+  grants: Permission[];
+  denies: Permission[];
+}
+
+export interface PermissionCatalogItem {
+  value: Permission;
+  label: string;
+  group: string;
+}
