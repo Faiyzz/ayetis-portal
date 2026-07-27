@@ -1,3 +1,4 @@
+import { PERMISSIONS } from '@ayetis/shared';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthLayout } from '@/features/auth/components/AuthLayout';
 import { ChangePasswordPage } from '@/features/auth/pages/ChangePasswordPage';
@@ -5,7 +6,16 @@ import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 import { ResetPasswordPage } from '@/features/auth/pages/ResetPasswordPage';
-import { AppShell, DashboardHome, GuestOnly, RequireAuth } from '@/portals/AppShell';
+import { RolePermissionsPage } from '@/features/users/pages/RolePermissionsPage';
+import { UserPermissionsPage } from '@/features/users/pages/UserPermissionsPage';
+import { UsersPage } from '@/features/users/pages/UsersPage';
+import {
+  AppShell,
+  DashboardHome,
+  GuestOnly,
+  RequireAuth,
+  RequirePermission,
+} from '@/portals/AppShell';
 
 export function AppRouter() {
   return (
@@ -23,6 +33,18 @@ export function AppRouter() {
         <Route path="/app" element={<AppShell />}>
           <Route index element={<DashboardHome />} />
           <Route path="change-password" element={<ChangePasswordPage />} />
+
+          <Route element={<RequirePermission permission={PERMISSIONS.USER_LIST} />}>
+            <Route path="users" element={<UsersPage />} />
+          </Route>
+
+          <Route element={<RequirePermission permission={PERMISSIONS.USER_ASSIGN_PERMISSIONS} />}>
+            <Route path="users/:userId/permissions" element={<UserPermissionsPage />} />
+          </Route>
+
+          <Route element={<RequirePermission permission={PERMISSIONS.ROLE_VIEW_PERMISSIONS} />}>
+            <Route path="roles" element={<RolePermissionsPage />} />
+          </Route>
         </Route>
       </Route>
 

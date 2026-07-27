@@ -1,15 +1,17 @@
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import type { Permission, Role } from '@ayetis/shared';
-import { hasPermission } from '@ayetis/shared';
+import { permissionsInclude } from '@ayetis/shared';
 import { env } from '../config/env';
 import { User, type IUser } from '../models/User';
 import { AppError } from '../utils/AppError';
+import { resolvePermissionsForUserId } from '../features/users/users.service';
 
 export interface AuthUser {
   id: string;
   email: string;
   role: Role;
+  permissions?: Permission[];
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -57,23 +59,34 @@ export function authenticate(req: AuthenticatedRequest, _res: Response, next: Ne
   }
 }
 
+/**
+ * Loads effective permissions from DB (role defaults + role/user overrides).
+ * Must run after authenticate.
+ */
 export function requirePermission(...permissions: Permission[]) {
-  return (req: AuthenticatedRequest, _res: Response, next: NextFunction): void => {
-    if (!req.user) {
-      next(new AppError('Authentication required', 401));
-      return;
+  return async (req: AuthenticatedRequest, _res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        next(new AppError('Authentication required', 401));
+        return;
+      }
+
+      const effective = await resolvePermissionsForUserId(req.user.id);
+      req.user.permissions = effective;
+
+      const allowed = permissions.every((permission) =>
+        permissionsInclude(effective, permission),
+      );
+
+      if (!allowed) {
+        next(new AppError('You do not have permission to perform this action', 403));
+        return;
+      }
+
+      next();
+    } catch (error) {
+      next(error);
     }
-
-    const allowed = permissions.every((permission) =>
-      hasPermission(req.user!.role, permission),
-    );
-
-    if (!allowed) {
-      next(new AppError('You do not have permission to perform this action', 403));
-      return;
-    }
-
-    next();
   };
 }
 

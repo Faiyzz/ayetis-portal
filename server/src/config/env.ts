@@ -1,6 +1,9 @@
+import path from 'path';
 import dotenv from 'dotenv';
 
-dotenv.config();
+// Prefer repo-root .env, then server/.env (later file wins for overlapping keys).
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 function required(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback;

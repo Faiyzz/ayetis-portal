@@ -1,10 +1,10 @@
 import crypto from 'crypto';
-import type { PublicUser } from '@ayetis/shared';
 import { ROLES } from '@ayetis/shared';
 import { env } from '../../config/env';
 import { signAccessToken } from '../../middleware/auth';
 import { User, type IUser } from '../../models/User';
 import { AppError } from '../../utils/AppError';
+import { toPublicUserAsync } from '../users/users.service';
 import type {
   ChangePasswordInput,
   ForgotPasswordInput,
@@ -13,20 +13,7 @@ import type {
   ResetPasswordInput,
 } from './auth.schemas';
 
-function toPublicUser(user: IUser): PublicUser {
-  return {
-    id: user.id,
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    role: user.role,
-    isActive: user.isActive,
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString(),
-  };
-}
-
-function buildAuthPayload(user: IUser) {
+async function buildAuthPayload(user: IUser) {
   const accessToken = signAccessToken({
     id: user.id,
     email: user.email,
@@ -34,7 +21,7 @@ function buildAuthPayload(user: IUser) {
   });
 
   return {
-    user: toPublicUser(user),
+    user: await toPublicUserAsync(user),
     tokens: {
       accessToken,
       expiresIn: env.jwtExpiresIn,
@@ -54,6 +41,8 @@ export async function registerDoctor(input: RegisterInput) {
     firstName: input.firstName,
     lastName: input.lastName,
     role: ROLES.DOCTOR,
+    permissionGrants: [],
+    permissionDenies: [],
   });
 
   return buildAuthPayload(user);
@@ -83,7 +72,7 @@ export async function getMe(userId: string) {
     throw new AppError('User not found', 404);
   }
 
-  return toPublicUser(user);
+  return toPublicUserAsync(user);
 }
 
 /**
@@ -103,7 +92,6 @@ export async function forgotPassword(input: ForgotPasswordInput) {
 
     const resetUrl = `${env.clientUrl}/reset-password?token=${rawToken}`;
 
-    // Email provider will plug in here later. For now, surface the link in development.
     if (env.isDev) {
       console.log(`[password-reset] ${user.email} → ${resetUrl}`);
     } else {
