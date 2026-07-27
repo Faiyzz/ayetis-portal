@@ -4,6 +4,7 @@ import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { BrandMark } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import { useAuthStore } from '@/features/auth/store';
+import { NotificationBell } from '@/features/notifications/NotificationBell';
 
 export function RequireAuth() {
   const user = useAuthStore((s) => s.user);
@@ -251,12 +252,12 @@ export function AppShell() {
       </aside>
 
       <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:h-full lg:min-h-0">
-        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-white px-4 py-3 lg:hidden">
+        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-white px-4 py-3 lg:px-8">
           <button
             type="button"
             aria-label="Open navigation"
             onClick={() => setMobileOpen(true)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line text-ink"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line text-ink lg:hidden"
           >
             <span className="sr-only">Menu</span>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
@@ -268,11 +269,14 @@ export function AppShell() {
               />
             </svg>
           </button>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1 lg:hidden">
             <p className="truncate text-sm font-semibold text-ink">
               {user.firstName} {user.lastName}
             </p>
             <p className="truncate text-xs text-muted">{ROLE_LABELS[user.role as Role]}</p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <NotificationBell />
           </div>
         </header>
 

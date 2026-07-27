@@ -1,21 +1,24 @@
 import {
   ALL_FILE_CATEGORIES,
   CASE_PRIORITIES,
+  EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORIES,
   FILE_CATEGORY_LABELS,
   type CreateCaseInput,
   type FileCategory,
+  type TreatmentInstructions,
 } from '@ayetis/shared';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { createCase, uploadCaseFiles } from '@/features/cases/api';
+import { TreatmentInstructionsFields } from '@/features/cases/components/TreatmentInstructionsPanel';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
 const STEPS = [
   { id: 'patient', title: 'Patient', hint: 'Who is this case for?' },
-  { id: 'treatment', title: 'Treatment', hint: 'What should Ayetis process?' },
+  { id: 'treatment', title: 'Treatment', hint: 'Summary and structured instructions' },
   { id: 'files', title: 'Files', hint: 'Attach STL, scans, photos, or x-rays' },
   { id: 'review', title: 'Review', hint: 'Confirm and submit' },
 ] as const;
@@ -30,6 +33,7 @@ const INITIAL: CreateCaseInput = {
   country: '',
   treatmentSummary: '',
   instructions: '',
+  treatmentInstructions: { ...EMPTY_TREATMENT_INSTRUCTIONS },
   priority: CASE_PRIORITIES.NORMAL,
   initialNote: '',
 };
@@ -237,20 +241,37 @@ export function CreateCasePage() {
               <span className="text-sm font-medium text-ink">Treatment summary</span>
               <textarea
                 required
-                rows={4}
+                rows={3}
                 value={form.treatmentSummary}
                 onChange={(e) => update('treatmentSummary', e.target.value)}
                 placeholder="Brief description of the requested treatment…"
                 className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
               />
             </label>
+
+            <div className="rounded-xl border border-line bg-surface/40 p-4">
+              <p className="text-sm font-semibold text-ink">Treatment instructions form</p>
+              <p className="mt-1 text-sm text-muted">
+                Document arches, appliance, goals, and special requirements.
+              </p>
+              <div className="mt-4">
+                <TreatmentInstructionsFields
+                  value={{
+                    ...EMPTY_TREATMENT_INSTRUCTIONS,
+                    ...(form.treatmentInstructions as TreatmentInstructions | undefined),
+                  }}
+                  onChange={(next) => update('treatmentInstructions', next)}
+                />
+              </div>
+            </div>
+
             <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-ink">Instructions</span>
+              <span className="text-sm font-medium text-ink">Free-text instructions</span>
               <textarea
-                rows={5}
+                rows={3}
                 value={form.instructions ?? ''}
                 onChange={(e) => update('instructions', e.target.value)}
-                placeholder="Special instructions for the Ayetis team…"
+                placeholder="Any extra free-text instructions for the Ayetis team…"
                 className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
               />
             </label>

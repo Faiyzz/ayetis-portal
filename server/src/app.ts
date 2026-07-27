@@ -6,6 +6,8 @@ import { env } from './config/env';
 import auditRoutes from './features/audit/audit.routes';
 import authRoutes from './features/auth/auth.routes';
 import casesRoutes from './features/cases/cases.routes';
+import clarificationsRoutes from './features/clarifications/clarifications.routes';
+import notificationsRoutes from './features/notifications/notifications.routes';
 import usersRoutes from './features/users/users.routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
@@ -35,7 +37,9 @@ export function createApp() {
   app.use('/api/auth', authRoutes);
   app.use('/api/users', usersRoutes);
   app.use('/api/activity', auditRoutes);
+  app.use('/api/notifications', notificationsRoutes);
   app.use('/api/cases', casesRoutes);
+  app.use('/api/clarifications', clarificationsRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

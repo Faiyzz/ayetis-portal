@@ -141,5 +141,21 @@ export async function downloadCaseFile(caseId: string, fileId: string, filename:
   URL.revokeObjectURL(url);
 }
 
+export async function updateCasePayment(
+  caseId: string,
+  payload: import('@ayetis/shared').UpdateCasePaymentInput,
+): Promise<CaseDetailDto> {
+  const { data } = await api.patch(`/cases/${caseId}/payment`, payload);
+  return data.data;
+}
+
+export async function updateTreatmentInstructions(
+  caseId: string,
+  payload: Partial<import('@ayetis/shared').TreatmentInstructions>,
+): Promise<CaseDetailDto> {
+  const { data } = await api.patch(`/cases/${caseId}/treatment-instructions`, payload);
+  return data.data;
+}
+
 export { CASE_PRIORITY_LABELS, formatHistoryValue };
 export type { CasePriority };

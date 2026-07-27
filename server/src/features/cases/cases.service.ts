@@ -5,7 +5,9 @@ import {
   CASE_PRIORITY_LABELS,
   CASE_STATUSES,
   CASE_STATUS_LABELS,
+  EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORIES,
+  PAYMENT_STATUSES,
   PERMISSIONS,
   buildCaseTimeline,
   formatHistoryValue,
@@ -21,7 +23,9 @@ import {
   type CreateCaseInput,
   type FileCategory,
   type Permission,
+  type TreatmentInstructions,
   type UpdateCaseInput,
+  type UpdateCasePaymentInput,
 } from '@ayetis/shared';
 import { Types } from 'mongoose';
 import { AppError } from '../../utils/AppError';
@@ -32,6 +36,10 @@ import {
   recordActivity,
   type RequestAuditContext,
 } from '../audit/audit.service';
+import {
+  countOpenClarifications,
+  listClarificationDtosForCase,
+} from '../clarifications/clarifications.service';
 import { resolvePermissionsForUserId } from '../users/users.service';
 import { resolveStoragePath, saveCaseFile } from '../../services/storage.service';
 
@@ -68,7 +76,40 @@ function pushHistory(
   } as ICase['history'][number]);
 }
 
-function toListItem(caseDoc: ICase): CaseListItemDto {
+function normalizeTreatmentInstructions(
+  input?: Partial<TreatmentInstructions> | null,
+): TreatmentInstructions {
+  return {
+    arches: (input?.arches as TreatmentInstructions['arches']) || '',
+    applianceType: input?.applianceType?.trim() ?? '',
+    treatmentGoal: input?.treatmentGoal?.trim() ?? '',
+    biteDetails: input?.biteDetails?.trim() ?? '',
+    retainers: input?.retainers?.trim() ?? '',
+    specialRequirements: input?.specialRequirements?.trim() ?? '',
+    additionalNotes: input?.additionalNotes?.trim() ?? '',
+  };
+}
+
+function toPaymentDto(caseDoc: ICase) {
+  const payment = caseDoc.payment ?? {
+    status: PAYMENT_STATUSES.NOT_BILLED,
+    currency: 'USD',
+    invoiceNumber: '',
+    notes: '',
+  };
+  return {
+    status: payment.status ?? PAYMENT_STATUSES.NOT_BILLED,
+    currency: payment.currency || 'USD',
+    amountDue: payment.amountDue ?? null,
+    amountPaid: payment.amountPaid ?? null,
+    invoiceNumber: payment.invoiceNumber || '',
+    notes: payment.notes || '',
+    updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
+  };
+}
+
+async function toListItem(caseDoc: ICase): Promise<CaseListItemDto> {
+  const openClarificationCount = await countOpenClarifications(caseDoc._id as Types.ObjectId);
   return {
     id: caseDoc.id,
     caseId: caseDoc.caseId,
@@ -80,6 +121,8 @@ function toListItem(caseDoc: ICase): CaseListItemDto {
     status: caseDoc.status,
     priority: caseDoc.priority,
     treatmentSummary: caseDoc.treatmentSummary,
+    paymentStatus: caseDoc.payment?.status ?? PAYMENT_STATUSES.NOT_BILLED,
+    openClarificationCount,
     isDeleted: caseDoc.isDeleted,
     createdAt: caseDoc.createdAt.toISOString(),
     updatedAt: caseDoc.updatedAt.toISOString(),
@@ -95,7 +138,6 @@ function mapHistory(caseDoc: ICase): CaseHistoryDto[] {
     if (Array.isArray(rawChanges)) {
       changes = rawChanges as CaseHistoryChange[];
     } else if (rawChanges && typeof rawChanges === 'object') {
-      // Legacy shape: { field: newValue }
       changes = Object.entries(rawChanges as Record<string, unknown>).map(([field, to]) => ({
         field,
         label: CASE_FIELD_LABELS[field] ?? field,
@@ -117,13 +159,23 @@ function mapHistory(caseDoc: ICase): CaseHistoryDto[] {
   });
 }
 
-function toDetail(caseDoc: ICase): CaseDetailDto {
+async function toDetail(caseDoc: ICase): Promise<CaseDetailDto> {
+  const [listItem, clarifications] = await Promise.all([
+    toListItem(caseDoc),
+    listClarificationDtosForCase(caseDoc._id as Types.ObjectId),
+  ]);
+
   return {
-    ...toListItem(caseDoc),
+    ...listItem,
     clinicName: caseDoc.clinicName,
     patientGender: caseDoc.patientGender,
     instructions: caseDoc.instructions,
     country: caseDoc.country,
+    treatmentInstructions: {
+      ...EMPTY_TREATMENT_INSTRUCTIONS,
+      ...(caseDoc.treatmentInstructions ?? {}),
+    },
+    payment: toPaymentDto(caseDoc),
     assignedDesignerId: caseDoc.assignedDesignerId
       ? String(caseDoc.assignedDesignerId)
       : null,
@@ -155,6 +207,7 @@ function toDetail(caseDoc: ICase): CaseDetailDto {
     })),
     history: mapHistory(caseDoc),
     timeline: buildCaseTimeline(caseDoc.status),
+    clarifications,
   };
 }
 
@@ -302,7 +355,7 @@ export async function listCases(
   ]);
 
   return {
-    items: items.map(toListItem),
+    items: await Promise.all(items.map((item) => toListItem(item))),
     total,
     page,
     pageSize,
@@ -320,7 +373,7 @@ export async function getCaseById(actor: CaseActor, caseIdOrMongoId: string) {
     throw new AppError('Case not found', 404);
   }
 
-  return toDetail(caseDoc);
+  return await toDetail(caseDoc);
 }
 
 async function findCase(caseIdOrMongoId: string) {
@@ -370,6 +423,13 @@ export async function createCase(
     country: input.country?.trim() ?? '',
     treatmentSummary: input.treatmentSummary.trim(),
     instructions: input.instructions?.trim() ?? '',
+    treatmentInstructions: normalizeTreatmentInstructions(input.treatmentInstructions),
+    payment: {
+      status: PAYMENT_STATUSES.NOT_BILLED,
+      currency: 'USD',
+      invoiceNumber: '',
+      notes: '',
+    },
     status: CASE_STATUSES.SUBMITTED,
     priority,
     notes: [],
@@ -425,7 +485,7 @@ export async function createCase(
     userAgent: audit?.userAgent,
   });
 
-  return toDetail(caseDoc);
+  return await toDetail(caseDoc);
 }
 
 export async function updateCase(
@@ -484,6 +544,23 @@ export async function updateCase(
     });
   }
 
+  if (input.treatmentInstructions) {
+    const previous = normalizeTreatmentInstructions(caseDoc.treatmentInstructions);
+    const next = normalizeTreatmentInstructions({
+      ...previous,
+      ...input.treatmentInstructions,
+    });
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      caseDoc.treatmentInstructions = next;
+      changes.push({
+        field: 'treatmentInstructions',
+        label: 'Treatment instructions',
+        from: previous,
+        to: next,
+      });
+    }
+  }
+
   if (changes.length === 0) {
     throw new AppError('No changes provided', 400);
   }
@@ -538,7 +615,7 @@ export async function updateCase(
     userAgent: audit?.userAgent,
   });
 
-  return toDetail(caseDoc);
+  return await toDetail(caseDoc);
 }
 
 export async function setCasePriority(
@@ -598,7 +675,7 @@ export async function setCasePriority(
     userAgent: audit?.userAgent,
   });
 
-  return toDetail(caseDoc);
+  return await toDetail(caseDoc);
 }
 
 export async function cancelCase(
@@ -663,7 +740,7 @@ export async function cancelCase(
     userAgent: audit?.userAgent,
   });
 
-  return toDetail(caseDoc);
+  return await toDetail(caseDoc);
 }
 
 export async function softDeleteCase(
@@ -716,7 +793,7 @@ export async function softDeleteCase(
     userAgent: audit?.userAgent,
   });
 
-  return toDetail(caseDoc);
+  return await toDetail(caseDoc);
 }
 
 export async function addCaseNote(
@@ -766,7 +843,7 @@ export async function addCaseNote(
     userAgent: audit?.userAgent,
   });
 
-  return toDetail(caseDoc);
+  return await toDetail(caseDoc);
 }
 
 export async function uploadCaseFiles(
@@ -853,7 +930,7 @@ export async function uploadCaseFiles(
     userAgent: audit?.userAgent,
   });
 
-  return toDetail(caseDoc);
+  return await toDetail(caseDoc);
 }
 
 export async function getCaseFileForDownload(
@@ -881,6 +958,129 @@ export async function getCaseFileForDownload(
     originalName: file.originalName || file.filename,
     mimeType: file.mimeType,
   };
+}
+
+export async function updateCasePayment(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: UpdateCasePaymentInput,
+  audit?: RequestAuditContext,
+) {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_MANAGE_PAYMENT)) {
+    throw new AppError('You do not have permission to manage payments', 403);
+  }
+
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (!caseDoc.payment) {
+    caseDoc.payment = {
+      status: PAYMENT_STATUSES.NOT_BILLED,
+      currency: 'USD',
+      invoiceNumber: '',
+      notes: '',
+    };
+  }
+
+  if (input.status !== undefined) caseDoc.payment.status = input.status;
+  if (input.currency !== undefined) caseDoc.payment.currency = input.currency.trim() || 'USD';
+  if (input.amountDue !== undefined) caseDoc.payment.amountDue = input.amountDue ?? undefined;
+  if (input.amountPaid !== undefined) caseDoc.payment.amountPaid = input.amountPaid ?? undefined;
+  if (input.invoiceNumber !== undefined) {
+    caseDoc.payment.invoiceNumber = input.invoiceNumber.trim();
+  }
+  if (input.notes !== undefined) caseDoc.payment.notes = input.notes.trim();
+  caseDoc.payment.updatedAt = new Date();
+  caseDoc.markModified('payment');
+
+  pushHistory(caseDoc, {
+    action: 'payment_updated',
+    summary: `Payment status set to ${caseDoc.payment.status}`,
+    actor,
+    metadata: { payment: toPaymentDto(caseDoc) },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_PAYMENT_UPDATE,
+    summary: `${actor.email} updated payment for case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    metadata: { payment: toPaymentDto(caseDoc) },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return await toDetail(caseDoc);
+}
+
+export async function updateTreatmentInstructions(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: Partial<TreatmentInstructions>,
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  const canEdit =
+    permissionsInclude(actor.permissions, PERMISSIONS.CASE_UPDATE) ||
+    (permissionsInclude(actor.permissions, PERMISSIONS.CASE_CREATE) &&
+      String(caseDoc.doctorId) === actor.id);
+
+  if (!canEdit) {
+    throw new AppError('You do not have permission to update treatment instructions', 403);
+  }
+
+  if (caseDoc.isDeleted) {
+    throw new AppError('Cannot edit a deleted case', 400);
+  }
+
+  const previous = normalizeTreatmentInstructions(caseDoc.treatmentInstructions);
+  const next = normalizeTreatmentInstructions({ ...previous, ...input });
+  caseDoc.treatmentInstructions = next;
+
+  if (input.additionalNotes !== undefined || input.specialRequirements !== undefined) {
+    // Keep free-text instructions in sync with special requirements when provided
+  }
+
+  pushHistory(caseDoc, {
+    action: 'treatment_instructions_updated',
+    summary: 'Treatment instructions updated',
+    actor,
+    metadata: {
+      changes: [
+        {
+          field: 'treatmentInstructions',
+          label: 'Treatment instructions',
+          from: previous,
+          to: next,
+        },
+      ],
+    },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_UPDATE,
+    summary: `${actor.email} updated treatment instructions for ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return await toDetail(caseDoc);
 }
 
 export async function resolveCaseActor(userId: string): Promise<CaseActor> {

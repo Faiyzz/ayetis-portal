@@ -18,6 +18,10 @@ export const AUDIT_ACTIONS = {
   CASE_NOTE_ADD: 'case.note.add',
   CASE_PRIORITY_SET: 'case.priority.set',
   CASE_FILE_UPLOAD: 'case.file.upload',
+  CASE_PAYMENT_UPDATE: 'case.payment.update',
+  CLARIFICATION_CREATE: 'clarification.create',
+  CLARIFICATION_REPLY: 'clarification.reply',
+  CLARIFICATION_RESOLVE: 'clarification.resolve',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
@@ -44,9 +48,13 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   [AUDIT_ACTIONS.CASE_NOTE_ADD]: 'Case note added',
   [AUDIT_ACTIONS.CASE_PRIORITY_SET]: 'Case priority changed',
   [AUDIT_ACTIONS.CASE_FILE_UPLOAD]: 'Case file uploaded',
+  [AUDIT_ACTIONS.CASE_PAYMENT_UPDATE]: 'Case payment updated',
+  [AUDIT_ACTIONS.CLARIFICATION_CREATE]: 'Clarification created',
+  [AUDIT_ACTIONS.CLARIFICATION_REPLY]: 'Clarification reply',
+  [AUDIT_ACTIONS.CLARIFICATION_RESOLVE]: 'Clarification resolved',
 };
 
-export type AuditTargetType = 'user' | 'role' | 'auth' | 'system' | 'case';
+export type AuditTargetType = 'user' | 'role' | 'auth' | 'system' | 'case' | 'clarification';
 
 export interface ActivityLogDto {
   id: string;

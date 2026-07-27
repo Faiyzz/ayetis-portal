@@ -1,3 +1,10 @@
+import type { ClarificationDto } from './clarifications';
+import type {
+  CasePaymentOverview,
+  PaymentStatus,
+  TreatmentInstructions,
+} from './treatment';
+
 export const CASE_STATUSES = {
   SUBMITTED: 'submitted',
   UNDER_VALIDATION: 'under_validation',
@@ -186,6 +193,8 @@ export interface CaseListItemDto {
   status: CaseStatus;
   priority: CasePriority;
   treatmentSummary: string;
+  paymentStatus: PaymentStatus;
+  openClarificationCount: number;
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;
@@ -196,6 +205,8 @@ export interface CaseDetailDto extends CaseListItemDto {
   patientGender: string;
   instructions: string;
   country: string;
+  treatmentInstructions: TreatmentInstructions;
+  payment: CasePaymentOverview;
   assignedDesignerId: string | null;
   assignedDesignerName: string | null;
   cancelReason: string | null;
@@ -206,6 +217,7 @@ export interface CaseDetailDto extends CaseListItemDto {
   files: CaseFileDto[];
   history: CaseHistoryDto[];
   timeline: TimelineStep[];
+  clarifications: ClarificationDto[];
 }
 
 export interface CaseListResult {
@@ -223,6 +235,7 @@ export interface CreateCaseInput {
   country?: string;
   treatmentSummary: string;
   instructions?: string;
+  treatmentInstructions?: Partial<TreatmentInstructions>;
   priority?: CasePriority;
   initialNote?: string;
 }
@@ -235,6 +248,7 @@ export interface UpdateCaseInput {
   country?: string;
   treatmentSummary?: string;
   instructions?: string;
+  treatmentInstructions?: Partial<TreatmentInstructions>;
   priority?: CasePriority;
   status?: CaseStatus;
 }

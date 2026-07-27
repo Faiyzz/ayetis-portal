@@ -1,9 +1,13 @@
 import {
+  ALL_ARCH_OPTIONS,
   ALL_CASE_PRIORITIES,
   ALL_CASE_STATUSES,
+  ALL_PAYMENT_STATUSES,
+  isArchOption,
   isCasePriority,
   isCaseStatus,
   isFileCategory,
+  isPaymentStatus,
   type CasePriority,
   type CaseStatus,
 } from '@ayetis/shared';
@@ -24,6 +28,23 @@ const statusSchema = z
   .refine((value): value is CaseStatus | undefined => !value || isCaseStatus(value), {
     message: `status must be one of: ${ALL_CASE_STATUSES.join(', ')}`,
   });
+
+const treatmentInstructionsSchema = z
+  .object({
+    arches: z
+      .string()
+      .optional()
+      .refine((value) => !value || isArchOption(value), {
+        message: `arches must be one of: ${ALL_ARCH_OPTIONS.join(', ')}`,
+      }),
+    applianceType: z.string().trim().max(120).optional(),
+    treatmentGoal: z.string().trim().max(2000).optional(),
+    biteDetails: z.string().trim().max(2000).optional(),
+    retainers: z.string().trim().max(1000).optional(),
+    specialRequirements: z.string().trim().max(2000).optional(),
+    additionalNotes: z.string().trim().max(2000).optional(),
+  })
+  .optional();
 
 export const listCasesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
@@ -49,6 +70,7 @@ export const createCaseSchema = z.object({
   country: z.string().trim().max(80).optional(),
   treatmentSummary: z.string().trim().min(1, 'Treatment summary is required').max(2000),
   instructions: z.string().trim().max(5000).optional(),
+  treatmentInstructions: treatmentInstructionsSchema,
   priority: z
     .string()
     .optional()
@@ -67,6 +89,7 @@ export const updateCaseSchema = z
     country: z.string().trim().max(80).optional(),
     treatmentSummary: z.string().trim().min(1).max(2000).optional(),
     instructions: z.string().trim().max(5000).optional(),
+    treatmentInstructions: treatmentInstructionsSchema,
     priority: z
       .string()
       .optional()
@@ -78,6 +101,39 @@ export const updateCaseSchema = z
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',
+  });
+
+export const treatmentInstructionsBodySchema = z.object({
+  arches: z
+    .string()
+    .optional()
+    .refine((value) => !value || isArchOption(value), {
+      message: `arches must be one of: ${ALL_ARCH_OPTIONS.join(', ')}`,
+    }),
+  applianceType: z.string().trim().max(120).optional(),
+  treatmentGoal: z.string().trim().max(2000).optional(),
+  biteDetails: z.string().trim().max(2000).optional(),
+  retainers: z.string().trim().max(1000).optional(),
+  specialRequirements: z.string().trim().max(2000).optional(),
+  additionalNotes: z.string().trim().max(2000).optional(),
+});
+
+export const updatePaymentSchema = z
+  .object({
+    status: z
+      .string()
+      .optional()
+      .refine((value) => !value || isPaymentStatus(value), {
+        message: `status must be one of: ${ALL_PAYMENT_STATUSES.join(', ')}`,
+      }),
+    currency: z.string().trim().max(8).optional(),
+    amountDue: z.number().min(0).nullable().optional(),
+    amountPaid: z.number().min(0).nullable().optional(),
+    invoiceNumber: z.string().trim().max(80).optional(),
+    notes: z.string().trim().max(2000).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'At least one payment field is required',
   });
 
 export const reasonSchema = z.object({

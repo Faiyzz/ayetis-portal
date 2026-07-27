@@ -22,5 +22,7 @@ export const env = {
   clientUrl: process.env.CLIENT_URL ?? 'http://localhost:5173',
   seedAdminEmail: process.env.SEED_ADMIN_EMAIL ?? 'admin@ayetis.com',
   seedAdminPassword: process.env.SEED_ADMIN_PASSWORD ?? 'Admin@12345',
+  resendApiKey: process.env.RESEND_API_KEY ?? '',
+  emailFrom: process.env.EMAIL_FROM ?? 'Ayetis Portal <onboarding@resend.dev>',
   isDev: (process.env.NODE_ENV ?? 'development') !== 'production',
 };

@@ -3,6 +3,7 @@ import { AUDIT_ACTIONS, ROLES } from '@ayetis/shared';
 import { env } from '../../config/env';
 import { signAccessToken } from '../../middleware/auth';
 import { User, type IUser } from '../../models/User';
+import { passwordResetTemplate, sendTemplatedEmail } from '../../services/email';
 import { AppError } from '../../utils/AppError';
 import {
   getRequestAuditContext,
@@ -170,8 +171,19 @@ export async function forgotPassword(input: ForgotPasswordInput, ctx: RequestAud
 
     const resetUrl = `${env.clientUrl}/reset-password?token=${rawToken}`;
 
-    if (env.isDev) {
-      console.log(`[password-reset] ${user.email} → ${resetUrl}`);
+    try {
+      await sendTemplatedEmail(
+        user.email,
+        passwordResetTemplate({
+          name: `${user.firstName} ${user.lastName}`.trim(),
+          resetUrl,
+        }),
+      );
+    } catch (error) {
+      console.error('[email] password-reset failed', error);
+      if (env.isDev) {
+        console.log(`[password-reset] ${user.email} → ${resetUrl}`);
+      }
     }
 
     await recordActivity({

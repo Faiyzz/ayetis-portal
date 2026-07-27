@@ -2,11 +2,13 @@ import {
   CASE_PRIORITIES,
   CASE_PRIORITY_LABELS,
   CASE_STATUS_LABELS,
+  EMPTY_TREATMENT_INSTRUCTIONS,
+  PAYMENT_STATUS_LABELS,
   PERMISSIONS,
   type CaseDetailDto,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import {
@@ -16,26 +18,38 @@ import {
   fetchCase,
   markCaseUrgent,
   softDeleteCase,
+  updateCasePayment,
+  updateTreatmentInstructions,
 } from '@/features/cases/api';
 import { CaseFilesPanel } from '@/features/cases/components/CaseFilesPanel';
 import { CaseHistoryPanel } from '@/features/cases/components/CaseHistoryPanel';
+import { CasePaymentPanel } from '@/features/cases/components/CasePaymentPanel';
 import { CaseStatusTimeline } from '@/features/cases/components/CaseStatusTimeline';
+import { ClarificationsPanel } from '@/features/cases/components/ClarificationsPanel';
+import { TreatmentInstructionsPanel } from '@/features/cases/components/TreatmentInstructionsPanel';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
 export function CaseDetailPage() {
   const { caseId = '' } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { can, canAny } = usePermissions();
+  const { can, canAny, user } = usePermissions();
   const [caseData, setCaseData] = useState<CaseDetailDto | null>(null);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [savingNote, setSavingNote] = useState(false);
   const [priorityBusy, setPriorityBusy] = useState(false);
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [treatmentBusy, setTreatmentBusy] = useState(false);
 
+  const tab = searchParams.get('tab') === 'clarifications' ? 'clarifications' : 'overview';
   const canUpload = canAny(PERMISSIONS.CASE_CREATE, PERMISSIONS.CASE_UPDATE);
   const showFullAudit = canAny(PERMISSIONS.AUDIT_VIEW, PERMISSIONS.CASE_VIEW_ALL);
+  const canEditTreatment =
+    can(PERMISSIONS.CASE_UPDATE) ||
+    (can(PERMISSIONS.CASE_CREATE) && caseData && user?.id === caseData.doctorId);
 
   async function load() {
     setLoading(true);
@@ -118,14 +132,8 @@ export function CaseDetailPage() {
       toast().warning('Deletion requires a reason');
       return;
     }
-    const first = window.confirm(
-      `Delete case ${caseData.caseId}? This is a soft delete and can be audited.`,
-    );
-    if (!first) return;
-    const second = window.confirm(
-      'Final confirmation: soft-delete this case? Records are retained for audit.',
-    );
-    if (!second) return;
+    if (!window.confirm(`Delete case ${caseData.caseId}?`)) return;
+    if (!window.confirm('Final confirmation: soft-delete this case?')) return;
 
     try {
       const updated = await softDeleteCase(caseData.caseId, { reason: reason.trim() });
@@ -154,6 +162,7 @@ export function CaseDetailPage() {
 
   const isUrgent = caseData.priority === CASE_PRIORITIES.URGENT;
   const isCancelled = caseData.status === 'cancelled';
+  const waitingClarification = caseData.status === 'waiting_clarification';
 
   return (
     <div className="space-y-5">
@@ -170,13 +179,20 @@ export function CaseDetailPage() {
             </span>
             <span
               className={`rounded-md px-2 py-1 font-medium ${
-                isUrgent
-                  ? 'bg-amber-50 text-amber-800'
-                  : 'bg-slate-100 text-slate-700'
+                isUrgent ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-700'
               }`}
             >
               {CASE_PRIORITY_LABELS[caseData.priority]}
             </span>
+            <span className="rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700">
+              {PAYMENT_STATUS_LABELS[caseData.paymentStatus]}
+            </span>
+            {caseData.openClarificationCount > 0 ? (
+              <span className="rounded-md bg-amber-50 px-2 py-1 font-medium text-amber-800">
+                {caseData.openClarificationCount} open clarification
+                {caseData.openClarificationCount === 1 ? '' : 's'}
+              </span>
+            ) : null}
             {caseData.isDeleted ? (
               <span className="rounded-md bg-red-50 px-2 py-1 font-medium text-red-700">
                 Soft-deleted
@@ -197,11 +213,7 @@ export function CaseDetailPage() {
                   : 'border-amber-200 bg-white text-amber-800 hover:bg-amber-50'
               }`}
             >
-              {priorityBusy
-                ? 'Updating…'
-                : isUrgent
-                  ? 'Clear urgent'
-                  : 'Mark urgent'}
+              {priorityBusy ? 'Updating…' : isUrgent ? 'Clear urgent' : 'Mark urgent'}
             </button>
           ) : null}
           {can(PERMISSIONS.CASE_UPDATE) && !caseData.isDeleted ? (
@@ -235,91 +247,174 @@ export function CaseDetailPage() {
         </div>
       </div>
 
-      <CaseStatusTimeline
-        steps={caseData.timeline}
-        currentLabel={CASE_STATUS_LABELS[caseData.status]}
-        isCancelled={isCancelled}
-      />
+      {waitingClarification ? (
+        <Alert tone="info">
+          This case is waiting for clarification. Open the Clarifications tab to review or reply.
+        </Alert>
+      ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-        <section className="space-y-4 rounded-xl border border-line bg-white p-5">
-          <h2 className="text-sm font-semibold text-ink">Case information</h2>
-          <dl className="grid gap-3 sm:grid-cols-2 text-sm">
-            {[
-              ['Patient', caseData.patientName],
-              ['Age', caseData.patientAge?.toString() ?? '—'],
-              ['Gender', caseData.patientGender || '—'],
-              ['Clinic', caseData.clinicName || '—'],
-              ['Country', caseData.country || '—'],
-              ['Doctor', `${caseData.doctorName} (${caseData.doctorEmail})`],
-              ['Assigned designer', caseData.assignedDesignerName || 'Unassigned'],
-              ['Created', new Date(caseData.createdAt).toLocaleString()],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-xs font-medium uppercase tracking-wide text-muted">{label}</dt>
-                <dd className="mt-1 text-ink">{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted">Instructions</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-ink">
-              {caseData.instructions || 'No instructions provided.'}
-            </p>
-          </div>
-          {caseData.cancelReason ? (
-            <Alert tone="info">Cancel reason: {caseData.cancelReason}</Alert>
-          ) : null}
-          {caseData.deleteReason ? (
-            <Alert>Delete reason: {caseData.deleteReason}</Alert>
-          ) : null}
-        </section>
+      <div className="flex gap-2 border-b border-line pb-px">
+        {(
+          [
+            ['overview', 'Overview'],
+            ['clarifications', `Clarifications (${caseData.clarifications.length})`],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() =>
+              setSearchParams(id === 'overview' ? {} : { tab: id }, { replace: true })
+            }
+            className={`rounded-t-lg px-3 py-2 text-sm font-semibold ${
+              tab === id
+                ? 'border border-b-white border-line bg-white text-brand-700'
+                : 'text-muted hover:text-ink'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-        <CaseFilesPanel
+      {tab === 'clarifications' ? (
+        <ClarificationsPanel
           caseId={caseData.caseId}
-          files={caseData.files}
-          canUpload={canUpload && !caseData.isDeleted}
-          onUpdated={setCaseData}
+          clarifications={caseData.clarifications}
+          onChanged={load}
         />
-      </div>
+      ) : (
+        <>
+          <CaseStatusTimeline
+            steps={caseData.timeline}
+            currentLabel={CASE_STATUS_LABELS[caseData.status]}
+            isCancelled={isCancelled}
+          />
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <section className="rounded-xl border border-line bg-white p-5">
-          <h2 className="text-sm font-semibold text-ink">Notes</h2>
-          {!caseData.isDeleted ? (
-            <form onSubmit={handleAddNote} className="mt-3 space-y-3">
-              <TextField
-                label="Add note"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Case note or clarification…"
-              />
-              <div className="max-w-xs">
-                <AuthButton loading={savingNote} disabled={!note.trim()}>
-                  Add note
-                </AuthButton>
+          <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+            <section className="space-y-4 rounded-xl border border-line bg-white p-5">
+              <h2 className="text-sm font-semibold text-ink">Case information</h2>
+              <dl className="grid gap-3 sm:grid-cols-2 text-sm">
+                {[
+                  ['Patient', caseData.patientName],
+                  ['Age', caseData.patientAge?.toString() ?? '—'],
+                  ['Gender', caseData.patientGender || '—'],
+                  ['Clinic', caseData.clinicName || '—'],
+                  ['Country', caseData.country || '—'],
+                  ['Doctor', `${caseData.doctorName} (${caseData.doctorEmail})`],
+                  ['Assigned designer', caseData.assignedDesignerName || 'Unassigned'],
+                  ['Created', new Date(caseData.createdAt).toLocaleString()],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted">
+                      {label}
+                    </dt>
+                    <dd className="mt-1 text-ink">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                  Free-text instructions
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-ink">
+                  {caseData.instructions || 'No free-text instructions provided.'}
+                </p>
               </div>
-            </form>
-          ) : null}
-          <ul className="mt-4 space-y-3">
-            {caseData.notes.length === 0 ? (
-              <li className="text-sm text-muted">No notes yet.</li>
-            ) : (
-              caseData.notes.map((item) => (
-                <li key={item.id} className="rounded-lg bg-surface px-3 py-3 text-sm">
-                  <p className="font-medium text-ink">{item.authorName}</p>
-                  <p className="mt-1 whitespace-pre-wrap text-ink">{item.body}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {new Date(item.createdAt).toLocaleString()}
-                  </p>
-                </li>
-              ))
-            )}
-          </ul>
-        </section>
+              {caseData.cancelReason ? (
+                <Alert tone="info">Cancel reason: {caseData.cancelReason}</Alert>
+              ) : null}
+            </section>
 
-        <CaseHistoryPanel history={caseData.history} showFullAudit={showFullAudit} />
-      </div>
+            <div className="space-y-4">
+              <CasePaymentPanel
+                payment={caseData.payment}
+                canManage={can(PERMISSIONS.CASE_MANAGE_PAYMENT) && !caseData.isDeleted}
+                saving={paymentBusy}
+                onSave={async (payload) => {
+                  setPaymentBusy(true);
+                  try {
+                    const updated = await updateCasePayment(caseData.caseId, payload);
+                    setCaseData(updated);
+                    toast().success('Payment overview updated');
+                  } catch (err) {
+                    toast().error(getErrorMessage(err, 'Unable to update payment'));
+                    throw err;
+                  } finally {
+                    setPaymentBusy(false);
+                  }
+                }}
+              />
+              <CaseFilesPanel
+                caseId={caseData.caseId}
+                files={caseData.files}
+                canUpload={canUpload && !caseData.isDeleted}
+                onUpdated={setCaseData}
+              />
+            </div>
+          </div>
+
+          <TreatmentInstructionsPanel
+            value={{ ...EMPTY_TREATMENT_INSTRUCTIONS, ...caseData.treatmentInstructions }}
+            canEdit={Boolean(canEditTreatment) && !caseData.isDeleted}
+            saving={treatmentBusy}
+            onSave={async (next) => {
+              setTreatmentBusy(true);
+              try {
+                const updated = await updateTreatmentInstructions(caseData.caseId, next);
+                setCaseData(updated);
+                toast().success('Treatment instructions saved');
+              } catch (err) {
+                toast().error(getErrorMessage(err, 'Unable to save treatment instructions'));
+                throw err;
+              } finally {
+                setTreatmentBusy(false);
+              }
+            }}
+          />
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <section className="rounded-xl border border-line bg-white p-5">
+              <h2 className="text-sm font-semibold text-ink">Notes & instructions</h2>
+              <p className="mt-1 text-sm text-muted">
+                Free-text notes for special requirements or team communication.
+              </p>
+              {!caseData.isDeleted ? (
+                <form onSubmit={handleAddNote} className="mt-3 space-y-3">
+                  <TextField
+                    label="Add note"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Case note or special instruction…"
+                  />
+                  <div className="max-w-xs">
+                    <AuthButton loading={savingNote} disabled={!note.trim()}>
+                      Add note
+                    </AuthButton>
+                  </div>
+                </form>
+              ) : null}
+              <ul className="mt-4 space-y-3">
+                {caseData.notes.length === 0 ? (
+                  <li className="text-sm text-muted">No notes yet.</li>
+                ) : (
+                  caseData.notes.map((item) => (
+                    <li key={item.id} className="rounded-lg bg-surface px-3 py-3 text-sm">
+                      <p className="font-medium text-ink">{item.authorName}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-ink">{item.body}</p>
+                      <p className="mt-1 text-xs text-muted">
+                        {new Date(item.createdAt).toLocaleString()}
+                      </p>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </section>
+
+            <CaseHistoryPanel history={caseData.history} showFullAudit={showFullAudit} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

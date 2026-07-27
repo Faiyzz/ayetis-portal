@@ -3,6 +3,7 @@ import {
   ALL_CASE_STATUSES,
   CASE_PRIORITY_LABELS,
   CASE_STATUS_LABELS,
+  PAYMENT_STATUS_LABELS,
   PERMISSIONS,
   type CaseListItemDto,
   type CasePriority,
@@ -31,7 +32,10 @@ function StatusPill({ status }: { status: CaseStatus }) {
 }
 
 export function CasesPage() {
-  const { can } = usePermissions();
+  const { can, canAny } = usePermissions();
+  const isDoctorView =
+    can(PERMISSIONS.CASE_VIEW_OWN) &&
+    !canAny(PERMISSIONS.CASE_VIEW_ALL, PERMISSIONS.CASE_VIEW_ASSIGNED);
   const [items, setItems] = useState<CaseListItemDto[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -80,9 +84,13 @@ export function CasesPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-medium text-brand-600">Cases</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">Case listing</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">
+            {isDoctorView ? 'My submitted cases' : 'Case listing'}
+          </h1>
           <p className="mt-1.5 text-[15px] text-muted">
-            Search and filter cases relevant to your role.
+            {isDoctorView
+              ? 'Track every case you have submitted in one place — status, priority, and payment.'
+              : 'Search and filter cases relevant to your role.'}
           </p>
         </div>
         {can(PERMISSIONS.CASE_CREATE) ? (
@@ -158,22 +166,23 @@ export function CasesPage() {
               <tr>
                 <th className="px-4 py-3 font-medium">Case ID</th>
                 <th className="px-4 py-3 font-medium">Patient</th>
-                <th className="px-4 py-3 font-medium">Doctor</th>
+                {!isDoctorView ? <th className="px-4 py-3 font-medium">Doctor</th> : null}
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Priority</th>
+                <th className="px-4 py-3 font-medium">Payment</th>
                 <th className="px-4 py-3 font-medium">Updated</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-muted">
+                  <td colSpan={isDoctorView ? 6 : 7} className="px-4 py-8 text-muted">
                     Loading cases…
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-muted">
+                  <td colSpan={isDoctorView ? 6 : 7} className="px-4 py-8 text-muted">
                     No cases found.
                   </td>
                 </tr>
@@ -187,17 +196,28 @@ export function CasesPage() {
                       >
                         {item.caseId}
                       </Link>
+                      {item.openClarificationCount > 0 ? (
+                        <p className="mt-0.5 text-xs text-amber-700">
+                          {item.openClarificationCount} clarification
+                          {item.openClarificationCount === 1 ? '' : 's'}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-4 py-3 text-ink">{item.patientName}</td>
-                    <td className="px-4 py-3">
-                      <p className="text-ink">{item.doctorName}</p>
-                      <p className="text-xs text-muted">{item.doctorEmail}</p>
-                    </td>
+                    {!isDoctorView ? (
+                      <td className="px-4 py-3">
+                        <p className="text-ink">{item.doctorName}</p>
+                        <p className="text-xs text-muted">{item.doctorEmail}</p>
+                      </td>
+                    ) : null}
                     <td className="px-4 py-3">
                       <StatusPill status={item.status} />
                     </td>
                     <td className="px-4 py-3 text-ink">
                       {CASE_PRIORITY_LABELS[item.priority]}
+                    </td>
+                    <td className="px-4 py-3 text-ink">
+                      {PAYMENT_STATUS_LABELS[item.paymentStatus]}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-muted">
                       {new Date(item.updatedAt).toLocaleString()}

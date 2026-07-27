@@ -89,6 +89,46 @@ export async function setPriority(req: AuthenticatedRequest, res: Response, next
   }
 }
 
+export async function updatePayment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.updateCasePayment(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'Payment overview updated',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateTreatmentInstructions(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.updateTreatmentInstructions(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'Treatment instructions saved',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function cancelCase(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const data = await casesService.cancelCase(

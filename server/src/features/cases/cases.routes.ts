@@ -7,6 +7,7 @@ import {
   requirePermission,
 } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
+import { caseClarificationsRouter } from '../clarifications/clarifications.routes';
 import * as casesController from './cases.controller';
 import {
   addNoteSchema,
@@ -14,7 +15,9 @@ import {
   listCasesQuerySchema,
   reasonSchema,
   setPrioritySchema,
+  treatmentInstructionsBodySchema,
   updateCaseSchema,
+  updatePaymentSchema,
   uploadFilesMetaSchema,
 } from './cases.schemas';
 
@@ -23,7 +26,7 @@ const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100 MB
+    fileSize: 100 * 1024 * 1024,
     files: 20,
   },
 });
@@ -72,6 +75,20 @@ router.post(
   casesController.setPriority,
 );
 
+router.patch(
+  '/:caseId/payment',
+  requirePermission(PERMISSIONS.CASE_MANAGE_PAYMENT),
+  validate(updatePaymentSchema),
+  casesController.updatePayment,
+);
+
+router.patch(
+  '/:caseId/treatment-instructions',
+  requireAnyPermission(PERMISSIONS.CASE_CREATE, PERMISSIONS.CASE_UPDATE),
+  validate(treatmentInstructionsBodySchema),
+  casesController.updateTreatmentInstructions,
+);
+
 router.post(
   '/:caseId/cancel',
   requireAnyPermission(PERMISSIONS.CASE_UPDATE, PERMISSIONS.CASE_DELETE),
@@ -99,10 +116,7 @@ router.post(
 
 router.post(
   '/:caseId/files',
-  requireAnyPermission(
-    PERMISSIONS.CASE_CREATE,
-    PERMISSIONS.CASE_UPDATE,
-  ),
+  requireAnyPermission(PERMISSIONS.CASE_CREATE, PERMISSIONS.CASE_UPDATE),
   upload.array('files', 20),
   validate(uploadFilesMetaSchema),
   casesController.uploadFiles,
@@ -117,5 +131,7 @@ router.get(
   ),
   casesController.downloadFile,
 );
+
+router.use('/:caseId/clarifications', caseClarificationsRouter);
 
 export default router;

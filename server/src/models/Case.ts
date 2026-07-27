@@ -1,13 +1,20 @@
 import {
+  ALL_ARCH_OPTIONS,
   ALL_CASE_PRIORITIES,
   ALL_CASE_STATUSES,
   ALL_FILE_CATEGORIES,
+  ALL_PAYMENT_STATUSES,
   CASE_PRIORITIES,
   CASE_STATUSES,
+  EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORIES,
+  PAYMENT_STATUSES,
+  type ArchOption,
   type CasePriority,
   type CaseStatus,
   type FileCategory,
+  type PaymentStatus,
+  type TreatmentInstructions,
 } from '@ayetis/shared';
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
 
@@ -44,6 +51,16 @@ export interface ICaseHistory {
   createdAt: Date;
 }
 
+export interface ICasePayment {
+  status: PaymentStatus;
+  currency: string;
+  amountDue?: number;
+  amountPaid?: number;
+  invoiceNumber: string;
+  notes: string;
+  updatedAt?: Date;
+}
+
 export interface ICase extends Document {
   caseId: string;
   doctorId: Types.ObjectId;
@@ -56,6 +73,8 @@ export interface ICase extends Document {
   country: string;
   treatmentSummary: string;
   instructions: string;
+  treatmentInstructions: TreatmentInstructions;
+  payment: ICasePayment;
   status: CaseStatus;
   priority: CasePriority;
   assignedDesignerId?: Types.ObjectId;
@@ -116,6 +135,40 @@ const caseHistorySchema = new Schema<ICaseHistory>(
   { _id: true },
 );
 
+const treatmentInstructionsSchema = new Schema<TreatmentInstructions>(
+  {
+    arches: {
+      type: String,
+      enum: ['', ...ALL_ARCH_OPTIONS],
+      default: '',
+    },
+    applianceType: { type: String, default: '', trim: true },
+    treatmentGoal: { type: String, default: '', trim: true },
+    biteDetails: { type: String, default: '', trim: true },
+    retainers: { type: String, default: '', trim: true },
+    specialRequirements: { type: String, default: '', trim: true },
+    additionalNotes: { type: String, default: '', trim: true },
+  },
+  { _id: false },
+);
+
+const casePaymentSchema = new Schema<ICasePayment>(
+  {
+    status: {
+      type: String,
+      enum: ALL_PAYMENT_STATUSES,
+      default: PAYMENT_STATUSES.NOT_BILLED,
+    },
+    currency: { type: String, default: 'USD', trim: true },
+    amountDue: { type: Number, min: 0 },
+    amountPaid: { type: Number, min: 0 },
+    invoiceNumber: { type: String, default: '', trim: true },
+    notes: { type: String, default: '', trim: true },
+    updatedAt: { type: Date },
+  },
+  { _id: false },
+);
+
 const caseSchema = new Schema<ICase>(
   {
     caseId: {
@@ -139,6 +192,19 @@ const caseSchema = new Schema<ICase>(
     country: { type: String, default: '', trim: true },
     treatmentSummary: { type: String, required: true, trim: true },
     instructions: { type: String, default: '', trim: true },
+    treatmentInstructions: {
+      type: treatmentInstructionsSchema,
+      default: () => ({ ...EMPTY_TREATMENT_INSTRUCTIONS }),
+    },
+    payment: {
+      type: casePaymentSchema,
+      default: () => ({
+        status: PAYMENT_STATUSES.NOT_BILLED,
+        currency: 'USD',
+        invoiceNumber: '',
+        notes: '',
+      }),
+    },
     status: {
       type: String,
       enum: ALL_CASE_STATUSES,
@@ -170,3 +236,5 @@ caseSchema.index({ createdAt: -1 });
 caseSchema.index({ status: 1, priority: 1, createdAt: -1 });
 
 export const Case: Model<ICase> = mongoose.models.Case ?? mongoose.model<ICase>('Case', caseSchema);
+
+export type { ArchOption };
