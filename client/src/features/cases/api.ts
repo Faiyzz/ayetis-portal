@@ -141,6 +141,55 @@ export async function downloadCaseFile(caseId: string, fileId: string, filename:
   URL.revokeObjectURL(url);
 }
 
+export async function downloadAllCaseFiles(caseId: string) {
+  const token = localStorage.getItem('ayetis_token');
+  const response = await fetch(`/api/cases/${caseId}/files/download-all`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error('Unable to download case files');
+  }
+
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const match = /filename="?([^"]+)"?/i.exec(disposition);
+  const filename = match?.[1] || `${caseId}-files.zip`;
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function startProduction(
+  caseId: string,
+  payload: { notes?: string } = {},
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/production/start`, payload);
+  return data.data;
+}
+
+export async function updateProductionNotes(
+  caseId: string,
+  payload: { notes?: string },
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/production/notes`, payload);
+  return data.data;
+}
+
+export async function submitCaseToQc(
+  caseId: string,
+  payload: { notes?: string } = {},
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/production/submit-qc`, payload);
+  return data.data;
+}
+
 export async function updateCasePayment(
   caseId: string,
   payload: import('@ayetis/shared').UpdateCasePaymentInput,

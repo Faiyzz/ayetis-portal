@@ -14,6 +14,7 @@ import {
   assignCaseSchema,
   createCaseSchema,
   listCasesQuerySchema,
+  productionNotesSchema,
   reasonSchema,
   setPrioritySchema,
   treatmentInstructionsBodySchema,
@@ -161,6 +162,16 @@ router.post(
 );
 
 router.get(
+  '/:caseId/files/download-all',
+  requireAnyPermission(
+    PERMISSIONS.CASE_VIEW_OWN,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+  ),
+  casesController.downloadAllFiles,
+);
+
+router.get(
   '/:caseId/files/:fileId',
   requireAnyPermission(
     PERMISSIONS.CASE_VIEW_OWN,
@@ -168,6 +179,27 @@ router.get(
     PERMISSIONS.CASE_VIEW_ASSIGNED,
   ),
   casesController.downloadFile,
+);
+
+router.post(
+  '/:caseId/production/start',
+  requirePermission(PERMISSIONS.CASE_DESIGN),
+  validate(productionNotesSchema),
+  casesController.startProduction,
+);
+
+router.post(
+  '/:caseId/production/notes',
+  requirePermission(PERMISSIONS.CASE_DESIGN),
+  validate(productionNotesSchema),
+  casesController.updateProduction,
+);
+
+router.post(
+  '/:caseId/production/submit-qc',
+  requirePermission(PERMISSIONS.CASE_DESIGN),
+  validate(productionNotesSchema),
+  casesController.submitToQc,
 );
 
 router.use('/:caseId/clarifications', caseClarificationsRouter);

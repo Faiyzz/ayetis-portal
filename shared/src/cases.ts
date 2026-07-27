@@ -225,6 +225,11 @@ export interface CaseDetailDto extends CaseListItemDto {
   deleteReason: string | null;
   validatedByName: string | null;
   validation: CaseValidationSummary;
+  productionStartedAt: string | null;
+  productionStartedByName: string | null;
+  submittedToQcAt: string | null;
+  submittedToQcByName: string | null;
+  productionNotes: string;
   notes: CaseNoteDto[];
   files: CaseFileDto[];
   history: CaseHistoryDto[];

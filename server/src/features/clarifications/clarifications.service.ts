@@ -96,12 +96,13 @@ async function findCaseForActor(actor: ClarificationActor, caseIdOrMongoId: stri
     return caseDoc;
   }
 
-  if (
-    permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ASSIGNED) &&
-    caseDoc.assignedDesignerId &&
-    String(caseDoc.assignedDesignerId) === actor.id
-  ) {
-    return caseDoc;
+  if (permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ASSIGNED)) {
+    if (caseDoc.assignedDesignerId && String(caseDoc.assignedDesignerId) === actor.id) {
+      return caseDoc;
+    }
+    if (caseDoc.assignmentMode === 'auto_queue' && !caseDoc.assignedDesignerId) {
+      return caseDoc;
+    }
   }
 
   throw new AppError('You do not have permission to view this case', 403);

@@ -180,3 +180,7 @@ export const assignCaseSchema = z
       });
     }
   });
+
+export const productionNotesSchema = z.object({
+  notes: z.string().trim().max(5000).optional(),
+});

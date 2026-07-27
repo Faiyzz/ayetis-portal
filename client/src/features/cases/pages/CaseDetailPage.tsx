@@ -27,6 +27,7 @@ import { CasePaymentPanel } from '@/features/cases/components/CasePaymentPanel';
 import { CaseStatusTimeline } from '@/features/cases/components/CaseStatusTimeline';
 import { CaseValidationAssignPanel } from '@/features/cases/components/CaseValidationAssignPanel';
 import { ClarificationsPanel } from '@/features/cases/components/ClarificationsPanel';
+import { DesignerProductionPanel } from '@/features/cases/components/DesignerProductionPanel';
 import { TreatmentInstructionsPanel } from '@/features/cases/components/TreatmentInstructionsPanel';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
@@ -299,6 +300,16 @@ export function CaseDetailPage() {
               canValidate={can(PERMISSIONS.CASE_VALIDATE)}
               canAssign={can(PERMISSIONS.CASE_ASSIGN)}
               canSetPriority={can(PERMISSIONS.CASE_SET_PRIORITY)}
+              onUpdated={setCaseData}
+              onOpenClarifications={() =>
+                setSearchParams({ tab: 'clarifications' }, { replace: true })
+              }
+            />
+          ) : null}
+
+          {can(PERMISSIONS.CASE_DESIGN) && !caseData.isDeleted ? (
+            <DesignerProductionPanel
+              caseData={caseData}
               onUpdated={setCaseData}
               onOpenClarifications={() =>
                 setSearchParams({ tab: 'clarifications' }, { replace: true })

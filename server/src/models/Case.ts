@@ -86,6 +86,13 @@ export interface ICase extends Document {
   validatedAt?: Date;
   validatedById?: Types.ObjectId;
   validatedByName?: string;
+  productionStartedAt?: Date;
+  productionStartedById?: Types.ObjectId;
+  productionStartedByName?: string;
+  submittedToQcAt?: Date;
+  submittedToQcById?: Types.ObjectId;
+  submittedToQcByName?: string;
+  productionNotes: string;
   cancelReason?: string;
   notes: ICaseNote[];
   files: ICaseFile[];
@@ -235,6 +242,13 @@ const caseSchema = new Schema<ICase>(
     validatedAt: { type: Date, index: true },
     validatedById: { type: Schema.Types.ObjectId, ref: 'User' },
     validatedByName: { type: String },
+    productionStartedAt: { type: Date, index: true },
+    productionStartedById: { type: Schema.Types.ObjectId, ref: 'User' },
+    productionStartedByName: { type: String },
+    submittedToQcAt: { type: Date },
+    submittedToQcById: { type: Schema.Types.ObjectId, ref: 'User' },
+    submittedToQcByName: { type: String },
+    productionNotes: { type: String, default: '', trim: true },
     cancelReason: { type: String },
     notes: { type: [caseNoteSchema], default: [] },
     files: { type: [caseFileSchema], default: [] },

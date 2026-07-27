@@ -309,3 +309,98 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response, nex
     next(error);
   }
 }
+
+export async function downloadAllFiles(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const { ZipArchive } = await import('archiver');
+    const pack = await casesService.getCaseFilesForZipDownload(
+      await actor(req),
+      req.params.caseId,
+      getRequestAuditContext(req),
+    );
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${pack.zipName}"`,
+    );
+
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+    archive.on('error', (error: Error) => next(error));
+    archive.pipe(res);
+
+    for (const entry of pack.entries) {
+      archive.file(entry.absolutePath, { name: entry.name });
+    }
+
+    await archive.finalize();
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function startProduction(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.startProduction(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'Production started',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateProduction(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.updateProductionNotes(
+      await actor(req),
+      req.params.caseId,
+      req.body.notes ?? '',
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'Production status updated',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function submitToQc(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.submitCaseToQc(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'Case submitted to QC queue',
+    });
+  } catch (error) {
+    next(error);
+  }
+}

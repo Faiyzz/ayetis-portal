@@ -144,6 +144,14 @@ export interface AssignCaseInput {
   note?: string;
 }
 
+export interface StartProductionInput {
+  notes?: string;
+}
+
+export interface SubmitToQcInput {
+  notes?: string;
+}
+
 export interface DesignerAssigneeDto {
   id: string;
   firstName: string;

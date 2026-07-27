@@ -7,7 +7,7 @@ import {
 } from '@ayetis/shared';
 import { useRef, useState, type FormEvent } from 'react';
 import { AuthButton } from '@/features/auth/components/AuthUI';
-import { downloadCaseFile, uploadCaseFiles } from '@/features/cases/api';
+import { downloadAllCaseFiles, downloadCaseFile, uploadCaseFiles } from '@/features/cases/api';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
@@ -34,6 +34,7 @@ export function CaseFilesPanel({
   const [selected, setSelected] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   function onPick(fileList: FileList | null) {
     if (!fileList) return;
@@ -77,13 +78,37 @@ export function CaseFilesPanel({
     }
   }
 
+  async function handleDownloadAll() {
+    setDownloadingAll(true);
+    try {
+      await downloadAllCaseFiles(caseId);
+      toast().success('Download started');
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to download all files'));
+    } finally {
+      setDownloadingAll(false);
+    }
+  }
+
   return (
     <section className="space-y-4 rounded-xl border border-line bg-white p-5">
-      <div>
-        <h2 className="text-sm font-semibold text-ink">Patient files</h2>
-        <p className="mt-1 text-sm text-muted">
-          STL files, scans, photos, and x-rays for production.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-ink">Patient files</h2>
+          <p className="mt-1 text-sm text-muted">
+            STL files, scans, photos, and x-rays for production.
+          </p>
+        </div>
+        {files.length > 0 ? (
+          <button
+            type="button"
+            disabled={downloadingAll}
+            onClick={() => void handleDownloadAll()}
+            className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300 disabled:opacity-60"
+          >
+            {downloadingAll ? 'Preparing zip…' : 'Download all'}
+          </button>
+        ) : null}
       </div>
 
       {canUpload ? (

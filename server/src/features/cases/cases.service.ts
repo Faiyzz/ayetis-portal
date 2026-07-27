@@ -315,6 +315,13 @@ async function toDetail(caseDoc: ICase): Promise<CaseDetailDto> {
     deleteReason: caseDoc.deleteReason ?? null,
     validatedByName: caseDoc.validatedByName ?? null,
     validation,
+    productionStartedAt: caseDoc.productionStartedAt
+      ? caseDoc.productionStartedAt.toISOString()
+      : null,
+    productionStartedByName: caseDoc.productionStartedByName ?? null,
+    submittedToQcAt: caseDoc.submittedToQcAt ? caseDoc.submittedToQcAt.toISOString() : null,
+    submittedToQcByName: caseDoc.submittedToQcByName ?? null,
+    productionNotes: caseDoc.productionNotes || '',
     notes: caseDoc.notes.map((note) => ({
       id: String(note._id),
       body: note.body,
@@ -352,12 +359,19 @@ function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
     return;
   }
 
-  if (
-    permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ASSIGNED) &&
-    caseDoc.assignedDesignerId &&
-    String(caseDoc.assignedDesignerId) === actor.id
-  ) {
-    return;
+  if (permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ASSIGNED)) {
+    if (caseDoc.assignedDesignerId && String(caseDoc.assignedDesignerId) === actor.id) {
+      return;
+    }
+    if (
+      caseDoc.assignmentMode === ASSIGNMENT_MODES.AUTO_QUEUE &&
+      !caseDoc.assignedDesignerId &&
+      !caseDoc.isDeleted &&
+      (caseDoc.status === CASE_STATUSES.DESIGNER_WORKING ||
+        caseDoc.status === CASE_STATUSES.UNDER_VALIDATION)
+    ) {
+      return;
+    }
   }
 
   throw new AppError('You do not have permission to view this case', 403);
@@ -391,6 +405,15 @@ function buildVisibilityFilter(actor: CaseActor): Record<string, unknown> {
 
   if (permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ASSIGNED)) {
     clauses.push({ assignedDesignerId: new Types.ObjectId(actor.id) });
+    // Auto pick queue is visible to designers until claimed.
+    clauses.push({
+      assignmentMode: ASSIGNMENT_MODES.AUTO_QUEUE,
+      $or: [{ assignedDesignerId: { $exists: false } }, { assignedDesignerId: null }],
+      status: {
+        $in: [CASE_STATUSES.DESIGNER_WORKING, CASE_STATUSES.UNDER_VALIDATION],
+      },
+      isDeleted: false,
+    });
   }
 
   if (clauses.length === 0) {
@@ -1090,6 +1113,258 @@ export async function getCaseFileForDownload(
     originalName: file.originalName || file.filename,
     mimeType: file.mimeType,
   };
+}
+
+export async function getCaseFilesForZipDownload(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (
+    caseDoc.isDeleted &&
+    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_DELETE)
+  ) {
+    throw new AppError('Case not found', 404);
+  }
+
+  if (caseDoc.files.length === 0) {
+    throw new AppError('This case has no files to download', 404);
+  }
+
+  const entries: Array<{ absolutePath: string; name: string }> = [];
+  const usedNames = new Set<string>();
+
+  for (const file of caseDoc.files) {
+    if (!file.storageKey) continue;
+    try {
+      const absolutePath = resolveStoragePath(file.storageKey);
+      await fs.access(absolutePath);
+      let name = file.originalName || file.filename || 'file';
+      if (usedNames.has(name)) {
+        const extIndex = name.lastIndexOf('.');
+        const base = extIndex > 0 ? name.slice(0, extIndex) : name;
+        const ext = extIndex > 0 ? name.slice(extIndex) : '';
+        name = `${base}-v${file.version || 1}${ext}`;
+      }
+      usedNames.add(name);
+      entries.push({ absolutePath, name });
+    } catch {
+      // skip missing files
+    }
+  }
+
+  if (entries.length === 0) {
+    throw new AppError('No accessible files found on storage', 404);
+  }
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_FILES_DOWNLOAD,
+    summary: `${actor.email} downloaded ${entries.length} file(s) for case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    metadata: { fileCount: entries.length },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return {
+    caseId: caseDoc.caseId,
+    zipName: `${caseDoc.caseId}-files.zip`,
+    entries,
+  };
+}
+
+function assertCanDesignCase(actor: CaseActor, caseDoc: ICase) {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_DESIGN)) {
+    throw new AppError('You do not have permission to update production on this case', 403);
+  }
+
+  assertCanViewCase(actor, caseDoc);
+
+  const isAssignee =
+    caseDoc.assignedDesignerId && String(caseDoc.assignedDesignerId) === actor.id;
+  const isAutoQueue =
+    caseDoc.assignmentMode === ASSIGNMENT_MODES.AUTO_QUEUE && !caseDoc.assignedDesignerId;
+  const canOverride = permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ALL);
+
+  if (!isAssignee && !isAutoQueue && !canOverride) {
+    throw new AppError('Only the assigned designer can update production on this case', 403);
+  }
+}
+
+export async function startProduction(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: { notes?: string } = {},
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanDesignCase(actor, caseDoc);
+
+  if (caseDoc.isDeleted) throw new AppError('Cannot start production on a deleted case', 400);
+  if (caseDoc.status === CASE_STATUSES.CANCELLED) {
+    throw new AppError('Cannot start production on a cancelled case', 400);
+  }
+  if (caseDoc.status === CASE_STATUSES.WAITING_CLARIFICATION) {
+    throw new AppError('Resolve clarifications before starting production', 400);
+  }
+  if (caseDoc.status === CASE_STATUSES.QC_REVIEW) {
+    throw new AppError('Case is already in the QC queue', 400);
+  }
+
+  caseDoc.status = CASE_STATUSES.DESIGNER_WORKING;
+  caseDoc.productionStartedAt = new Date();
+  caseDoc.productionStartedById = new Types.ObjectId(actor.id);
+  caseDoc.productionStartedByName = actorName(actor);
+  if (input.notes?.trim()) {
+    caseDoc.productionNotes = input.notes.trim();
+  }
+
+  // If auto-queue and unassigned, claim for this designer when they start.
+  if (
+    caseDoc.assignmentMode === ASSIGNMENT_MODES.AUTO_QUEUE &&
+    !caseDoc.assignedDesignerId
+  ) {
+    caseDoc.assignmentMode = ASSIGNMENT_MODES.DESIGNER;
+    caseDoc.assignedDesignerId = new Types.ObjectId(actor.id);
+    caseDoc.assignedDesignerName = actorName(actor);
+  }
+
+  pushHistory(caseDoc, {
+    action: 'production_started',
+    summary: 'Designer marked case as in production',
+    actor,
+    metadata: { notes: input.notes?.trim() || undefined },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_PRODUCTION_START,
+    summary: `${actor.email} started production on case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return await toDetail(caseDoc);
+}
+
+export async function updateProductionNotes(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  notes: string,
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanDesignCase(actor, caseDoc);
+
+  if (caseDoc.isDeleted) throw new AppError('Cannot update a deleted case', 400);
+
+  caseDoc.productionNotes = notes.trim();
+  if (!caseDoc.productionStartedAt) {
+    caseDoc.productionStartedAt = new Date();
+    caseDoc.productionStartedById = new Types.ObjectId(actor.id);
+    caseDoc.productionStartedByName = actorName(actor);
+  }
+  if (caseDoc.status !== CASE_STATUSES.QC_REVIEW) {
+    caseDoc.status = CASE_STATUSES.DESIGNER_WORKING;
+  }
+
+  pushHistory(caseDoc, {
+    action: 'production_updated',
+    summary: 'Production notes updated',
+    actor,
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_UPDATE,
+    summary: `${actor.email} updated production notes on case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return await toDetail(caseDoc);
+}
+
+export async function submitCaseToQc(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: { notes?: string } = {},
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanDesignCase(actor, caseDoc);
+
+  if (caseDoc.isDeleted) throw new AppError('Cannot submit a deleted case', 400);
+  if (caseDoc.status === CASE_STATUSES.CANCELLED) {
+    throw new AppError('Cannot submit a cancelled case', 400);
+  }
+  if (caseDoc.status === CASE_STATUSES.WAITING_CLARIFICATION) {
+    throw new AppError('Resolve clarifications before submitting to QC', 400);
+  }
+  if (caseDoc.status === CASE_STATUSES.QC_REVIEW) {
+    return await toDetail(caseDoc);
+  }
+
+  if (input.notes?.trim()) {
+    caseDoc.productionNotes = input.notes.trim();
+  }
+
+  caseDoc.status = CASE_STATUSES.QC_REVIEW;
+  caseDoc.submittedToQcAt = new Date();
+  caseDoc.submittedToQcById = new Types.ObjectId(actor.id);
+  caseDoc.submittedToQcByName = actorName(actor);
+
+  if (!caseDoc.productionStartedAt) {
+    caseDoc.productionStartedAt = caseDoc.submittedToQcAt;
+    caseDoc.productionStartedById = new Types.ObjectId(actor.id);
+    caseDoc.productionStartedByName = actorName(actor);
+  }
+
+  pushHistory(caseDoc, {
+    action: 'submitted_to_qc',
+    summary: 'Case submitted to QC queue',
+    actor,
+    metadata: { notes: input.notes?.trim() || undefined },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_PRODUCTION_SUBMIT_QC,
+    summary: `${actor.email} submitted case ${caseDoc.caseId} to QC`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return await toDetail(caseDoc);
 }
 
 export async function updateCasePayment(
