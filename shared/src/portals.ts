@@ -33,6 +33,11 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
     ],
     shortcuts: [
       {
+        label: 'Cases',
+        description: 'Browse and manage all cases',
+        to: '/app/cases',
+      },
+      {
         label: 'Users',
         description: 'View and manage team accounts',
         to: '/app/users',
@@ -66,12 +71,14 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
     ],
     shortcuts: [
       {
-        label: 'Submit case',
-        description: 'Case submission will be available here next',
+        label: 'My cases',
+        description: 'View submitted and in-progress cases',
+        to: '/app/cases',
       },
       {
-        label: 'My cases',
-        description: 'Status and timeline views coming soon',
+        label: 'Create case',
+        description: 'Submit a new patient treatment request',
+        to: '/app/cases/new',
       },
     ],
   },
@@ -87,12 +94,9 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
     ],
     shortcuts: [
       {
-        label: 'Validation queue',
-        description: 'Incoming cases awaiting completeness checks',
-      },
-      {
-        label: 'Waiting on doctor',
-        description: 'Clarifications pending doctor response',
+        label: 'Case listing',
+        description: 'Validate and update case details',
+        to: '/app/cases',
       },
     ],
   },

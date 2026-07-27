@@ -50,7 +50,7 @@ const activityLogSchema = new Schema<IActivityLog>(
     },
     targetType: {
       type: String,
-      enum: ['user', 'role', 'auth', 'system'],
+      enum: ['user', 'role', 'auth', 'system', 'case'],
       required: true,
       index: true,
     },

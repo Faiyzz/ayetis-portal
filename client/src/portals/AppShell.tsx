@@ -68,6 +68,30 @@ export function RequirePermission({
   return <Outlet />;
 }
 
+export function RequireAnyPermission({
+  permissions,
+}: {
+  permissions: Array<(typeof PERMISSIONS)[keyof typeof PERMISSIONS]>;
+}) {
+  const { canAny } = usePermissions();
+  const user = useAuthStore((s) => s.user);
+  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
+
+  if (isBootstrapping) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-muted">
+        Loading session…
+      </div>
+    );
+  }
+
+  if (!canAny(...permissions)) {
+    return <Navigate to={user ? getDashboardPath(user.role) : '/login'} replace />;
+  }
+
+  return <Outlet />;
+}
+
 interface NavItem {
   id: string;
   label: string;
@@ -75,6 +99,7 @@ interface NavItem {
   /** Returns whether this item should appear active for the current path. */
   isActive: (pathname: string) => boolean;
   permission?: Permission;
+  anyOf?: Permission[];
 }
 
 function buildNavItems(dashboardPath: string): NavItem[] {
@@ -84,6 +109,26 @@ function buildNavItems(dashboardPath: string): NavItem[] {
       label: 'Dashboard',
       to: dashboardPath,
       isActive: (pathname) => pathname === dashboardPath || pathname === '/app',
+    },
+    {
+      id: 'cases',
+      label: 'Cases',
+      to: '/app/cases',
+      anyOf: [
+        PERMISSIONS.CASE_VIEW_OWN,
+        PERMISSIONS.CASE_VIEW_ALL,
+        PERMISSIONS.CASE_VIEW_ASSIGNED,
+      ],
+      isActive: (pathname) =>
+        pathname === '/app/cases' ||
+        (pathname.startsWith('/app/cases/') && pathname !== '/app/cases/new'),
+    },
+    {
+      id: 'create-case',
+      label: 'Create case',
+      to: '/app/cases/new',
+      permission: PERMISSIONS.CASE_CREATE,
+      isActive: (pathname) => pathname === '/app/cases/new',
     },
     {
       id: 'users',
@@ -127,14 +172,16 @@ function buildNavItems(dashboardPath: string): NavItem[] {
 export function AppShell() {
   const user = useAuthStore((s) => s.user)!;
   const logout = useAuthStore((s) => s.logout);
-  const { can } = usePermissions();
+  const { can, canAny } = usePermissions();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const dashboardPath = getDashboardPath(user.role);
-  const navItems = buildNavItems(dashboardPath).filter(
-    (item) => !item.permission || can(item.permission),
-  );
+  const navItems = buildNavItems(dashboardPath).filter((item) => {
+    if (item.anyOf) return canAny(...item.anyOf);
+    if (item.permission) return can(item.permission);
+    return true;
+  });
 
   function closeMobile() {
     setMobileOpen(false);

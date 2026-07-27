@@ -11,6 +11,11 @@ export const AUDIT_ACTIONS = {
   USER_DELETE: 'user.delete',
   USER_PERMISSIONS_UPDATE: 'user.permissions.update',
   ROLE_PERMISSIONS_UPDATE: 'role.permissions.update',
+  CASE_CREATE: 'case.create',
+  CASE_UPDATE: 'case.update',
+  CASE_CANCEL: 'case.cancel',
+  CASE_DELETE: 'case.delete',
+  CASE_NOTE_ADD: 'case.note.add',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
@@ -30,9 +35,14 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   [AUDIT_ACTIONS.USER_DELETE]: 'User deleted',
   [AUDIT_ACTIONS.USER_PERMISSIONS_UPDATE]: 'User permissions updated',
   [AUDIT_ACTIONS.ROLE_PERMISSIONS_UPDATE]: 'Role permissions updated',
+  [AUDIT_ACTIONS.CASE_CREATE]: 'Case created',
+  [AUDIT_ACTIONS.CASE_UPDATE]: 'Case updated',
+  [AUDIT_ACTIONS.CASE_CANCEL]: 'Case cancelled',
+  [AUDIT_ACTIONS.CASE_DELETE]: 'Case deleted',
+  [AUDIT_ACTIONS.CASE_NOTE_ADD]: 'Case note added',
 };
 
-export type AuditTargetType = 'user' | 'role' | 'auth' | 'system';
+export type AuditTargetType = 'user' | 'role' | 'auth' | 'system' | 'case';
 
 export interface ActivityLogDto {
   id: string;

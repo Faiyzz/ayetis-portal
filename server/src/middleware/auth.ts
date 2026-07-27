@@ -90,6 +90,33 @@ export function requirePermission(...permissions: Permission[]) {
   };
 }
 
+export function requireAnyPermission(...permissions: Permission[]) {
+  return async (req: AuthenticatedRequest, _res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        next(new AppError('Authentication required', 401));
+        return;
+      }
+
+      const effective = await resolvePermissionsForUserId(req.user.id);
+      req.user.permissions = effective;
+
+      const allowed = permissions.some((permission) =>
+        permissionsInclude(effective, permission),
+      );
+
+      if (!allowed) {
+        next(new AppError('You do not have permission to perform this action', 403));
+        return;
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
 export async function loadUser(
   req: AuthenticatedRequest,
   _res: Response,

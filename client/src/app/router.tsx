@@ -7,11 +7,21 @@ import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 import { ResetPasswordPage } from '@/features/auth/pages/ResetPasswordPage';
 import { ActivityLogPage } from '@/features/audit/pages/ActivityLogPage';
+import { CaseDetailPage } from '@/features/cases/pages/CaseDetailPage';
+import { CasesPage } from '@/features/cases/pages/CasesPage';
+import { CreateCasePage } from '@/features/cases/pages/CreateCasePage';
+import { EditCasePage } from '@/features/cases/pages/EditCasePage';
 import { CreateUserPage } from '@/features/users/pages/CreateUserPage';
 import { RolePermissionsPage } from '@/features/users/pages/RolePermissionsPage';
 import { UserPermissionsPage } from '@/features/users/pages/UserPermissionsPage';
 import { UsersPage } from '@/features/users/pages/UsersPage';
-import { AppShell, GuestOnly, RequireAuth, RequirePermission } from '@/portals/AppShell';
+import {
+  AppShell,
+  GuestOnly,
+  RequireAnyPermission,
+  RequireAuth,
+  RequirePermission,
+} from '@/portals/AppShell';
 import { RoleDashboard } from '@/portals/RoleDashboard';
 import { RoleHomeRedirect } from '@/portals/roleRoutes';
 
@@ -35,6 +45,29 @@ export function AppRouter() {
           {ALL_ROLES.map((role) => (
             <Route key={role} path={role} element={<RoleDashboard role={role} />} />
           ))}
+
+          <Route element={<RequirePermission permission={PERMISSIONS.CASE_CREATE} />}>
+            <Route path="cases/new" element={<CreateCasePage />} />
+          </Route>
+
+          <Route
+            element={
+              <RequireAnyPermission
+                permissions={[
+                  PERMISSIONS.CASE_VIEW_OWN,
+                  PERMISSIONS.CASE_VIEW_ALL,
+                  PERMISSIONS.CASE_VIEW_ASSIGNED,
+                ]}
+              />
+            }
+          >
+            <Route path="cases" element={<CasesPage />} />
+            <Route path="cases/:caseId" element={<CaseDetailPage />} />
+          </Route>
+
+          <Route element={<RequirePermission permission={PERMISSIONS.CASE_UPDATE} />}>
+            <Route path="cases/:caseId/edit" element={<EditCasePage />} />
+          </Route>
 
           <Route element={<RequirePermission permission={PERMISSIONS.USER_LIST} />}>
             <Route path="users" element={<UsersPage />} />
