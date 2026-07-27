@@ -12,7 +12,9 @@ import * as casesController from './cases.controller';
 import {
   addNoteSchema,
   assignCaseSchema,
+  clinicalRemarkSchema,
   createCaseSchema,
+  doctorDecisionSchema,
   listCasesQuerySchema,
   performanceQuerySchema,
   productionNotesSchema,
@@ -106,6 +108,25 @@ router.get(
   requirePermission(PERMISSIONS.CASE_QC_REVIEW),
   validate(performanceQuerySchema, 'query'),
   casesController.qcPerformance,
+);
+
+router.get(
+  '/dashboard/consultant',
+  requirePermission(PERMISSIONS.CASE_CONSULT),
+  casesController.consultantDashboard,
+);
+
+router.get(
+  '/reports/consultant/me',
+  requirePermission(PERMISSIONS.CASE_CONSULT),
+  validate(performanceQuerySchema, 'query'),
+  casesController.consultantPerformance,
+);
+
+router.get(
+  '/dashboard/doctor-deliveries',
+  requirePermission(PERMISSIONS.CASE_VIEW_OWN),
+  casesController.doctorDeliveryQueue,
 );
 
 router.get(
@@ -285,6 +306,26 @@ router.post(
   requirePermission(PERMISSIONS.CASE_QC_REVIEW),
   validate(qcRejectSchema),
   casesController.rejectQc,
+);
+
+router.post(
+  '/:caseId/clinical-remarks',
+  requirePermission(PERMISSIONS.CASE_CONSULT),
+  validate(clinicalRemarkSchema),
+  casesController.addClinicalRemark,
+);
+
+router.post(
+  '/:caseId/doctor/view',
+  requirePermission(PERMISSIONS.CASE_VIEW_OWN),
+  casesController.recordDoctorView,
+);
+
+router.post(
+  '/:caseId/doctor/decision',
+  requirePermission(PERMISSIONS.CASE_VIEW_OWN),
+  validate(doctorDecisionSchema),
+  casesController.doctorDecision,
 );
 
 router.use('/:caseId/clarifications', caseClarificationsRouter);

@@ -80,6 +80,11 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
         description: 'Submit a new patient treatment request',
         to: '/app/cases/new',
       },
+      {
+        label: 'Deliveries',
+        description: 'Review delivered cases and decide',
+        to: '/app/doctor',
+      },
     ],
   },
   [ROLES.COORDINATOR]: {
@@ -169,13 +174,13 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
     shortcuts: [
       {
         label: 'Consultation queue',
-        description: 'Cases needing clinical guidance',
+        description: 'Cases with colour status indicators',
         to: '/app/orthodontist',
       },
       {
-        label: 'Escalated QC',
-        description: 'Cases rejected twice by QC',
-        to: '/app/orthodontist?tab=escalated',
+        label: 'My performance',
+        description: 'Reviews, consultations, and error trends',
+        to: '/app/orthodontist?tab=performance',
       },
     ],
   },

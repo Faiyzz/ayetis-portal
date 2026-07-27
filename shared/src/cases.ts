@@ -1,5 +1,11 @@
 import type { ClarificationDto } from './clarifications';
 import type {
+  ClinicalRemarkDto,
+  ConsultantIndicator,
+  DoctorDecision,
+  DoctorEngagementDto,
+} from './consultation';
+import type {
   AssignmentMode,
   CaseValidationSummary,
   CoordinatorQueue,
@@ -206,6 +212,7 @@ export interface CaseListItemDto {
   assignedDesignerName: string | null;
   assignmentMode: AssignmentMode;
   validatedAt: string | null;
+  consultantIndicator: ConsultantIndicator | null;
   queue: CoordinatorQueue | null;
   delayLevel: DelayLevel | null;
   isDeleted: boolean;
@@ -239,6 +246,14 @@ export interface CaseDetailDto extends CaseListItemDto {
   lastQcRequiredChanges: string | null;
   delivery: CaseDeliveryDto | null;
   qcReviews: QcReviewDto[];
+  clinicalRemarks: ClinicalRemarkDto[];
+  assignedConsultantId: string | null;
+  assignedConsultantName: string | null;
+  consultantReviewedAt: string | null;
+  doctorDecision: DoctorDecision | null;
+  doctorDecisionNote: string | null;
+  doctorDecisionAt: string | null;
+  doctorEngagement: DoctorEngagementDto;
   notes: CaseNoteDto[];
   files: CaseFileDto[];
   history: CaseHistoryDto[];

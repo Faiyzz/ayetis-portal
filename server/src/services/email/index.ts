@@ -11,5 +11,6 @@ export {
 export {
   clarificationRequiredTemplate,
   clarificationRepliedTemplate,
+  caseDeliveredTemplate,
   passwordResetTemplate,
 } from './templates';

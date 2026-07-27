@@ -9,3 +9,4 @@ export * from './clarifications';
 export * from './notifications';
 export * from './coordinator';
 export * from './qc';
+export * from './consultation';

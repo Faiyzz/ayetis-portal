@@ -7,11 +7,13 @@ import {
 } from '@ayetis/shared';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store';
+import { ConsultantDashboard } from '@/portals/ConsultantDashboard';
 import { CoordinatorDashboard } from '@/portals/CoordinatorDashboard';
 import {
   DesignerDashboard,
   EscalatedOversightDashboard,
 } from '@/portals/DesignerDashboard';
+import { DoctorDashboard } from '@/portals/DoctorDashboard';
 import { QcDashboard } from '@/portals/QcDashboard';
 
 interface RoleDashboardProps {
@@ -29,6 +31,10 @@ export function RoleDashboard({ role }: RoleDashboardProps) {
     return <Navigate to={getDashboardPath(user.role)} replace />;
   }
 
+  if (role === ROLES.DOCTOR) {
+    return <DoctorDashboard firstName={user.firstName} />;
+  }
+
   if (role === ROLES.COORDINATOR) {
     return <CoordinatorDashboard firstName={user.firstName} />;
   }
@@ -42,13 +48,7 @@ export function RoleDashboard({ role }: RoleDashboardProps) {
   }
 
   if (role === ROLES.ORTHODONTIST) {
-    return (
-      <EscalatedOversightDashboard
-        firstName={user.firstName}
-        title="Consultant portal"
-        subtitle="Provide clinical guidance and review cases escalated after repeated QC rejection."
-      />
-    );
+    return <ConsultantDashboard firstName={user.firstName} />;
   }
 
   if (role === ROLES.SUPERVISOR) {

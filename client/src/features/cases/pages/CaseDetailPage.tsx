@@ -28,7 +28,9 @@ import { CasePaymentPanel } from '@/features/cases/components/CasePaymentPanel';
 import { CaseStatusTimeline } from '@/features/cases/components/CaseStatusTimeline';
 import { CaseValidationAssignPanel } from '@/features/cases/components/CaseValidationAssignPanel';
 import { ClarificationsPanel } from '@/features/cases/components/ClarificationsPanel';
+import { ClinicalRemarksPanel } from '@/features/cases/components/ClinicalRemarksPanel';
 import { DesignerProductionPanel } from '@/features/cases/components/DesignerProductionPanel';
+import { DoctorDeliveryPanel } from '@/features/cases/components/DoctorDeliveryPanel';
 import { QcReviewPanel } from '@/features/cases/components/QcReviewPanel';
 import { TreatmentInstructionsPanel } from '@/features/cases/components/TreatmentInstructionsPanel';
 import { toast } from '@/features/notifications/toastStore';
@@ -323,16 +325,29 @@ export function CaseDetailPage() {
             <QcReviewPanel caseData={caseData} onUpdated={setCaseData} />
           ) : null}
 
+          {can(PERMISSIONS.CASE_CONSULT) && !caseData.isDeleted ? (
+            <ClinicalRemarksPanel caseData={caseData} onUpdated={setCaseData} />
+          ) : null}
+
+          {user?.id === caseData.doctorId &&
+          (caseData.delivery ||
+            caseData.status === 'delivered' ||
+            caseData.status === 'approved' ||
+            caseData.status === 'completed') ? (
+            <DoctorDeliveryPanel caseData={caseData} onUpdated={setCaseData} />
+          ) : null}
+
           {caseData.delivery &&
+          user?.id !== caseData.doctorId &&
           (caseData.status === 'approved' ||
             caseData.status === 'delivered' ||
             caseData.status === 'completed') ? (
             <section className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-5">
               <h2 className="text-sm font-semibold text-emerald-950">Delivery package</h2>
               <p className="mt-1 text-sm text-emerald-900/80">
-                QC approved this case
+                Delivered
                 {caseData.delivery.uploadedByName
-                  ? ` (${caseData.delivery.uploadedByName})`
+                  ? ` by ${caseData.delivery.uploadedByName}`
                   : ''}
                 .
               </p>

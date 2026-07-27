@@ -6,6 +6,8 @@ import {
   isArchOption,
   isCasePriority,
   isCaseStatus,
+  isConsultantIndicator,
+  isDoctorDecision,
   isFileCategory,
   isPaymentStatus,
   isQcErrorCode,
@@ -214,4 +216,18 @@ export const performanceQuerySchema = z.object({
     .regex(/^\d{4}-\d{2}$/)
     .optional(),
   view: z.enum(['month', 'quarter']).optional(),
+});
+
+export const clinicalRemarkSchema = z.object({
+  body: z.string().trim().min(1, 'Clinical remark is required').max(5000),
+  indicator: z
+    .string()
+    .refine((value) => isConsultantIndicator(value), { message: 'Invalid indicator' }),
+});
+
+export const doctorDecisionSchema = z.object({
+  decision: z
+    .string()
+    .refine((value) => isDoctorDecision(value), { message: 'Invalid doctor decision' }),
+  note: z.string().trim().max(2000).optional(),
 });

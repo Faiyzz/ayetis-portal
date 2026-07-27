@@ -37,8 +37,12 @@ export function QcReviewPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [mode, setMode] = useState<'comment' | 'approve' | 'reject'>('comment');
 
-  const inQc = caseData.status === 'qc_review';
-  const approved = caseData.status === 'approved' || caseData.status === 'delivered';
+  const inQc =
+    caseData.status === 'qc_review' || caseData.status === 'orthodontist_review';
+  const approved =
+    caseData.status === 'approved' ||
+    caseData.status === 'delivered' ||
+    caseData.status === 'completed';
 
   useEffect(() => {
     setComment('');

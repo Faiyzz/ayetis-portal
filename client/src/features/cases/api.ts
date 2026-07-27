@@ -277,6 +277,45 @@ export async function fetchQcPerformance(params?: {
   return data.data as import('@ayetis/shared').QcPerformanceDto;
 }
 
+export async function fetchConsultantDashboard() {
+  const { data } = await api.get('/cases/dashboard/consultant');
+  return data.data as import('@ayetis/shared').ConsultantDashboardDto;
+}
+
+export async function fetchConsultantPerformance(params?: {
+  month?: string;
+  view?: 'month' | 'quarter';
+}) {
+  const { data } = await api.get('/cases/reports/consultant/me', { params });
+  return data.data as import('@ayetis/shared').ConsultantPerformanceDto;
+}
+
+export async function addClinicalRemark(
+  caseId: string,
+  payload: import('@ayetis/shared').AddClinicalRemarkInput,
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/clinical-remarks`, payload);
+  return data.data;
+}
+
+export async function fetchDoctorDeliveries() {
+  const { data } = await api.get('/cases/dashboard/doctor-deliveries');
+  return data.data as import('@ayetis/shared').DoctorDeliveryQueueItemDto[];
+}
+
+export async function recordDoctorCaseView(caseId: string): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/doctor/view`);
+  return data.data;
+}
+
+export async function submitDoctorDecision(
+  caseId: string,
+  payload: import('@ayetis/shared').DoctorDecisionInput,
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/doctor/decision`, payload);
+  return data.data;
+}
+
 export async function downloadDeliveryVideo(caseId: string) {
   const token = localStorage.getItem('ayetis_token');
   const response = await fetch(`/api/cases/${caseId}/delivery/video`, {

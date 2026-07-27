@@ -6,10 +6,14 @@ import {
   CASE_PRIORITY_LABELS,
   CASE_STATUSES,
   CASE_STATUS_LABELS,
+  CONSULTANT_INDICATORS,
+  CONSULTANT_INDICATOR_LABELS,
   COORDINATOR_QUEUE_DESCRIPTIONS,
   COORDINATOR_QUEUE_LABELS,
   COORDINATOR_QUEUES,
   DELAY_LEVELS,
+  DOCTOR_DECISIONS,
+  DOCTOR_DECISION_LABELS,
   EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORIES,
   NOTIFICATION_TYPES,
@@ -42,6 +46,11 @@ import {
   type CasePriority,
   type CaseStatus,
   type CaseValidationSummary,
+  type ClinicalRemarkDto,
+  type ConsultantDashboardDto,
+  type ConsultantIndicator,
+  type ConsultantPerformanceDto,
+  type ConsultantQueueCaseDto,
   type CoordinatorDashboardDto,
   type CoordinatorQueue,
   type CoordinatorQueueCaseDto,
@@ -49,6 +58,9 @@ import {
   type DelayLevel,
   type DesignerAssigneeDto,
   type DesignerPerformanceDto,
+  type DoctorDecision,
+  type DoctorDeliveryQueueItemDto,
+  type DoctorEngagementDto,
   type FileCategory,
   type Permission,
   type QcDashboardDto,
@@ -66,10 +78,15 @@ import {
 } from '@ayetis/shared';
 import fs from 'fs/promises';
 import { Types } from 'mongoose';
+import { env } from '../../config/env';
 import { AppError } from '../../utils/AppError';
-import { Case, type ICase, type IQcReview } from '../../models/Case';
+import { Case, type ICase, type IClinicalRemark, type IQcReview } from '../../models/Case';
 import { generateCaseId } from '../../models/CaseCounter';
 import { User } from '../../models/User';
+import {
+  caseDeliveredTemplate,
+  sendTemplatedEmail,
+} from '../../services/email';
 import {
   recordActivity,
   type RequestAuditContext,
@@ -274,11 +291,37 @@ async function toListItem(caseDoc: ICase): Promise<CaseListItemDto> {
     assignedDesignerName: caseDoc.assignedDesignerName ?? null,
     assignmentMode,
     validatedAt: caseDoc.validatedAt ? caseDoc.validatedAt.toISOString() : null,
+    consultantIndicator: caseDoc.consultantIndicator ?? null,
     queue,
     delayLevel: caseDoc.isDeleted ? null : computeDelayLevel(ref),
     isDeleted: caseDoc.isDeleted,
     createdAt: caseDoc.createdAt.toISOString(),
     updatedAt: caseDoc.updatedAt.toISOString(),
+  };
+}
+
+function mapClinicalRemarks(caseDoc: ICase): ClinicalRemarkDto[] {
+  return (caseDoc.clinicalRemarks ?? []).map((remark) => ({
+    id: String(remark._id),
+    body: remark.body,
+    indicator: remark.indicator,
+    authorId: String(remark.authorId),
+    authorName: remark.authorName,
+    createdAt: remark.createdAt.toISOString(),
+  }));
+}
+
+function mapDoctorEngagement(caseDoc: ICase): DoctorEngagementDto {
+  const eng = caseDoc.doctorEngagement ?? {};
+  return {
+    openedAt: eng.openedAt ? eng.openedAt.toISOString() : null,
+    videoViewedAt: eng.videoViewedAt ? eng.videoViewedAt.toISOString() : null,
+    respondedAt: eng.respondedAt ? eng.respondedAt.toISOString() : null,
+    filesDownloadedAt: eng.filesDownloadedAt ? eng.filesDownloadedAt.toISOString() : null,
+    lastViewedAt: eng.lastViewedAt ? eng.lastViewedAt.toISOString() : null,
+    viewedWithoutActionNotifiedAt: eng.viewedWithoutActionNotifiedAt
+      ? eng.viewedWithoutActionNotifiedAt.toISOString()
+      : null,
   };
 }
 
@@ -376,6 +419,20 @@ async function toDetail(caseDoc: ICase): Promise<CaseDetailDto> {
         }
       : null,
     qcReviews: mapQcReviews(caseDoc),
+    clinicalRemarks: mapClinicalRemarks(caseDoc),
+    assignedConsultantId: caseDoc.assignedConsultantId
+      ? String(caseDoc.assignedConsultantId)
+      : null,
+    assignedConsultantName: caseDoc.assignedConsultantName ?? null,
+    consultantReviewedAt: caseDoc.consultantReviewedAt
+      ? caseDoc.consultantReviewedAt.toISOString()
+      : null,
+    doctorDecision: caseDoc.doctorDecision ?? null,
+    doctorDecisionNote: caseDoc.doctorDecisionNote ?? null,
+    doctorDecisionAt: caseDoc.doctorDecisionAt
+      ? caseDoc.doctorDecisionAt.toISOString()
+      : null,
+    doctorEngagement: mapDoctorEngagement(caseDoc),
     notes: caseDoc.notes.map((note) => ({
       id: String(note._id),
       body: note.body,
@@ -433,6 +490,7 @@ function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
     permissionsInclude(actor.permissions, PERMISSIONS.CASE_QC_REVIEW) &&
     !caseDoc.isDeleted &&
     (caseDoc.status === CASE_STATUSES.QC_REVIEW ||
+      caseDoc.status === CASE_STATUSES.ORTHODONTIST_REVIEW ||
       caseDoc.status === CASE_STATUSES.APPROVED ||
       caseDoc.status === CASE_STATUSES.DELIVERED ||
       Boolean(caseDoc.escalatedForOversight))
@@ -440,12 +498,13 @@ function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
     return;
   }
 
-  if (
-    permissionsInclude(actor.permissions, PERMISSIONS.CASE_CONSULT) &&
-    !caseDoc.isDeleted &&
-    Boolean(caseDoc.escalatedForOversight)
-  ) {
-    return;
+  if (permissionsInclude(actor.permissions, PERMISSIONS.CASE_CONSULT) && !caseDoc.isDeleted) {
+    if (Boolean(caseDoc.escalatedForOversight)) return;
+    if (caseDoc.assignedConsultantId && String(caseDoc.assignedConsultantId) === actor.id) {
+      return;
+    }
+    if (caseDoc.status === CASE_STATUSES.ORTHODONTIST_REVIEW) return;
+    if ((caseDoc.clinicalRemarks?.length ?? 0) > 0) return;
   }
 
   throw new AppError('You do not have permission to view this case', 403);
@@ -499,6 +558,7 @@ function buildVisibilityFilter(actor: CaseActor): Record<string, unknown> {
       status: {
         $in: [
           CASE_STATUSES.QC_REVIEW,
+          CASE_STATUSES.ORTHODONTIST_REVIEW,
           CASE_STATUSES.APPROVED,
           CASE_STATUSES.DELIVERED,
         ],
@@ -510,6 +570,15 @@ function buildVisibilityFilter(actor: CaseActor): Record<string, unknown> {
 
   if (permissionsInclude(actor.permissions, PERMISSIONS.CASE_CONSULT)) {
     clauses.push({ escalatedForOversight: true, isDeleted: false });
+    clauses.push({ assignedConsultantId: new Types.ObjectId(actor.id) });
+    clauses.push({
+      status: CASE_STATUSES.ORTHODONTIST_REVIEW,
+      isDeleted: false,
+    });
+    clauses.push({
+      'clinicalRemarks.0': { $exists: true },
+      isDeleted: false,
+    });
   }
 
   if (clauses.length === 0) {
@@ -1221,6 +1290,19 @@ export async function getDeliveryVideoForDownload(
   const key = caseDoc.delivery?.videoStorageKey;
   if (!key) throw new AppError('Delivery video not found', 404);
 
+  if (
+    permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_OWN) &&
+    String(caseDoc.doctorId) === actor.id
+  ) {
+    if (!caseDoc.doctorEngagement) caseDoc.doctorEngagement = {};
+    const now = new Date();
+    if (!caseDoc.doctorEngagement.videoViewedAt) {
+      caseDoc.doctorEngagement.videoViewedAt = now;
+    }
+    caseDoc.doctorEngagement.lastViewedAt = now;
+    await caseDoc.save();
+  }
+
   return {
     absolutePath: resolveStoragePath(key),
     originalName: caseDoc.delivery?.videoFilename || 'delivery-video',
@@ -1270,6 +1352,18 @@ export async function getCaseFilesForZipDownload(
 
   if (entries.length === 0) {
     throw new AppError('No accessible files found on storage', 404);
+  }
+
+  if (
+    permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_OWN) &&
+    String(caseDoc.doctorId) === actor.id &&
+    (caseDoc.status === CASE_STATUSES.DELIVERED ||
+      caseDoc.status === CASE_STATUSES.APPROVED ||
+      caseDoc.status === CASE_STATUSES.COMPLETED)
+  ) {
+    if (!caseDoc.doctorEngagement) caseDoc.doctorEngagement = {};
+    caseDoc.doctorEngagement.filesDownloadedAt = new Date();
+    await caseDoc.save();
   }
 
   await recordActivity({
@@ -1629,8 +1723,11 @@ export async function addQcComment(
   assertCanViewCase(actor, caseDoc);
 
   if (caseDoc.isDeleted) throw new AppError('Cannot review a deleted case', 400);
-  if (caseDoc.status !== CASE_STATUSES.QC_REVIEW) {
-    throw new AppError('Case is not in the QC review queue', 400);
+  if (
+    caseDoc.status !== CASE_STATUSES.QC_REVIEW &&
+    caseDoc.status !== CASE_STATUSES.ORTHODONTIST_REVIEW
+  ) {
+    throw new AppError('Case is not in a QC review queue', 400);
   }
 
   const comments = input.comments.trim();
@@ -1690,8 +1787,11 @@ export async function approveQcCase(
   assertCanViewCase(actor, caseDoc);
 
   if (caseDoc.isDeleted) throw new AppError('Cannot approve a deleted case', 400);
-  if (caseDoc.status !== CASE_STATUSES.QC_REVIEW) {
-    throw new AppError('Only cases in QC review can be approved', 400);
+  if (
+    caseDoc.status !== CASE_STATUSES.QC_REVIEW &&
+    caseDoc.status !== CASE_STATUSES.ORTHODONTIST_REVIEW
+  ) {
+    throw new AppError('Only cases in QC or consultant review can be approved', 400);
   }
 
   const deliveryViewLink = input.deliveryViewLink?.trim() || '';
@@ -1714,7 +1814,10 @@ export async function approveQcCase(
 
   const comments = input.comments?.trim() || 'Approved';
 
-  caseDoc.status = CASE_STATUSES.APPROVED;
+  caseDoc.status = CASE_STATUSES.DELIVERED;
+  caseDoc.doctorDecision = undefined;
+  caseDoc.doctorDecisionNote = undefined;
+  caseDoc.doctorDecisionAt = undefined;
   caseDoc.delivery = {
     viewLink: deliveryViewLink,
     videoFilename: deliveryVideoFilename,
@@ -1735,7 +1838,7 @@ export async function approveQcCase(
 
   pushHistory(caseDoc, {
     action: 'qc_approved',
-    summary: 'QC approved case for delivery',
+    summary: 'Case approved and delivered to doctor',
     actor,
     metadata: {
       comments,
@@ -1747,8 +1850,8 @@ export async function approveQcCase(
   await caseDoc.save();
 
   await recordActivity({
-    action: AUDIT_ACTIONS.CASE_QC_APPROVE,
-    summary: `${actor.email} approved case ${caseDoc.caseId} in QC`,
+    action: AUDIT_ACTIONS.CASE_DELIVERED,
+    summary: `${actor.email} delivered case ${caseDoc.caseId} to doctor`,
     actorId: actor.id,
     actorEmail: actor.email,
     actorName: actorName(actor),
@@ -1759,14 +1862,33 @@ export async function approveQcCase(
     userAgent: audit?.userAgent,
   });
 
+  const portalUrl = `${env.clientUrl}/app/cases/${caseDoc.caseId}`;
+
   await createNotification({
     userId: String(caseDoc.doctorId),
-    type: NOTIFICATION_TYPES.CASE_QC_APPROVED,
-    title: `${caseDoc.caseId} approved by QC`,
-    body: 'Your case is ready for review. Open it to view the delivery video or link.',
+    type: NOTIFICATION_TYPES.CASE_DELIVERED,
+    title: `${caseDoc.caseId} delivered for your review`,
+    body: 'Your case is ready. Open it to view the delivery video or link, then record your decision.',
     link: `/app/cases/${caseDoc.caseId}`,
     caseId: caseDoc.caseId,
   });
+
+  try {
+    await sendTemplatedEmail(
+      caseDoc.doctorEmail,
+      caseDeliveredTemplate({
+        doctorName: caseDoc.doctorName,
+        caseId: caseDoc.caseId,
+        patientName: caseDoc.patientName,
+        deliveredByName: actorName(actor),
+        hasVideo: Boolean(deliveryVideoStorageKey),
+        hasLink: Boolean(deliveryViewLink),
+        portalUrl,
+      }),
+    );
+  } catch {
+    // Non-blocking email failure
+  }
 
   return await toDetail(caseDoc);
 }
@@ -1782,8 +1904,11 @@ export async function rejectQcCase(
   assertCanViewCase(actor, caseDoc);
 
   if (caseDoc.isDeleted) throw new AppError('Cannot reject a deleted case', 400);
-  if (caseDoc.status !== CASE_STATUSES.QC_REVIEW) {
-    throw new AppError('Only cases in QC review can be rejected', 400);
+  if (
+    caseDoc.status !== CASE_STATUSES.QC_REVIEW &&
+    caseDoc.status !== CASE_STATUSES.ORTHODONTIST_REVIEW
+  ) {
+    throw new AppError('Only cases in QC or consultant review can be rejected', 400);
   }
 
   const comments = input.comments.trim();
@@ -2483,6 +2608,423 @@ export async function resolveCaseActor(userId: string): Promise<CaseActor> {
     role: user.role,
     permissions,
   };
+}
+
+function assertCanConsult(actor: CaseActor) {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_CONSULT)) {
+    throw new AppError('You do not have permission to consult on cases', 403);
+  }
+}
+
+function toConsultantQueueCaseDto(caseDoc: ICase): ConsultantQueueCaseDto {
+  return {
+    id: caseDoc.id,
+    caseId: caseDoc.caseId,
+    patientName: caseDoc.patientName,
+    doctorName: caseDoc.doctorName,
+    designerName: caseDoc.assignedDesignerName ?? null,
+    status: caseDoc.status,
+    priority: caseDoc.priority,
+    treatmentSummary: caseDoc.treatmentSummary,
+    consultantIndicator: caseDoc.consultantIndicator ?? null,
+    escalatedForOversight: Boolean(caseDoc.escalatedForOversight),
+    qcRejectionCount: caseDoc.qcRejectionCount ?? 0,
+    clinicalRemarkCount: caseDoc.clinicalRemarks?.length ?? 0,
+    assignedConsultantName: caseDoc.assignedConsultantName ?? null,
+    updatedAt: caseDoc.updatedAt.toISOString(),
+  };
+}
+
+export async function getConsultantDashboard(
+  actor: CaseActor,
+): Promise<ConsultantDashboardDto> {
+  assertCanConsult(actor);
+
+  const cases = await Case.find({
+    isDeleted: false,
+    status: { $nin: [CASE_STATUSES.CANCELLED, CASE_STATUSES.COMPLETED] },
+    $or: [
+      { escalatedForOversight: true },
+      { assignedConsultantId: new Types.ObjectId(actor.id) },
+      { status: CASE_STATUSES.ORTHODONTIST_REVIEW },
+      { 'clinicalRemarks.0': { $exists: true } },
+    ],
+  })
+    .sort({ priority: -1, updatedAt: -1 })
+    .limit(100);
+
+  const items = cases.map(toConsultantQueueCaseDto);
+  let greenCount = 0;
+  let yellowCount = 0;
+  let redCount = 0;
+  let unreviewedCount = 0;
+
+  for (const item of items) {
+    if (item.consultantIndicator === CONSULTANT_INDICATORS.GREEN) greenCount += 1;
+    else if (item.consultantIndicator === CONSULTANT_INDICATORS.YELLOW) yellowCount += 1;
+    else if (item.consultantIndicator === CONSULTANT_INDICATORS.RED) redCount += 1;
+    else unreviewedCount += 1;
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    totalCount: items.length,
+    greenCount,
+    yellowCount,
+    redCount,
+    unreviewedCount,
+    items,
+  };
+}
+
+export async function addClinicalRemark(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: { body: string; indicator: ConsultantIndicator },
+  audit?: RequestAuditContext,
+) {
+  assertCanConsult(actor);
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (caseDoc.isDeleted) throw new AppError('Cannot remark on a deleted case', 400);
+  if (caseDoc.status === CASE_STATUSES.CANCELLED) {
+    throw new AppError('Cannot remark on a cancelled case', 400);
+  }
+
+  const body = input.body.trim();
+  if (!body) throw new AppError('Clinical remark is required', 400);
+
+  caseDoc.clinicalRemarks.unshift({
+    _id: new Types.ObjectId(),
+    body,
+    indicator: input.indicator,
+    authorId: new Types.ObjectId(actor.id),
+    authorName: actorName(actor),
+    createdAt: new Date(),
+  } as IClinicalRemark);
+
+  caseDoc.consultantIndicator = input.indicator;
+  if (input.indicator === CONSULTANT_INDICATORS.GREEN) {
+    caseDoc.consultantReviewedAt = new Date();
+  }
+  if (!caseDoc.assignedConsultantId) {
+    caseDoc.assignedConsultantId = new Types.ObjectId(actor.id);
+    caseDoc.assignedConsultantName = actorName(actor);
+  }
+
+  pushHistory(caseDoc, {
+    action: 'clinical_remark',
+    summary: `Clinical remark added (${CONSULTANT_INDICATOR_LABELS[input.indicator]})`,
+    actor,
+    metadata: { indicator: input.indicator, body },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_CLINICAL_REMARK,
+    summary: `${actor.email} added a clinical remark on case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  const notifyIds: string[] = [];
+  if (caseDoc.assignedDesignerId) notifyIds.push(String(caseDoc.assignedDesignerId));
+  const qcUsers = await findUserIdsByRoles([ROLES.QC, ROLES.SUPERVISOR]);
+  notifyIds.push(...qcUsers);
+
+  await createNotificationsForUsers(notifyIds, {
+    type: NOTIFICATION_TYPES.CLINICAL_REMARK,
+    title: `Clinical remark on ${caseDoc.caseId}`,
+    body: `${CONSULTANT_INDICATOR_LABELS[input.indicator]}: ${body}`.slice(0, 240),
+    link: `/app/cases/${caseDoc.caseId}`,
+    caseId: caseDoc.caseId,
+  });
+
+  return await toDetail(caseDoc);
+}
+
+export async function getConsultantPerformance(
+  actor: CaseActor,
+  query: { month?: string; view?: 'month' | 'quarter' } = {},
+): Promise<ConsultantPerformanceDto> {
+  assertCanConsult(actor);
+
+  const availableMonths = recentMonthOptions(3);
+  const periodKey =
+    query.month && availableMonths.some((m) => m.key === query.month)
+      ? query.month
+      : availableMonths[0]!.key;
+  const view = query.view === 'quarter' ? 'quarter' : 'month';
+  const range =
+    view === 'quarter'
+      ? quarterRangeUtc(periodKey)
+      : { ...monthRangeUtc(periodKey), label: labelForMonthKey(periodKey) };
+
+  const reviewerId = new Types.ObjectId(actor.id);
+
+  const cases = await Case.find({
+    isDeleted: false,
+    $or: [
+      { 'qcReviews.reviewerId': reviewerId },
+      { 'clinicalRemarks.authorId': reviewerId },
+    ],
+  }).select('qcReviews clinicalRemarks');
+
+  let reviewCount = 0;
+  let consultationCount = 0;
+  let qcRevertedCount = 0;
+  let approvedCount = 0;
+  const errorCounts = new Map<string, number>();
+  const indicatorBreakdown: Record<ConsultantIndicator, number> = {
+    [CONSULTANT_INDICATORS.GREEN]: 0,
+    [CONSULTANT_INDICATORS.YELLOW]: 0,
+    [CONSULTANT_INDICATORS.RED]: 0,
+  };
+
+  for (const caseDoc of cases) {
+    for (const review of caseDoc.qcReviews ?? []) {
+      if (String(review.reviewerId) !== actor.id) continue;
+      if (review.createdAt < range.start || review.createdAt >= range.end) continue;
+      reviewCount += 1;
+      if (review.outcome === QC_REVIEW_OUTCOMES.APPROVED) approvedCount += 1;
+      if (review.outcome === QC_REVIEW_OUTCOMES.REJECTED) {
+        qcRevertedCount += 1;
+        if (review.errorCode) {
+          errorCounts.set(review.errorCode, (errorCounts.get(review.errorCode) ?? 0) + 1);
+        }
+      }
+    }
+
+    for (const remark of caseDoc.clinicalRemarks ?? []) {
+      if (String(remark.authorId) !== actor.id) continue;
+      if (remark.createdAt < range.start || remark.createdAt >= range.end) continue;
+      consultationCount += 1;
+      indicatorBreakdown[remark.indicator] += 1;
+    }
+  }
+
+  return {
+    view,
+    periodKey,
+    periodLabel: range.label,
+    availableMonths,
+    reviewCount,
+    consultationCount,
+    qcRevertedCount,
+    approvedCount,
+    errorTrends: ALL_QC_ERROR_CODES.map((errorCode) => ({
+      errorCode,
+      label: QC_ERROR_CODE_LABELS[errorCode],
+      count: errorCounts.get(errorCode) ?? 0,
+    }))
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count),
+    indicatorBreakdown,
+  };
+}
+
+export async function recordDoctorCaseView(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (String(caseDoc.doctorId) !== actor.id) {
+    return await toDetail(caseDoc);
+  }
+
+  if (
+    caseDoc.status !== CASE_STATUSES.DELIVERED &&
+    caseDoc.status !== CASE_STATUSES.APPROVED
+  ) {
+    return await toDetail(caseDoc);
+  }
+
+  if (!caseDoc.doctorEngagement) caseDoc.doctorEngagement = {};
+  const now = new Date();
+  const firstOpen = !caseDoc.doctorEngagement.openedAt;
+  if (firstOpen) caseDoc.doctorEngagement.openedAt = now;
+  caseDoc.doctorEngagement.lastViewedAt = now;
+
+  const shouldNotifyView =
+    firstOpen &&
+    !caseDoc.doctorDecision &&
+    !caseDoc.doctorEngagement.viewedWithoutActionNotifiedAt;
+
+  if (shouldNotifyView) {
+    caseDoc.doctorEngagement.viewedWithoutActionNotifiedAt = now;
+  }
+
+  pushHistory(caseDoc, {
+    action: 'doctor_viewed',
+    summary: firstOpen
+      ? 'Doctor opened delivered case'
+      : 'Doctor viewed delivered case',
+    actor,
+  });
+
+  await caseDoc.save();
+
+  if (shouldNotifyView) {
+    await recordActivity({
+      action: AUDIT_ACTIONS.CASE_DOCTOR_VIEWED,
+      summary: `Doctor has viewed Case ID ${caseDoc.caseId}`,
+      actorId: actor.id,
+      actorEmail: actor.email,
+      actorName: actorName(actor),
+      actorRole: actor.role,
+      targetType: 'case',
+      targetId: caseDoc.caseId,
+      ipAddress: audit?.ipAddress,
+      userAgent: audit?.userAgent,
+    });
+
+    const teamIds = await findUserIdsByRoles([
+      ROLES.QC,
+      ROLES.COORDINATOR,
+      ROLES.SUPERVISOR,
+      ROLES.ORTHODONTIST,
+    ]);
+    if (caseDoc.assignedDesignerId) teamIds.push(String(caseDoc.assignedDesignerId));
+
+    await createNotificationsForUsers(teamIds, {
+      type: NOTIFICATION_TYPES.CASE_DOCTOR_VIEWED,
+      title: `Doctor has viewed Case ID ${caseDoc.caseId}`,
+      body: `${caseDoc.doctorName} opened the delivery without selecting an option yet (“Viewed”).`,
+      link: `/app/cases/${caseDoc.caseId}`,
+      caseId: caseDoc.caseId,
+    });
+  }
+
+  return await toDetail(caseDoc);
+}
+
+export async function submitDoctorDecision(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: { decision: DoctorDecision; note?: string },
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (String(caseDoc.doctorId) !== actor.id) {
+    throw new AppError('Only the owning doctor can decide on this case', 403);
+  }
+
+  if (
+    caseDoc.status !== CASE_STATUSES.DELIVERED &&
+    caseDoc.status !== CASE_STATUSES.APPROVED
+  ) {
+    throw new AppError('Case is not awaiting doctor review', 400);
+  }
+
+  const note = input.note?.trim() || '';
+  const now = new Date();
+
+  caseDoc.doctorDecision = input.decision;
+  caseDoc.doctorDecisionNote = note || undefined;
+  caseDoc.doctorDecisionAt = now;
+  if (!caseDoc.doctorEngagement) caseDoc.doctorEngagement = {};
+  caseDoc.doctorEngagement.respondedAt = now;
+  caseDoc.doctorEngagement.lastViewedAt = now;
+
+  if (input.decision === DOCTOR_DECISIONS.APPROVE) {
+    caseDoc.status = CASE_STATUSES.COMPLETED;
+  } else if (input.decision === DOCTOR_DECISIONS.REQUEST_MODIFICATION) {
+    if (!note) throw new AppError('Describe the modification you need', 400);
+    caseDoc.status = CASE_STATUSES.SENT_FOR_MODIFICATION;
+  } else if (input.decision === DOCTOR_DECISIONS.CANCEL) {
+    if (!note) throw new AppError('Provide a cancellation reason', 400);
+    caseDoc.status = CASE_STATUSES.CANCELLED;
+    caseDoc.cancelReason = note;
+  } else if (input.decision === DOCTOR_DECISIONS.UNDER_REVIEW) {
+    caseDoc.status = CASE_STATUSES.DELIVERED;
+  }
+
+  pushHistory(caseDoc, {
+    action: 'doctor_decision',
+    summary: `Doctor decision: ${DOCTOR_DECISION_LABELS[input.decision]}`,
+    actor,
+    metadata: { decision: input.decision, note: note || undefined },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_DOCTOR_DECISION,
+    summary: `${actor.email} recorded decision "${input.decision}" on case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  const teamIds = await findUserIdsByRoles([
+    ROLES.QC,
+    ROLES.COORDINATOR,
+    ROLES.SUPERVISOR,
+    ROLES.DESIGNER,
+  ]);
+  if (caseDoc.assignedDesignerId) teamIds.push(String(caseDoc.assignedDesignerId));
+  if (caseDoc.assignedConsultantId) teamIds.push(String(caseDoc.assignedConsultantId));
+
+  await createNotificationsForUsers(teamIds, {
+    type: NOTIFICATION_TYPES.CASE_DOCTOR_DECISION,
+    title: `${caseDoc.caseId}: ${DOCTOR_DECISION_LABELS[input.decision]}`,
+    body: (note || `Doctor selected ${DOCTOR_DECISION_LABELS[input.decision]}`).slice(0, 240),
+    link: `/app/cases/${caseDoc.caseId}`,
+    caseId: caseDoc.caseId,
+  });
+
+  return await toDetail(caseDoc);
+}
+
+export async function getDoctorDeliveryQueue(
+  actor: CaseActor,
+): Promise<DoctorDeliveryQueueItemDto[]> {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_OWN)) {
+    throw new AppError('You do not have permission to view deliveries', 403);
+  }
+
+  const cases = await Case.find({
+    doctorId: new Types.ObjectId(actor.id),
+    isDeleted: false,
+    status: {
+      $in: [CASE_STATUSES.DELIVERED, CASE_STATUSES.APPROVED, CASE_STATUSES.COMPLETED],
+    },
+  })
+    .sort({ updatedAt: -1 })
+    .limit(50);
+
+  return cases.map((caseDoc) => ({
+    id: caseDoc.id,
+    caseId: caseDoc.caseId,
+    patientName: caseDoc.patientName,
+    status: caseDoc.status,
+    treatmentSummary: caseDoc.treatmentSummary,
+    hasDeliveryVideo: Boolean(caseDoc.delivery?.videoStorageKey),
+    hasDeliveryLink: Boolean(caseDoc.delivery?.viewLink),
+    doctorDecision: caseDoc.doctorDecision ?? null,
+    deliveredAt: caseDoc.delivery?.uploadedAt
+      ? caseDoc.delivery.uploadedAt.toISOString()
+      : null,
+    updatedAt: caseDoc.updatedAt.toISOString(),
+  }));
 }
 
 export { CASE_STATUS_LABELS };

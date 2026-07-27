@@ -5,7 +5,11 @@ export const NOTIFICATION_TYPES = {
   CASE_NOTE: 'case_note',
   CASE_QC_REJECTED: 'case_qc_rejected',
   CASE_QC_APPROVED: 'case_qc_approved',
+  CASE_DELIVERED: 'case_delivered',
   CASE_ESCALATED: 'case_escalated',
+  CASE_DOCTOR_VIEWED: 'case_doctor_viewed',
+  CASE_DOCTOR_DECISION: 'case_doctor_decision',
+  CLINICAL_REMARK: 'clinical_remark',
   SYSTEM: 'system',
 } as const;
 
@@ -20,7 +24,11 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   [NOTIFICATION_TYPES.CASE_NOTE]: 'Case note',
   [NOTIFICATION_TYPES.CASE_QC_REJECTED]: 'QC rejected case',
   [NOTIFICATION_TYPES.CASE_QC_APPROVED]: 'QC approved case',
+  [NOTIFICATION_TYPES.CASE_DELIVERED]: 'Case delivered',
   [NOTIFICATION_TYPES.CASE_ESCALATED]: 'Case escalated',
+  [NOTIFICATION_TYPES.CASE_DOCTOR_VIEWED]: 'Doctor viewed case',
+  [NOTIFICATION_TYPES.CASE_DOCTOR_DECISION]: 'Doctor decision',
+  [NOTIFICATION_TYPES.CLINICAL_REMARK]: 'Clinical remark',
   [NOTIFICATION_TYPES.SYSTEM]: 'System',
 };
 

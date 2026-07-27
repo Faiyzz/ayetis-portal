@@ -162,3 +162,63 @@ export function passwordResetTemplate(input: {
     }),
   };
 }
+
+export function caseDeliveredTemplate(input: {
+  doctorName: string;
+  caseId: string;
+  patientName: string;
+  deliveredByName: string;
+  hasVideo: boolean;
+  hasLink: boolean;
+  portalUrl: string;
+}): RenderedEmail {
+  const subject = `Case ${input.caseId} is ready for your review`;
+  const assets = [
+    input.hasVideo ? 'video explanation' : null,
+    input.hasLink ? 'HTML/view link' : null,
+  ]
+    .filter(Boolean)
+    .join(' and ');
+
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">Hello ${escapeHtml(input.doctorName)},</p>
+    <p style="margin:0 0 12px;">
+      Case <strong>${escapeHtml(input.caseId)}</strong> has been approved and delivered.
+      ${assets ? `A ${escapeHtml(assets)} is available in the portal.` : ''}
+    </p>
+    ${detailsTable([
+      ['Case ID', input.caseId],
+      ['Patient', input.patientName],
+      ['Delivered by', input.deliveredByName],
+    ])}
+    <p style="margin:16px 0 0;">
+      Please open the case to review the delivery package, then approve, request modification,
+      cancel, or keep it under review.
+    </p>
+  `;
+
+  const text = [
+    `Hello ${input.doctorName},`,
+    '',
+    `Case ${input.caseId} is ready for your review.`,
+    `Patient: ${input.patientName}`,
+    `Delivered by: ${input.deliveredByName}`,
+    assets ? `Delivery includes: ${assets}` : '',
+    '',
+    `Open portal: ${input.portalUrl}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return {
+    subject,
+    text,
+    html: renderEmailLayout({
+      preheader: subject,
+      title: subject,
+      bodyHtml,
+      cta: { label: 'Review delivery', url: input.portalUrl },
+      footerNote: 'Ayetis delivery notice — respond in the portal to record your decision.',
+    }),
+  };
+}

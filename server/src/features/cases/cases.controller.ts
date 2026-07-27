@@ -513,3 +513,98 @@ export async function downloadDeliveryVideo(
     next(error);
   }
 }
+
+export async function consultantDashboard(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.getConsultantDashboard(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function addClinicalRemark(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.addClinicalRemark(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Clinical remark added' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function consultantPerformance(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.getConsultantPerformance(await actor(req), {
+      month: req.query.month ? String(req.query.month) : undefined,
+      view: req.query.view === 'quarter' ? 'quarter' : 'month',
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function recordDoctorView(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.recordDoctorCaseView(
+      await actor(req),
+      req.params.caseId,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function doctorDecision(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.submitDoctorDecision(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Decision recorded' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function doctorDeliveryQueue(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.getDoctorDeliveryQueue(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}

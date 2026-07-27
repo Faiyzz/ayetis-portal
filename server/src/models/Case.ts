@@ -3,6 +3,8 @@ import {
   ALL_ASSIGNMENT_MODES,
   ALL_CASE_PRIORITIES,
   ALL_CASE_STATUSES,
+  ALL_CONSULTANT_INDICATORS,
+  ALL_DOCTOR_DECISIONS,
   ALL_FILE_CATEGORIES,
   ALL_PAYMENT_STATUSES,
   ALL_QC_ERROR_CODES,
@@ -17,6 +19,8 @@ import {
   type AssignmentMode,
   type CasePriority,
   type CaseStatus,
+  type ConsultantIndicator,
+  type DoctorDecision,
   type FileCategory,
   type PaymentStatus,
   type QcErrorCode,
@@ -93,6 +97,24 @@ export interface ICaseDelivery {
   uploadedByName?: string;
 }
 
+export interface IClinicalRemark {
+  _id: Types.ObjectId;
+  body: string;
+  indicator: ConsultantIndicator;
+  authorId: Types.ObjectId;
+  authorName: string;
+  createdAt: Date;
+}
+
+export interface IDoctorEngagement {
+  openedAt?: Date;
+  videoViewedAt?: Date;
+  respondedAt?: Date;
+  filesDownloadedAt?: Date;
+  lastViewedAt?: Date;
+  viewedWithoutActionNotifiedAt?: Date;
+}
+
 export interface ICase extends Document {
   caseId: string;
   doctorId: Types.ObjectId;
@@ -112,6 +134,8 @@ export interface ICase extends Document {
   assignmentMode: AssignmentMode;
   assignedDesignerId?: Types.ObjectId;
   assignedDesignerName?: string;
+  assignedConsultantId?: Types.ObjectId;
+  assignedConsultantName?: string;
   validatedAt?: Date;
   validatedById?: Types.ObjectId;
   validatedByName?: string;
@@ -130,6 +154,13 @@ export interface ICase extends Document {
   lastQcRequiredChanges?: string;
   delivery?: ICaseDelivery;
   qcReviews: IQcReview[];
+  clinicalRemarks: IClinicalRemark[];
+  consultantIndicator?: ConsultantIndicator;
+  consultantReviewedAt?: Date;
+  doctorDecision?: DoctorDecision;
+  doctorDecisionNote?: string;
+  doctorDecisionAt?: Date;
+  doctorEngagement: IDoctorEngagement;
   cancelReason?: string;
   notes: ICaseNote[];
   files: ICaseFile[];
@@ -217,6 +248,33 @@ const caseDeliverySchema = new Schema<ICaseDelivery>(
     uploadedAt: { type: Date },
     uploadedById: { type: Schema.Types.ObjectId, ref: 'User' },
     uploadedByName: { type: String },
+  },
+  { _id: false },
+);
+
+const clinicalRemarkSchema = new Schema<IClinicalRemark>(
+  {
+    body: { type: String, required: true, trim: true },
+    indicator: {
+      type: String,
+      enum: ALL_CONSULTANT_INDICATORS,
+      required: true,
+    },
+    authorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    authorName: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: true },
+);
+
+const doctorEngagementSchema = new Schema<IDoctorEngagement>(
+  {
+    openedAt: { type: Date },
+    videoViewedAt: { type: Date },
+    respondedAt: { type: Date },
+    filesDownloadedAt: { type: Date },
+    lastViewedAt: { type: Date },
+    viewedWithoutActionNotifiedAt: { type: Date },
   },
   { _id: false },
 );
@@ -311,6 +369,8 @@ const caseSchema = new Schema<ICase>(
     },
     assignedDesignerId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     assignedDesignerName: { type: String },
+    assignedConsultantId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    assignedConsultantName: { type: String },
     validatedAt: { type: Date, index: true },
     validatedById: { type: Schema.Types.ObjectId, ref: 'User' },
     validatedByName: { type: String },
@@ -329,6 +389,16 @@ const caseSchema = new Schema<ICase>(
     lastQcRequiredChanges: { type: String, trim: true },
     delivery: { type: caseDeliverySchema },
     qcReviews: { type: [qcReviewSchema], default: [] },
+    clinicalRemarks: { type: [clinicalRemarkSchema], default: [] },
+    consultantIndicator: { type: String, enum: ALL_CONSULTANT_INDICATORS, index: true },
+    consultantReviewedAt: { type: Date },
+    doctorDecision: { type: String, enum: ALL_DOCTOR_DECISIONS },
+    doctorDecisionNote: { type: String, trim: true },
+    doctorDecisionAt: { type: Date },
+    doctorEngagement: {
+      type: doctorEngagementSchema,
+      default: () => ({}),
+    },
     cancelReason: { type: String },
     notes: { type: [caseNoteSchema], default: [] },
     files: { type: [caseFileSchema], default: [] },
@@ -346,6 +416,8 @@ caseSchema.index({ createdAt: -1 });
 caseSchema.index({ status: 1, priority: 1, createdAt: -1 });
 caseSchema.index({ status: 1, submittedToQcAt: -1 });
 caseSchema.index({ escalatedForOversight: 1, updatedAt: -1 });
+caseSchema.index({ assignedConsultantId: 1, updatedAt: -1 });
+caseSchema.index({ consultantIndicator: 1, updatedAt: -1 });
 
 export const Case: Model<ICase> = mongoose.models.Case ?? mongoose.model<ICase>('Case', caseSchema);
 
