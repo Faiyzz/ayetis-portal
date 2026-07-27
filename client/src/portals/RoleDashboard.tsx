@@ -1,6 +1,14 @@
-import { getDashboardConfig, type Role, type RoleDashboardConfig } from '@ayetis/shared';
+import {
+  getDashboardConfig,
+  getDashboardPath,
+  ROLES,
+  type Role,
+  type RoleDashboardConfig,
+} from '@ayetis/shared';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store';
+import { CoordinatorDashboard } from '@/portals/CoordinatorDashboard';
+import { DesignerDashboard } from '@/portals/DesignerDashboard';
 
 interface RoleDashboardProps {
   role: Role;
@@ -14,7 +22,15 @@ export function RoleDashboard({ role }: RoleDashboardProps) {
   }
 
   if (user.role !== role) {
-    return <Navigate to={getDashboardConfig(user.role).path} replace />;
+    return <Navigate to={getDashboardPath(user.role)} replace />;
+  }
+
+  if (role === ROLES.COORDINATOR) {
+    return <CoordinatorDashboard firstName={user.firstName} />;
+  }
+
+  if (role === ROLES.DESIGNER) {
+    return <DesignerDashboard firstName={user.firstName} />;
   }
 
   return <DashboardView config={getDashboardConfig(role)} firstName={user.firstName} />;

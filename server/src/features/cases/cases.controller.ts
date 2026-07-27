@@ -129,6 +129,88 @@ export async function updateTreatmentInstructions(
   }
 }
 
+export async function coordinatorDashboard(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.getCoordinatorDashboard(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listDesigners(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.listDesignerAssignees(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function startValidation(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.startCaseValidation(
+      await actor(req),
+      req.params.caseId,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'Validation started',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function markValidated(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.markCaseValidated(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'Case marked as validated',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function assignCase(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.assignCase(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message:
+        req.body.mode === 'auto_queue'
+          ? 'Case sent to auto pick queue'
+          : 'Case assigned to designer',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function cancelCase(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const data = await casesService.cancelCase(

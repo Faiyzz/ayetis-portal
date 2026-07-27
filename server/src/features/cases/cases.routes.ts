@@ -11,6 +11,7 @@ import { caseClarificationsRouter } from '../clarifications/clarifications.route
 import * as casesController from './cases.controller';
 import {
   addNoteSchema,
+  assignCaseSchema,
   createCaseSchema,
   listCasesQuerySchema,
   reasonSchema,
@@ -19,6 +20,7 @@ import {
   updateCaseSchema,
   updatePaymentSchema,
   uploadFilesMetaSchema,
+  validateCaseSchema,
 } from './cases.schemas';
 
 const router = Router();
@@ -52,6 +54,22 @@ router.post(
 );
 
 router.get(
+  '/dashboard/coordinator',
+  requireAnyPermission(
+    PERMISSIONS.CASE_VALIDATE,
+    PERMISSIONS.CASE_ASSIGN,
+    PERMISSIONS.CASE_VIEW_ALL,
+  ),
+  casesController.coordinatorDashboard,
+);
+
+router.get(
+  '/assignees/designers',
+  requirePermission(PERMISSIONS.CASE_ASSIGN),
+  casesController.listDesigners,
+);
+
+router.get(
   '/:caseId',
   requireAnyPermission(
     PERMISSIONS.CASE_VIEW_OWN,
@@ -73,6 +91,26 @@ router.post(
   requirePermission(PERMISSIONS.CASE_SET_PRIORITY),
   validate(setPrioritySchema),
   casesController.setPriority,
+);
+
+router.post(
+  '/:caseId/validation/start',
+  requirePermission(PERMISSIONS.CASE_VALIDATE),
+  casesController.startValidation,
+);
+
+router.post(
+  '/:caseId/validate',
+  requirePermission(PERMISSIONS.CASE_VALIDATE),
+  validate(validateCaseSchema),
+  casesController.markValidated,
+);
+
+router.post(
+  '/:caseId/assign',
+  requirePermission(PERMISSIONS.CASE_ASSIGN),
+  validate(assignCaseSchema),
+  casesController.assignCase,
 );
 
 router.patch(

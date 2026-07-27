@@ -1,15 +1,18 @@
 import {
   ALL_ARCH_OPTIONS,
+  ALL_ASSIGNMENT_MODES,
   ALL_CASE_PRIORITIES,
   ALL_CASE_STATUSES,
   ALL_FILE_CATEGORIES,
   ALL_PAYMENT_STATUSES,
+  ASSIGNMENT_MODES,
   CASE_PRIORITIES,
   CASE_STATUSES,
   EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORIES,
   PAYMENT_STATUSES,
   type ArchOption,
+  type AssignmentMode,
   type CasePriority,
   type CaseStatus,
   type FileCategory,
@@ -77,8 +80,12 @@ export interface ICase extends Document {
   payment: ICasePayment;
   status: CaseStatus;
   priority: CasePriority;
+  assignmentMode: AssignmentMode;
   assignedDesignerId?: Types.ObjectId;
   assignedDesignerName?: string;
+  validatedAt?: Date;
+  validatedById?: Types.ObjectId;
+  validatedByName?: string;
   cancelReason?: string;
   notes: ICaseNote[];
   files: ICaseFile[];
@@ -217,8 +224,17 @@ const caseSchema = new Schema<ICase>(
       default: CASE_PRIORITIES.NORMAL,
       index: true,
     },
+    assignmentMode: {
+      type: String,
+      enum: ALL_ASSIGNMENT_MODES,
+      default: ASSIGNMENT_MODES.NONE,
+      index: true,
+    },
     assignedDesignerId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     assignedDesignerName: { type: String },
+    validatedAt: { type: Date, index: true },
+    validatedById: { type: Schema.Types.ObjectId, ref: 'User' },
+    validatedByName: { type: String },
     cancelReason: { type: String },
     notes: { type: [caseNoteSchema], default: [] },
     files: { type: [caseFileSchema], default: [] },

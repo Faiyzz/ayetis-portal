@@ -25,6 +25,7 @@ import { CaseFilesPanel } from '@/features/cases/components/CaseFilesPanel';
 import { CaseHistoryPanel } from '@/features/cases/components/CaseHistoryPanel';
 import { CasePaymentPanel } from '@/features/cases/components/CasePaymentPanel';
 import { CaseStatusTimeline } from '@/features/cases/components/CaseStatusTimeline';
+import { CaseValidationAssignPanel } from '@/features/cases/components/CaseValidationAssignPanel';
 import { ClarificationsPanel } from '@/features/cases/components/ClarificationsPanel';
 import { TreatmentInstructionsPanel } from '@/features/cases/components/TreatmentInstructionsPanel';
 import { toast } from '@/features/notifications/toastStore';
@@ -290,6 +291,20 @@ export function CaseDetailPage() {
             currentLabel={CASE_STATUS_LABELS[caseData.status]}
             isCancelled={isCancelled}
           />
+
+          {(can(PERMISSIONS.CASE_VALIDATE) || can(PERMISSIONS.CASE_ASSIGN)) &&
+          !caseData.isDeleted ? (
+            <CaseValidationAssignPanel
+              caseData={caseData}
+              canValidate={can(PERMISSIONS.CASE_VALIDATE)}
+              canAssign={can(PERMISSIONS.CASE_ASSIGN)}
+              canSetPriority={can(PERMISSIONS.CASE_SET_PRIORITY)}
+              onUpdated={setCaseData}
+              onOpenClarifications={() =>
+                setSearchParams({ tab: 'clarifications' }, { replace: true })
+              }
+            />
+          ) : null}
 
           <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
             <section className="space-y-4 rounded-xl border border-line bg-white p-5">

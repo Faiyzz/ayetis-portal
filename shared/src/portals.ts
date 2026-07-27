@@ -94,8 +94,13 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
     ],
     shortcuts: [
       {
+        label: 'Coordinator dashboard',
+        description: 'Queues with delay colour bars',
+        to: '/app/coordinator',
+      },
+      {
         label: 'Case listing',
-        description: 'Validate and update case details',
+        description: 'Validate, clarify, and assign',
         to: '/app/cases',
       },
     ],
@@ -112,12 +117,14 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
     ],
     shortcuts: [
       {
-        label: 'My queue',
-        description: 'Assigned production cases will appear here',
+        label: 'My assigned cases',
+        description: 'Cases routed to you',
+        to: '/app/designer',
       },
       {
-        label: 'Performance',
-        description: 'Monthly designer metrics coming soon',
+        label: 'Case listing',
+        description: 'Filter and open assigned work',
+        to: '/app/cases',
       },
     ],
   },

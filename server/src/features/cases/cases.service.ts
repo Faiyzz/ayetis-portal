@@ -1,18 +1,30 @@
 import {
+  ASSIGNMENT_MODES,
   AUDIT_ACTIONS,
   CASE_FIELD_LABELS,
   CASE_PRIORITIES,
   CASE_PRIORITY_LABELS,
   CASE_STATUSES,
   CASE_STATUS_LABELS,
+  COORDINATOR_QUEUE_DESCRIPTIONS,
+  COORDINATOR_QUEUE_LABELS,
+  COORDINATOR_QUEUES,
+  DELAY_LEVELS,
   EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORIES,
   PAYMENT_STATUSES,
   PERMISSIONS,
+  ROLES,
+  ALL_COORDINATOR_QUEUES,
+  ALL_DELAY_LEVELS,
   buildCaseTimeline,
+  computeDelayLevel,
   formatHistoryValue,
   isFileCategory,
   permissionsInclude,
+  resolveCoordinatorQueue,
+  type AssignCaseInput,
+  type AssignmentMode,
   type CaseDetailDto,
   type CaseHistoryChange,
   type CaseHistoryDto,
@@ -20,13 +32,22 @@ import {
   type CaseListResult,
   type CasePriority,
   type CaseStatus,
+  type CaseValidationSummary,
+  type CoordinatorDashboardDto,
+  type CoordinatorQueue,
+  type CoordinatorQueueCaseDto,
   type CreateCaseInput,
+  type DelayLevel,
+  type DesignerAssigneeDto,
   type FileCategory,
   type Permission,
   type TreatmentInstructions,
   type UpdateCaseInput,
   type UpdateCasePaymentInput,
+  type ValidateCaseInput,
+  type ValidationCheckItem,
 } from '@ayetis/shared';
+import fs from 'fs/promises';
 import { Types } from 'mongoose';
 import { AppError } from '../../utils/AppError';
 import { Case, type ICase } from '../../models/Case';
@@ -108,8 +129,111 @@ function toPaymentDto(caseDoc: ICase) {
   };
 }
 
+async function buildValidationSummary(caseDoc: ICase): Promise<CaseValidationSummary> {
+  const checks: ValidationCheckItem[] = [];
+
+  checks.push({
+    id: 'patient_name',
+    label: 'Patient name provided',
+    passed: Boolean(caseDoc.patientName?.trim()),
+  });
+
+  checks.push({
+    id: 'treatment_summary',
+    label: 'Treatment summary provided',
+    passed: Boolean(caseDoc.treatmentSummary?.trim()),
+  });
+
+  const ti = caseDoc.treatmentInstructions;
+  const hasStructured =
+    Boolean(ti?.arches) ||
+    Boolean(ti?.applianceType?.trim()) ||
+    Boolean(ti?.treatmentGoal?.trim()) ||
+    Boolean(ti?.specialRequirements?.trim()) ||
+    Boolean(caseDoc.instructions?.trim());
+
+  checks.push({
+    id: 'treatment_instructions',
+    label: 'Treatment instructions documented',
+    passed: hasStructured,
+    detail: hasStructured
+      ? undefined
+      : 'Add structured form fields or free-text instructions',
+  });
+
+  checks.push({
+    id: 'files_attached',
+    label: 'At least one patient file attached',
+    passed: caseDoc.files.length > 0,
+    detail: caseDoc.files.length === 0 ? 'Upload STL, scans, photos, or x-rays' : undefined,
+  });
+
+  let accessibleCount = 0;
+  for (const file of caseDoc.files) {
+    if (!file.storageKey) continue;
+    try {
+      await fs.access(resolveStoragePath(file.storageKey));
+      accessibleCount += 1;
+    } catch {
+      // missing on disk
+    }
+  }
+
+  const filesOk = caseDoc.files.length === 0 ? false : accessibleCount === caseDoc.files.length;
+  checks.push({
+    id: 'files_accessible',
+    label: 'Attached files are accessible',
+    passed: filesOk,
+    detail:
+      caseDoc.files.length === 0
+        ? 'No files to verify'
+        : filesOk
+          ? `${accessibleCount}/${caseDoc.files.length} readable`
+          : `${accessibleCount}/${caseDoc.files.length} readable — some files missing on storage`,
+  });
+
+  const openClarifications = await countOpenClarifications(caseDoc._id as Types.ObjectId);
+  checks.push({
+    id: 'no_open_clarifications',
+    label: 'No open clarifications',
+    passed: openClarifications === 0,
+    detail:
+      openClarifications > 0
+        ? `${openClarifications} clarification(s) still open`
+        : undefined,
+  });
+
+  return {
+    ready: checks.every((check) => check.passed),
+    checks,
+    validatedAt: caseDoc.validatedAt ? caseDoc.validatedAt.toISOString() : null,
+    validatedByName: caseDoc.validatedByName ?? null,
+  };
+}
+
+function delayHoursSince(reference: Date, now = new Date()) {
+  return Math.max(0, (now.getTime() - reference.getTime()) / (1000 * 60 * 60));
+}
+
+function queueReferenceDate(caseDoc: ICase): Date {
+  return caseDoc.validatedAt ?? caseDoc.updatedAt ?? caseDoc.createdAt;
+}
+
 async function toListItem(caseDoc: ICase): Promise<CaseListItemDto> {
   const openClarificationCount = await countOpenClarifications(caseDoc._id as Types.ObjectId);
+  const assignmentMode = (caseDoc.assignmentMode ?? ASSIGNMENT_MODES.NONE) as AssignmentMode;
+  const queue = caseDoc.isDeleted
+    ? null
+    : resolveCoordinatorQueue({
+        status: caseDoc.status,
+        validatedAt: caseDoc.validatedAt,
+        assignmentMode,
+        assignedDesignerId: caseDoc.assignedDesignerId
+          ? String(caseDoc.assignedDesignerId)
+          : null,
+      });
+  const ref = queueReferenceDate(caseDoc);
+
   return {
     id: caseDoc.id,
     caseId: caseDoc.caseId,
@@ -123,6 +247,14 @@ async function toListItem(caseDoc: ICase): Promise<CaseListItemDto> {
     treatmentSummary: caseDoc.treatmentSummary,
     paymentStatus: caseDoc.payment?.status ?? PAYMENT_STATUSES.NOT_BILLED,
     openClarificationCount,
+    assignedDesignerId: caseDoc.assignedDesignerId
+      ? String(caseDoc.assignedDesignerId)
+      : null,
+    assignedDesignerName: caseDoc.assignedDesignerName ?? null,
+    assignmentMode,
+    validatedAt: caseDoc.validatedAt ? caseDoc.validatedAt.toISOString() : null,
+    queue,
+    delayLevel: caseDoc.isDeleted ? null : computeDelayLevel(ref),
     isDeleted: caseDoc.isDeleted,
     createdAt: caseDoc.createdAt.toISOString(),
     updatedAt: caseDoc.updatedAt.toISOString(),
@@ -160,9 +292,10 @@ function mapHistory(caseDoc: ICase): CaseHistoryDto[] {
 }
 
 async function toDetail(caseDoc: ICase): Promise<CaseDetailDto> {
-  const [listItem, clarifications] = await Promise.all([
+  const [listItem, clarifications, validation] = await Promise.all([
     toListItem(caseDoc),
     listClarificationDtosForCase(caseDoc._id as Types.ObjectId),
+    buildValidationSummary(caseDoc),
   ]);
 
   return {
@@ -176,14 +309,12 @@ async function toDetail(caseDoc: ICase): Promise<CaseDetailDto> {
       ...(caseDoc.treatmentInstructions ?? {}),
     },
     payment: toPaymentDto(caseDoc),
-    assignedDesignerId: caseDoc.assignedDesignerId
-      ? String(caseDoc.assignedDesignerId)
-      : null,
-    assignedDesignerName: caseDoc.assignedDesignerName ?? null,
     cancelReason: caseDoc.cancelReason ?? null,
     deletedAt: caseDoc.deletedAt ? caseDoc.deletedAt.toISOString() : null,
     deletedByName: caseDoc.deletedByName ?? null,
     deleteReason: caseDoc.deleteReason ?? null,
+    validatedByName: caseDoc.validatedByName ?? null,
+    validation,
     notes: caseDoc.notes.map((note) => ({
       id: String(note._id),
       body: note.body,
@@ -430,6 +561,7 @@ export async function createCase(
       invoiceNumber: '',
       notes: '',
     },
+    assignmentMode: ASSIGNMENT_MODES.NONE,
     status: CASE_STATUSES.SUBMITTED,
     priority,
     notes: [],
@@ -1045,10 +1177,6 @@ export async function updateTreatmentInstructions(
   const next = normalizeTreatmentInstructions({ ...previous, ...input });
   caseDoc.treatmentInstructions = next;
 
-  if (input.additionalNotes !== undefined || input.specialRequirements !== undefined) {
-    // Keep free-text instructions in sync with special requirements when provided
-  }
-
   pushHistory(caseDoc, {
     action: 'treatment_instructions_updated',
     summary: 'Treatment instructions updated',
@@ -1081,6 +1209,344 @@ export async function updateTreatmentInstructions(
   });
 
   return await toDetail(caseDoc);
+}
+
+export async function startCaseValidation(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  audit?: RequestAuditContext,
+) {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_VALIDATE)) {
+    throw new AppError('You do not have permission to validate cases', 403);
+  }
+
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (caseDoc.isDeleted) throw new AppError('Cannot validate a deleted case', 400);
+  if (caseDoc.status === CASE_STATUSES.CANCELLED) {
+    throw new AppError('Cannot validate a cancelled case', 400);
+  }
+
+  if (caseDoc.status === CASE_STATUSES.SUBMITTED) {
+    caseDoc.status = CASE_STATUSES.UNDER_VALIDATION;
+    pushHistory(caseDoc, {
+      action: 'validation_started',
+      summary: 'Case moved to under validation',
+      actor,
+    });
+    await caseDoc.save();
+
+    await recordActivity({
+      action: AUDIT_ACTIONS.CASE_VALIDATE,
+      summary: `${actor.email} started validation for case ${caseDoc.caseId}`,
+      actorId: actor.id,
+      actorEmail: actor.email,
+      actorName: actorName(actor),
+      actorRole: actor.role,
+      targetType: 'case',
+      targetId: caseDoc.caseId,
+      metadata: { step: 'started' },
+      ipAddress: audit?.ipAddress,
+      userAgent: audit?.userAgent,
+    });
+  }
+
+  return await toDetail(caseDoc);
+}
+
+export async function markCaseValidated(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: ValidateCaseInput = {},
+  audit?: RequestAuditContext,
+) {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_VALIDATE)) {
+    throw new AppError('You do not have permission to validate cases', 403);
+  }
+
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (caseDoc.isDeleted) throw new AppError('Cannot validate a deleted case', 400);
+  if (caseDoc.status === CASE_STATUSES.CANCELLED) {
+    throw new AppError('Cannot validate a cancelled case', 400);
+  }
+  if (caseDoc.status === CASE_STATUSES.WAITING_CLARIFICATION) {
+    throw new AppError('Resolve open clarifications before validating', 400);
+  }
+
+  const validation = await buildValidationSummary(caseDoc);
+  const hardFail = validation.checks.filter(
+    (check) =>
+      !check.passed &&
+      (check.id === 'patient_name' || check.id === 'treatment_summary'),
+  );
+  if (hardFail.length > 0) {
+    throw new AppError(
+      `Cannot validate: ${hardFail.map((c) => c.label).join(', ')}`,
+      400,
+    );
+  }
+
+  if (!validation.ready && !input.force) {
+    throw new AppError(
+      'Case is not ready for validation. Fix checklist items or force validate with a note.',
+      400,
+    );
+  }
+
+  if (caseDoc.status === CASE_STATUSES.SUBMITTED) {
+    caseDoc.status = CASE_STATUSES.UNDER_VALIDATION;
+  }
+
+  caseDoc.validatedAt = new Date();
+  caseDoc.validatedById = new Types.ObjectId(actor.id);
+  caseDoc.validatedByName = actorName(actor);
+
+  pushHistory(caseDoc, {
+    action: 'validated',
+    summary: input.force
+      ? 'Case marked as validated (forced)'
+      : 'Case marked as validated',
+    actor,
+    metadata: {
+      notes: input.notes?.trim() || undefined,
+      force: Boolean(input.force),
+      checks: validation.checks,
+    },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_VALIDATE,
+    summary: `${actor.email} validated case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    metadata: { force: Boolean(input.force), notes: input.notes },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return await toDetail(caseDoc);
+}
+
+export async function assignCase(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: AssignCaseInput,
+  audit?: RequestAuditContext,
+) {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_ASSIGN)) {
+    throw new AppError('You do not have permission to assign cases', 403);
+  }
+
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (caseDoc.isDeleted) throw new AppError('Cannot assign a deleted case', 400);
+  if (caseDoc.status === CASE_STATUSES.CANCELLED) {
+    throw new AppError('Cannot assign a cancelled case', 400);
+  }
+  if (caseDoc.status === CASE_STATUSES.WAITING_CLARIFICATION) {
+    throw new AppError('Cannot assign while waiting for doctor clarification', 400);
+  }
+  if (!caseDoc.validatedAt) {
+    throw new AppError('Validate the case before assigning', 400);
+  }
+
+  if (input.mode === 'designer') {
+    if (!input.designerId) {
+      throw new AppError('designerId is required when assigning to a designer', 400);
+    }
+    const designer = await User.findById(input.designerId);
+    if (!designer || !designer.isActive || designer.role !== ROLES.DESIGNER) {
+      throw new AppError('Active designer not found', 404);
+    }
+
+    caseDoc.assignmentMode = ASSIGNMENT_MODES.DESIGNER;
+    caseDoc.assignedDesignerId = designer._id as Types.ObjectId;
+    caseDoc.assignedDesignerName = `${designer.firstName} ${designer.lastName}`.trim();
+    caseDoc.status = CASE_STATUSES.DESIGNER_WORKING;
+
+    pushHistory(caseDoc, {
+      action: 'assigned',
+      summary: `Assigned to designer ${caseDoc.assignedDesignerName}`,
+      actor,
+      metadata: { designerId: designer.id, note: input.note?.trim() || undefined },
+    });
+  } else if (input.mode === 'auto_queue') {
+    caseDoc.assignmentMode = ASSIGNMENT_MODES.AUTO_QUEUE;
+    caseDoc.assignedDesignerId = undefined;
+    caseDoc.assignedDesignerName = undefined;
+    caseDoc.status = CASE_STATUSES.DESIGNER_WORKING;
+
+    pushHistory(caseDoc, {
+      action: 'assigned',
+      summary: 'Sent to auto case-pick queue',
+      actor,
+      metadata: { mode: 'auto_queue', note: input.note?.trim() || undefined },
+    });
+  } else {
+    throw new AppError('Invalid assignment mode', 400);
+  }
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_ASSIGN,
+    summary: `${actor.email} assigned case ${caseDoc.caseId} (${input.mode})`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    metadata: {
+      mode: input.mode,
+      designerId: input.designerId,
+      note: input.note,
+    },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return await toDetail(caseDoc);
+}
+
+function toQueueCaseDto(
+  caseDoc: ICase,
+  openClarificationCount: number,
+): CoordinatorQueueCaseDto {
+  const assignmentMode = (caseDoc.assignmentMode ?? ASSIGNMENT_MODES.NONE) as AssignmentMode;
+  const queue = resolveCoordinatorQueue({
+    status: caseDoc.status,
+    validatedAt: caseDoc.validatedAt,
+    assignmentMode,
+    assignedDesignerId: caseDoc.assignedDesignerId
+      ? String(caseDoc.assignedDesignerId)
+      : null,
+  });
+  const ref = queueReferenceDate(caseDoc);
+  const hours = delayHoursSince(ref);
+
+  return {
+    id: caseDoc.id,
+    caseId: caseDoc.caseId,
+    patientName: caseDoc.patientName,
+    doctorName: caseDoc.doctorName,
+    doctorEmail: caseDoc.doctorEmail,
+    status: caseDoc.status,
+    priority: caseDoc.priority,
+    treatmentSummary: caseDoc.treatmentSummary,
+    queue,
+    delayLevel: computeDelayLevel(ref),
+    delayHours: Math.round(hours * 10) / 10,
+    fileCount: caseDoc.files.length,
+    openClarificationCount,
+    assignedDesignerName: caseDoc.assignedDesignerName ?? null,
+    assignmentMode,
+    validatedAt: caseDoc.validatedAt ? caseDoc.validatedAt.toISOString() : null,
+    createdAt: caseDoc.createdAt.toISOString(),
+    updatedAt: caseDoc.updatedAt.toISOString(),
+  };
+}
+
+export async function getCoordinatorDashboard(
+  actor: CaseActor,
+): Promise<CoordinatorDashboardDto> {
+  if (
+    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ALL) &&
+    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_VALIDATE) &&
+    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_ASSIGN)
+  ) {
+    throw new AppError('You do not have permission to view the coordinator dashboard', 403);
+  }
+
+  const cases = await Case.find({
+    isDeleted: false,
+    status: { $ne: CASE_STATUSES.CANCELLED },
+  }).sort({ updatedAt: -1 });
+
+  const openCounts = await Promise.all(
+    cases.map(async (caseDoc) => ({
+      id: String(caseDoc._id),
+      count: await countOpenClarifications(caseDoc._id as Types.ObjectId),
+    })),
+  );
+  const openMap = new Map(openCounts.map((entry) => [entry.id, entry.count]));
+
+  const items = cases.map((caseDoc) =>
+    toQueueCaseDto(caseDoc, openMap.get(String(caseDoc._id)) ?? 0),
+  );
+
+  // Only intake-relevant cases in coordinator buckets; assigned includes production.
+  const intakeQueues = new Set<CoordinatorQueue>(ALL_COORDINATOR_QUEUES);
+  const relevant = items.filter((item) => intakeQueues.has(item.queue));
+
+  const totals = Object.fromEntries(
+    ALL_COORDINATOR_QUEUES.map((queue) => [queue, 0]),
+  ) as Record<CoordinatorQueue, number>;
+
+  const delayBreakdown = Object.fromEntries(
+    ALL_DELAY_LEVELS.map((level) => [level, 0]),
+  ) as Record<DelayLevel, number>;
+
+  for (const item of relevant) {
+    totals[item.queue] += 1;
+    delayBreakdown[item.delayLevel] += 1;
+  }
+
+  const buckets = ALL_COORDINATOR_QUEUES.map((queue) => {
+    const queueItems = relevant.filter((item) => item.queue === queue);
+    const bucketDelay = Object.fromEntries(
+      ALL_DELAY_LEVELS.map((level) => [level, 0]),
+    ) as Record<DelayLevel, number>;
+    for (const item of queueItems) {
+      bucketDelay[item.delayLevel] += 1;
+    }
+    return {
+      queue,
+      label: COORDINATOR_QUEUE_LABELS[queue],
+      description: COORDINATOR_QUEUE_DESCRIPTIONS[queue],
+      count: queueItems.length,
+      delayBreakdown: bucketDelay,
+      items: queueItems.slice(0, 25),
+    };
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    totals,
+    delayBreakdown,
+    buckets,
+  };
+}
+
+export async function listDesignerAssignees(
+  actor: CaseActor,
+): Promise<DesignerAssigneeDto[]> {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_ASSIGN)) {
+    throw new AppError('You do not have permission to list designers', 403);
+  }
+
+  const designers = await User.find({
+    role: ROLES.DESIGNER,
+    isActive: true,
+  }).sort({ firstName: 1, lastName: 1 });
+
+  return designers.map((designer) => ({
+    id: designer.id,
+    firstName: designer.firstName,
+    lastName: designer.lastName,
+    email: designer.email,
+    isActive: designer.isActive,
+  }));
 }
 
 export async function resolveCaseActor(userId: string): Promise<CaseActor> {

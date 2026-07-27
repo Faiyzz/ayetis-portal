@@ -159,3 +159,24 @@ export const uploadFilesMetaSchema = z.object({
     }),
   note: z.string().trim().max(500).optional(),
 });
+
+export const validateCaseSchema = z.object({
+  notes: z.string().trim().max(2000).optional(),
+  force: z.boolean().optional(),
+});
+
+export const assignCaseSchema = z
+  .object({
+    mode: z.enum(['designer', 'auto_queue']),
+    designerId: z.string().trim().min(1).optional(),
+    note: z.string().trim().max(1000).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.mode === 'designer' && !value.designerId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'designerId is required when mode is designer',
+        path: ['designerId'],
+      });
+    }
+  });

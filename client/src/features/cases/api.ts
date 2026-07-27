@@ -157,5 +157,36 @@ export async function updateTreatmentInstructions(
   return data.data;
 }
 
+export async function fetchCoordinatorDashboard() {
+  const { data } = await api.get('/cases/dashboard/coordinator');
+  return data.data as import('@ayetis/shared').CoordinatorDashboardDto;
+}
+
+export async function fetchDesignerAssignees() {
+  const { data } = await api.get('/cases/assignees/designers');
+  return data.data as import('@ayetis/shared').DesignerAssigneeDto[];
+}
+
+export async function startCaseValidation(caseId: string): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/validation/start`);
+  return data.data;
+}
+
+export async function markCaseValidated(
+  caseId: string,
+  payload: import('@ayetis/shared').ValidateCaseInput = {},
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/validate`, payload);
+  return data.data;
+}
+
+export async function assignCase(
+  caseId: string,
+  payload: import('@ayetis/shared').AssignCaseInput,
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/assign`, payload);
+  return data.data;
+}
+
 export { CASE_PRIORITY_LABELS, formatHistoryValue };
 export type { CasePriority };

@@ -1,5 +1,11 @@
 import type { ClarificationDto } from './clarifications';
 import type {
+  AssignmentMode,
+  CaseValidationSummary,
+  CoordinatorQueue,
+  DelayLevel,
+} from './coordinator';
+import type {
   CasePaymentOverview,
   PaymentStatus,
   TreatmentInstructions,
@@ -195,6 +201,12 @@ export interface CaseListItemDto {
   treatmentSummary: string;
   paymentStatus: PaymentStatus;
   openClarificationCount: number;
+  assignedDesignerId: string | null;
+  assignedDesignerName: string | null;
+  assignmentMode: AssignmentMode;
+  validatedAt: string | null;
+  queue: CoordinatorQueue | null;
+  delayLevel: DelayLevel | null;
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;
@@ -207,12 +219,12 @@ export interface CaseDetailDto extends CaseListItemDto {
   country: string;
   treatmentInstructions: TreatmentInstructions;
   payment: CasePaymentOverview;
-  assignedDesignerId: string | null;
-  assignedDesignerName: string | null;
   cancelReason: string | null;
   deletedAt: string | null;
   deletedByName: string | null;
   deleteReason: string | null;
+  validatedByName: string | null;
+  validation: CaseValidationSummary;
   notes: CaseNoteDto[];
   files: CaseFileDto[];
   history: CaseHistoryDto[];

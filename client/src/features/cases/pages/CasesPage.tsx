@@ -36,6 +36,8 @@ export function CasesPage() {
   const isDoctorView =
     can(PERMISSIONS.CASE_VIEW_OWN) &&
     !canAny(PERMISSIONS.CASE_VIEW_ALL, PERMISSIONS.CASE_VIEW_ASSIGNED);
+  const isDesignerView =
+    can(PERMISSIONS.CASE_VIEW_ASSIGNED) && !can(PERMISSIONS.CASE_VIEW_ALL);
   const [items, setItems] = useState<CaseListItemDto[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -85,12 +87,18 @@ export function CasesPage() {
         <div>
           <p className="text-sm font-medium text-brand-600">Cases</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">
-            {isDoctorView ? 'My submitted cases' : 'Case listing'}
+            {isDoctorView
+              ? 'My submitted cases'
+              : isDesignerView
+                ? 'My assigned cases'
+                : 'Case listing'}
           </h1>
           <p className="mt-1.5 text-[15px] text-muted">
             {isDoctorView
               ? 'Track every case you have submitted in one place — status, priority, and payment.'
-              : 'Search and filter cases relevant to your role.'}
+              : isDesignerView
+                ? 'Cases assigned to you for production. Open a case to review files and instructions.'
+                : 'Search and filter cases relevant to your role.'}
           </p>
         </div>
         {can(PERMISSIONS.CASE_CREATE) ? (
@@ -166,7 +174,10 @@ export function CasesPage() {
               <tr>
                 <th className="px-4 py-3 font-medium">Case ID</th>
                 <th className="px-4 py-3 font-medium">Patient</th>
-                {!isDoctorView ? <th className="px-4 py-3 font-medium">Doctor</th> : null}
+                {!isDoctorView && !isDesignerView ? (
+                  <th className="px-4 py-3 font-medium">Doctor</th>
+                ) : null}
+                {!isDoctorView ? <th className="px-4 py-3 font-medium">Assignee</th> : null}
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Priority</th>
                 <th className="px-4 py-3 font-medium">Payment</th>
@@ -176,13 +187,13 @@ export function CasesPage() {
             <tbody className="divide-y divide-line">
               {loading ? (
                 <tr>
-                  <td colSpan={isDoctorView ? 6 : 7} className="px-4 py-8 text-muted">
+                  <td colSpan={8} className="px-4 py-8 text-muted">
                     Loading cases…
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={isDoctorView ? 6 : 7} className="px-4 py-8 text-muted">
+                  <td colSpan={8} className="px-4 py-8 text-muted">
                     No cases found.
                   </td>
                 </tr>
@@ -204,10 +215,16 @@ export function CasesPage() {
                       ) : null}
                     </td>
                     <td className="px-4 py-3 text-ink">{item.patientName}</td>
-                    {!isDoctorView ? (
+                    {!isDoctorView && !isDesignerView ? (
                       <td className="px-4 py-3">
                         <p className="text-ink">{item.doctorName}</p>
                         <p className="text-xs text-muted">{item.doctorEmail}</p>
+                      </td>
+                    ) : null}
+                    {!isDoctorView ? (
+                      <td className="px-4 py-3 text-ink">
+                        {item.assignedDesignerName ||
+                          (item.assignmentMode === 'auto_queue' ? 'Auto queue' : '—')}
                       </td>
                     ) : null}
                     <td className="px-4 py-3">
