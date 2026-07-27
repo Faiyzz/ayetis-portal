@@ -107,15 +107,24 @@ export function NotificationBell() {
         <div className="absolute right-0 z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-line bg-white shadow-lg">
           <div className="flex items-center justify-between border-b border-line px-3 py-2.5">
             <p className="text-sm font-semibold text-ink">Notifications</p>
-            {unreadCount > 0 ? (
-              <button
-                type="button"
-                onClick={() => void handleMarkAll()}
-                className="text-xs font-semibold text-brand-700 hover:underline"
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => void handleMarkAll()}
+                  className="text-xs font-semibold text-brand-700 hover:underline"
+                >
+                  Mark all read
+                </button>
+              ) : null}
+              <Link
+                to="/app/notifications"
+                onClick={() => setOpen(false)}
+                className="text-xs font-semibold text-ink hover:underline"
               >
-                Mark all read
-              </button>
-            ) : null}
+                View all
+              </Link>
+            </div>
           </div>
           <div className="max-h-80 overflow-y-auto">
             {loading && items.length === 0 ? (

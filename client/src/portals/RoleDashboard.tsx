@@ -8,6 +8,7 @@ import {
 import { Link, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store';
 import { AdminDashboard } from '@/portals/AdminDashboard';
+import { AnalyticsDashboard } from '@/portals/AnalyticsDashboard';
 import { ConsultantDashboard } from '@/portals/ConsultantDashboard';
 import { CoordinatorDashboard } from '@/portals/CoordinatorDashboard';
 import { DesignerDashboard } from '@/portals/DesignerDashboard';
@@ -56,6 +57,10 @@ export function RoleDashboard({ role }: RoleDashboardProps) {
 
   if (role === ROLES.SUPERVISOR) {
     return <SupervisorDashboard firstName={user.firstName} />;
+  }
+
+  if (role === ROLES.ANALYTICS) {
+    return <AnalyticsDashboard firstName={user.firstName} />;
   }
 
   return <DashboardView config={getDashboardConfig(role)} firstName={user.firstName} />;

@@ -1,4 +1,6 @@
 export const NOTIFICATION_TYPES = {
+  CASE_SUBMITTED: 'case_submitted',
+  CASE_ASSIGNED: 'case_assigned',
   CLARIFICATION_REQUIRED: 'clarification_required',
   CLARIFICATION_REPLIED: 'clarification_replied',
   CLARIFICATION_RESOLVED: 'clarification_resolved',
@@ -18,6 +20,8 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[keyof typeof NOTIFICA
 export const ALL_NOTIFICATION_TYPES: NotificationType[] = Object.values(NOTIFICATION_TYPES);
 
 export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
+  [NOTIFICATION_TYPES.CASE_SUBMITTED]: 'New case submitted',
+  [NOTIFICATION_TYPES.CASE_ASSIGNED]: 'Case assigned',
   [NOTIFICATION_TYPES.CLARIFICATION_REQUIRED]: 'Clarification required',
   [NOTIFICATION_TYPES.CLARIFICATION_REPLIED]: 'Clarification reply',
   [NOTIFICATION_TYPES.CLARIFICATION_RESOLVED]: 'Clarification resolved',

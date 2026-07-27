@@ -230,16 +230,23 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
     highlights: [
       'Case volume and pipeline reports',
       'Department and role performance',
-      'Doctor satisfaction and complaint trends',
+      'Month / quarter filters and CSV export',
     ],
     shortcuts: [
       {
-        label: 'Case reports',
-        description: 'Pipeline totals and status breakdowns',
+        label: 'Case pipeline',
+        description: 'Totals by status across the workflow',
+        to: '/app/analytics',
       },
       {
-        label: 'Department reports',
-        description: 'Designer, QC, and consultant analytics',
+        label: 'Department comparison',
+        description: 'Benchmark designers, QC, consultants, supervisors',
+        to: '/app/analytics',
+      },
+      {
+        label: 'Complaints & ratings',
+        description: 'Doctor complaint and decision trends',
+        to: '/app/complaints',
       },
     ],
   },

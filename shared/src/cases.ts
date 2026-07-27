@@ -127,6 +127,9 @@ export const FILE_CATEGORIES = {
   SCAN: 'scan',
   PHOTO: 'photo',
   XRAY: 'xray',
+  PDF: 'pdf',
+  VIDEO: 'video',
+  MODEL: 'model',
   OTHER: 'other',
 } as const;
 
@@ -139,8 +142,43 @@ export const FILE_CATEGORY_LABELS: Record<FileCategory, string> = {
   [FILE_CATEGORIES.SCAN]: 'Scan',
   [FILE_CATEGORIES.PHOTO]: 'Photo',
   [FILE_CATEGORIES.XRAY]: 'X-ray',
+  [FILE_CATEGORIES.PDF]: 'PDF',
+  [FILE_CATEGORIES.VIDEO]: 'Video',
+  [FILE_CATEGORIES.MODEL]: '3D model',
   [FILE_CATEGORIES.OTHER]: 'Other',
 };
+
+/** Extensions accepted for case file uploads (plus image/* and video/* mime families). */
+export const ALLOWED_UPLOAD_EXTENSIONS = [
+  '.stl',
+  '.obj',
+  '.ply',
+  '.dcm',
+  '.dicom',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.heic',
+  '.bmp',
+  '.tif',
+  '.tiff',
+  '.pdf',
+  '.zip',
+  '.mp4',
+  '.mov',
+  '.webm',
+  '.avi',
+  '.mkv',
+  '.html',
+  '.htm',
+] as const;
+
+export function isAllowedUploadFilename(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return ALLOWED_UPLOAD_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
 
 export const CASE_FIELD_LABELS: Record<string, string> = {
   patientName: 'Patient name',

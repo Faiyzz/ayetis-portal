@@ -12,6 +12,7 @@ import { CasesPage } from '@/features/cases/pages/CasesPage';
 import { CreateCasePage } from '@/features/cases/pages/CreateCasePage';
 import { EditCasePage } from '@/features/cases/pages/EditCasePage';
 import { ComplaintsPage } from '@/features/complaints/pages/ComplaintsPage';
+import { NotificationCenterPage } from '@/features/notifications/pages/NotificationCenterPage';
 import { CreateUserPage } from '@/features/users/pages/CreateUserPage';
 import { RolePermissionsPage } from '@/features/users/pages/RolePermissionsPage';
 import { UserPermissionsPage } from '@/features/users/pages/UserPermissionsPage';
@@ -42,6 +43,7 @@ export function AppRouter() {
         <Route path="/app" element={<AppShell />}>
           <Route index element={<RoleHomeRedirect />} />
           <Route path="change-password" element={<ChangePasswordPage />} />
+          <Route path="notifications" element={<NotificationCenterPage />} />
 
           {ALL_ROLES.map((role) => (
             <Route key={role} path={role} element={<RoleDashboard role={role} />} />

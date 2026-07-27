@@ -25,4 +25,14 @@ export const env = {
   resendApiKey: process.env.RESEND_API_KEY ?? '',
   emailFrom: process.env.EMAIL_FROM ?? 'Ayetis Portal <onboarding@resend.dev>',
   isDev: (process.env.NODE_ENV ?? 'development') !== 'production',
+  /** local = disk under UPLOADS_DIR; s3 = Railway / S3-compatible private bucket */
+  storageProvider: (process.env.STORAGE_PROVIDER ?? 'local').toLowerCase() === 's3' ? 's3' as const : 'local' as const,
+  uploadsDir: process.env.UPLOADS_DIR ?? '',
+  s3Endpoint: process.env.S3_ENDPOINT ?? process.env.AWS_ENDPOINT_URL ?? '',
+  s3Region: process.env.S3_REGION ?? process.env.AWS_REGION ?? 'auto',
+  s3Bucket: process.env.S3_BUCKET ?? process.env.AWS_S3_BUCKET ?? '',
+  s3AccessKeyId: process.env.S3_ACCESS_KEY_ID ?? process.env.AWS_ACCESS_KEY_ID ?? '',
+  s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? process.env.AWS_SECRET_ACCESS_KEY ?? '',
+  s3ForcePathStyle: (process.env.S3_FORCE_PATH_STYLE ?? 'true').toLowerCase() !== 'false',
+  maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 500 * 1024 * 1024),
 };

@@ -1,11 +1,11 @@
 import { PERMISSIONS } from '@ayetis/shared';
 import { Router } from 'express';
-import multer from 'multer';
 import {
   authenticate,
   requireAnyPermission,
   requirePermission,
 } from '../../middleware/auth';
+import { caseFileUpload, deliveryVideoUpload } from '../../middleware/uploads';
 import { validate } from '../../middleware/validate';
 import { caseClarificationsRouter } from '../clarifications/clarifications.routes';
 import * as casesController from './cases.controller';
@@ -31,22 +31,6 @@ import {
 } from './cases.schemas';
 
 const router = Router();
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 100 * 1024 * 1024,
-    files: 20,
-  },
-});
-
-const deliveryUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 500 * 1024 * 1024,
-    files: 1,
-  },
-});
 
 router.use(authenticate);
 
@@ -224,7 +208,7 @@ router.post(
 router.post(
   '/:caseId/files',
   requireAnyPermission(PERMISSIONS.CASE_CREATE, PERMISSIONS.CASE_UPDATE),
-  upload.array('files', 20),
+  caseFileUpload.array('files', 20),
   validate(uploadFilesMetaSchema),
   casesController.uploadFiles,
 );
@@ -296,7 +280,7 @@ router.post(
 router.post(
   '/:caseId/qc/approve',
   requirePermission(PERMISSIONS.CASE_QC_REVIEW),
-  deliveryUpload.single('video'),
+  deliveryVideoUpload.single('video'),
   validate(qcApproveSchema),
   casesController.approveQc,
 );

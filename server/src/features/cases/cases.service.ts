@@ -29,6 +29,7 @@ import {
   buildCaseTimeline,
   computeDelayLevel,
   formatHistoryValue,
+  isAllowedUploadFilename,
   isFileCategory,
   labelForMonthKey,
   monthRangeUtc,
@@ -76,7 +77,6 @@ import {
   type ValidateCaseInput,
   type ValidationCheckItem,
 } from '@ayetis/shared';
-import fs from 'fs/promises';
 import { Types } from 'mongoose';
 import { env } from '../../config/env';
 import { AppError } from '../../utils/AppError';
@@ -85,6 +85,7 @@ import { generateCaseId } from '../../models/CaseCounter';
 import { User } from '../../models/User';
 import {
   caseDeliveredTemplate,
+  caseEventTemplate,
   sendTemplatedEmail,
 } from '../../services/email';
 import {
@@ -100,7 +101,11 @@ import {
   createNotificationsForUsers,
 } from '../notifications/notifications.service';
 import { resolvePermissionsForUserId } from '../users/users.service';
-import { resolveStoragePath, saveCaseFile } from '../../services/storage.service';
+import {
+  persistUploadedFile,
+  openStoredReadStream,
+  storedFileExists,
+} from '../../services/storage.service';
 
 export interface CaseActor {
   id: string;
@@ -209,11 +214,8 @@ async function buildValidationSummary(caseDoc: ICase): Promise<CaseValidationSum
   let accessibleCount = 0;
   for (const file of caseDoc.files) {
     if (!file.storageKey) continue;
-    try {
-      await fs.access(resolveStoragePath(file.storageKey));
+    if (await storedFileExists(file.storageKey)) {
       accessibleCount += 1;
-    } catch {
-      // missing on disk
     }
   }
 
@@ -607,6 +609,18 @@ function detectCategory(originalName: string, mimeType: string, explicit?: strin
   if (lower.endsWith('.stl') || mimeType.includes('sla') || mimeType.includes('stl')) {
     return FILE_CATEGORIES.STL;
   }
+  if (lower.endsWith('.obj') || lower.endsWith('.ply') || mimeType.includes('model')) {
+    return FILE_CATEGORIES.MODEL;
+  }
+  if (lower.endsWith('.pdf') || mimeType === 'application/pdf') {
+    return FILE_CATEGORIES.PDF;
+  }
+  if (
+    mimeType.startsWith('video/') ||
+    /\.(mp4|mov|webm|avi|mkv)$/i.test(lower)
+  ) {
+    return FILE_CATEGORIES.VIDEO;
+  }
   if (
     lower.endsWith('.dcm') ||
     lower.endsWith('.dicom') ||
@@ -617,7 +631,7 @@ function detectCategory(originalName: string, mimeType: string, explicit?: strin
   }
   if (
     mimeType.startsWith('image/') ||
-    /\.(jpe?g|png|gif|webp|heic)$/i.test(lower)
+    /\.(jpe?g|png|gif|webp|heic|bmp|tiff?)$/i.test(lower)
   ) {
     if (/x[-_]?ray|radiograph|opg|cbct/i.test(lower)) return FILE_CATEGORIES.XRAY;
     return FILE_CATEGORIES.PHOTO;
@@ -803,6 +817,26 @@ export async function createCase(
     metadata: { mongoId: caseDoc.id, patientName: caseDoc.patientName },
     ipAddress: audit?.ipAddress,
     userAgent: audit?.userAgent,
+  });
+
+  const intakeStaffIds = await findUserIdsByRoles([
+    ROLES.COORDINATOR,
+    ROLES.SUPERVISOR,
+    ROLES.ADMIN,
+  ]);
+  await createNotificationsForUsers(intakeStaffIds, {
+    type: NOTIFICATION_TYPES.CASE_SUBMITTED,
+    title: `New case submitted: ${caseId}`,
+    body: `${caseDoc.doctorName} submitted ${caseDoc.patientName} for review.`,
+    link: `/app/cases/${caseId}`,
+    caseId,
+  });
+  await emailUsers(intakeStaffIds, {
+    subject: `New case submitted: ${caseId}`,
+    headline: 'New case submitted',
+    message: `${caseDoc.doctorName} submitted a new case for ${caseDoc.patientName}.`,
+    caseId,
+    patientName: caseDoc.patientName,
   });
 
   return await toDetail(caseDoc);
@@ -1190,7 +1224,8 @@ export async function uploadCaseFiles(
     originalname: string;
     mimetype: string;
     size: number;
-    buffer: Buffer;
+    buffer?: Buffer;
+    path?: string;
   }>,
   options: { category?: string; note?: string } = {},
   audit?: RequestAuditContext,
@@ -1209,11 +1244,20 @@ export async function uploadCaseFiles(
   const uploadedNames: string[] = [];
 
   for (const file of files) {
+    if (!isAllowedUploadFilename(file.originalname) && !file.mimetype.startsWith('image/') && !file.mimetype.startsWith('video/')) {
+      throw new AppError(
+        `Unsupported file type: ${file.originalname}. Allowed: STL, OBJ, images, PDF, video, DICOM, ZIP, HTML.`,
+        400,
+      );
+    }
+
     const category = detectCategory(file.originalname, file.mimetype, options.category);
-    const { storageKey } = await saveCaseFile({
+    const { storageKey } = await persistUploadedFile({
       caseId: caseDoc.caseId,
       originalName: file.originalname,
+      mimeType: file.mimetype,
       buffer: file.buffer,
+      tempPath: file.path,
     });
 
     const sameNameCount = caseDoc.files.filter(
@@ -1290,10 +1334,27 @@ export async function getCaseFileForDownload(
     throw new AppError('File not found', 404);
   }
 
+  if (!(await storedFileExists(file.storageKey))) {
+    throw new AppError('File is missing from storage', 404);
+  }
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_FILES_DOWNLOAD,
+    summary: `${actor.email} downloaded ${file.originalName || file.filename} from case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    metadata: { fileId, storageKey: file.storageKey },
+  }).catch(() => undefined);
+
   return {
-    absolutePath: resolveStoragePath(file.storageKey),
+    storageKey: file.storageKey,
     originalName: file.originalName || file.filename,
     mimeType: file.mimeType,
+    sizeBytes: file.sizeBytes,
   };
 }
 
@@ -1321,8 +1382,9 @@ export async function getDeliveryVideoForDownload(
   }
 
   return {
-    absolutePath: resolveStoragePath(key),
+    storageKey: key,
     originalName: caseDoc.delivery?.videoFilename || 'delivery-video',
+    mimeType: 'video/mp4',
   };
 }
 
@@ -1345,26 +1407,21 @@ export async function getCaseFilesForZipDownload(
     throw new AppError('This case has no files to download', 404);
   }
 
-  const entries: Array<{ absolutePath: string; name: string }> = [];
+  const entries: Array<{ storageKey: string; name: string }> = [];
   const usedNames = new Set<string>();
 
   for (const file of caseDoc.files) {
     if (!file.storageKey) continue;
-    try {
-      const absolutePath = resolveStoragePath(file.storageKey);
-      await fs.access(absolutePath);
-      let name = file.originalName || file.filename || 'file';
-      if (usedNames.has(name)) {
-        const extIndex = name.lastIndexOf('.');
-        const base = extIndex > 0 ? name.slice(0, extIndex) : name;
-        const ext = extIndex > 0 ? name.slice(extIndex) : '';
-        name = `${base}-v${file.version || 1}${ext}`;
-      }
-      usedNames.add(name);
-      entries.push({ absolutePath, name });
-    } catch {
-      // skip missing files
+    if (!(await storedFileExists(file.storageKey))) continue;
+    let name = file.originalName || file.filename || 'file';
+    if (usedNames.has(name)) {
+      const extIndex = name.lastIndexOf('.');
+      const base = extIndex > 0 ? name.slice(0, extIndex) : name;
+      const ext = extIndex > 0 ? name.slice(extIndex) : '';
+      name = `${base}-v${file.version || 1}${ext}`;
     }
+    usedNames.add(name);
+    entries.push({ storageKey: file.storageKey, name });
   }
 
   if (entries.length === 0) {
@@ -1680,6 +1737,41 @@ async function findUserIdsByRoles(roles: string[]): Promise<string[]> {
   return users.map((u) => String(u._id));
 }
 
+async function emailUsers(
+  userIds: string[],
+  input: {
+    subject: string;
+    headline: string;
+    message: string;
+    caseId: string;
+    patientName?: string;
+    ctaLabel?: string;
+  },
+) {
+  const unique = [...new Set(userIds.filter(Boolean))];
+  if (!unique.length) return;
+  const users = await User.find({ _id: { $in: unique }, isActive: { $ne: false } }).select(
+    'email firstName lastName',
+  );
+  await Promise.all(
+    users.map((user) =>
+      sendTemplatedEmail(
+        user.email,
+        caseEventTemplate({
+          recipientName: `${user.firstName} ${user.lastName}`.trim() || user.email,
+          subject: input.subject,
+          headline: input.headline,
+          message: input.message,
+          caseId: input.caseId,
+          patientName: input.patientName,
+          portalUrl: `${env.clientUrl}/app/cases/${input.caseId}`,
+          ctaLabel: input.ctaLabel,
+        }),
+      ).catch(() => undefined),
+    ),
+  );
+}
+
 export async function getQcDashboard(actor: CaseActor): Promise<QcDashboardDto> {
   assertCanQcReview(actor);
 
@@ -1816,10 +1908,12 @@ export async function approveQcCase(
   let deliveryVideoStorageKey: string | undefined;
 
   if (videoFile) {
-    const saved = await saveCaseFile({
+    const saved = await persistUploadedFile({
       caseId: caseDoc.caseId,
       originalName: videoFile.originalname,
+      mimeType: videoFile.mimetype,
       buffer: videoFile.buffer,
+      tempPath: videoFile.path,
     });
     deliveryVideoFilename = videoFile.originalname;
     deliveryVideoStorageKey = saved.storageKey;
@@ -1991,6 +2085,13 @@ export async function rejectQcCase(
       body: `${QC_ERROR_CODE_LABELS[input.errorCode]}: ${requiredChanges}`.slice(0, 240),
       link: `/app/cases/${caseDoc.caseId}`,
       caseId: caseDoc.caseId,
+    });
+    await emailUsers([String(caseDoc.assignedDesignerId)], {
+      subject: `QC returned case ${caseDoc.caseId}`,
+      headline: 'QC rejected / returned case',
+      message: `QC returned ${caseDoc.caseId}: ${QC_ERROR_CODE_LABELS[input.errorCode]}. ${requiredChanges}`,
+      caseId: caseDoc.caseId,
+      patientName: caseDoc.patientName,
     });
   }
 
@@ -2476,6 +2577,34 @@ export async function assignCase(
     userAgent: audit?.userAgent,
   });
 
+  if (input.mode === 'designer' && caseDoc.assignedDesignerId) {
+    const designerId = String(caseDoc.assignedDesignerId);
+    await createNotification({
+      userId: designerId,
+      type: NOTIFICATION_TYPES.CASE_ASSIGNED,
+      title: `Case assigned: ${caseDoc.caseId}`,
+      body: `${actorName(actor)} assigned ${caseDoc.patientName} to you.`,
+      link: `/app/cases/${caseDoc.caseId}`,
+      caseId: caseDoc.caseId,
+    });
+    await emailUsers([designerId], {
+      subject: `Case assigned: ${caseDoc.caseId}`,
+      headline: 'Case assigned to you',
+      message: `${actorName(actor)} assigned case ${caseDoc.caseId} (${caseDoc.patientName}) to you.`,
+      caseId: caseDoc.caseId,
+      patientName: caseDoc.patientName,
+    });
+  } else if (input.mode === 'auto_queue') {
+    const designerIds = await findUserIdsByRoles([ROLES.DESIGNER]);
+    await createNotificationsForUsers(designerIds, {
+      type: NOTIFICATION_TYPES.CASE_ASSIGNED,
+      title: `Case in pick queue: ${caseDoc.caseId}`,
+      body: `${caseDoc.patientName} is available in the auto case-pick queue.`,
+      link: `/app/cases/${caseDoc.caseId}`,
+      caseId: caseDoc.caseId,
+    });
+  }
+
   return await toDetail(caseDoc);
 }
 
@@ -2921,6 +3050,13 @@ export async function recordDoctorCaseView(
       link: `/app/cases/${caseDoc.caseId}`,
       caseId: caseDoc.caseId,
     });
+    await emailUsers(teamIds, {
+      subject: `Doctor viewed case ${caseDoc.caseId}`,
+      headline: 'Doctor viewed delivery',
+      message: `${caseDoc.doctorName} opened case ${caseDoc.caseId} without selecting an option yet.`,
+      caseId: caseDoc.caseId,
+      patientName: caseDoc.patientName,
+    });
   }
 
   return await toDetail(caseDoc);
@@ -3006,6 +3142,15 @@ export async function submitDoctorDecision(
     body: (note || `Doctor selected ${DOCTOR_DECISION_LABELS[input.decision]}`).slice(0, 240),
     link: `/app/cases/${caseDoc.caseId}`,
     caseId: caseDoc.caseId,
+  });
+  await emailUsers(teamIds, {
+    subject: `${caseDoc.caseId}: ${DOCTOR_DECISION_LABELS[input.decision]}`,
+    headline: 'Doctor decision recorded',
+    message:
+      note ||
+      `${caseDoc.doctorName} selected ${DOCTOR_DECISION_LABELS[input.decision]} on case ${caseDoc.caseId}.`,
+    caseId: caseDoc.caseId,
+    patientName: caseDoc.patientName,
   });
 
   return await toDetail(caseDoc);

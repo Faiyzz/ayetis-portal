@@ -166,6 +166,12 @@ function buildNavItems(dashboardPath: string): NavItem[] {
       isActive: (pathname) => pathname.startsWith('/app/complaints'),
     },
     {
+      id: 'notifications',
+      label: 'Notifications',
+      to: '/app/notifications',
+      isActive: (pathname) => pathname.startsWith('/app/notifications'),
+    },
+    {
       id: 'activity',
       label: 'Activity log',
       to: '/app/activity',

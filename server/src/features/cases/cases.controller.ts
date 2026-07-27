@@ -280,6 +280,7 @@ export async function uploadFiles(req: AuthenticatedRequest, res: Response, next
         mimetype: file.mimetype,
         size: file.size,
         buffer: file.buffer,
+        path: file.path,
       })),
       {
         category: typeof req.body.category === 'string' ? req.body.category : undefined,
@@ -304,7 +305,16 @@ export async function downloadFile(req: AuthenticatedRequest, res: Response, nex
       req.params.caseId,
       req.params.fileId,
     );
-    res.download(file.absolutePath, file.originalName);
+    const { openStoredReadStream } = await import('../../services/storage.service');
+    const { stream, contentLength } = await openStoredReadStream(file.storageKey);
+    res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(file.originalName)}"`,
+    );
+    if (contentLength != null) res.setHeader('Content-Length', String(contentLength));
+    stream.on('error', (error) => next(error));
+    stream.pipe(res);
   } catch (error) {
     next(error);
   }
@@ -317,6 +327,7 @@ export async function downloadAllFiles(
 ) {
   try {
     const { ZipArchive } = await import('archiver');
+    const { openStoredReadStream } = await import('../../services/storage.service');
     const pack = await casesService.getCaseFilesForZipDownload(
       await actor(req),
       req.params.caseId,
@@ -334,7 +345,8 @@ export async function downloadAllFiles(
     archive.pipe(res);
 
     for (const entry of pack.entries) {
-      archive.file(entry.absolutePath, { name: entry.name });
+      const { stream } = await openStoredReadStream(entry.storageKey);
+      archive.append(stream, { name: entry.name });
     }
 
     await archive.finalize();
@@ -508,7 +520,16 @@ export async function downloadDeliveryVideo(
       await actor(req),
       req.params.caseId,
     );
-    res.download(file.absolutePath, file.originalName);
+    const { openStoredReadStream } = await import('../../services/storage.service');
+    const { stream, contentLength } = await openStoredReadStream(file.storageKey);
+    res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(file.originalName)}"`,
+    );
+    if (contentLength != null) res.setHeader('Content-Length', String(contentLength));
+    stream.on('error', (error) => next(error));
+    stream.pipe(res);
   } catch (error) {
     next(error);
   }

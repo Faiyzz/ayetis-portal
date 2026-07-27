@@ -5,7 +5,7 @@ import {
   type CaseFileDto,
   type FileCategory,
 } from '@ayetis/shared';
-import { useRef, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import { downloadAllCaseFiles, downloadCaseFile, uploadCaseFiles } from '@/features/cases/api';
 import { toast } from '@/features/notifications/toastStore';
@@ -15,6 +15,20 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function groupByOriginalName(files: CaseFileDto[]) {
+  const map = new Map<string, CaseFileDto[]>();
+  for (const file of files) {
+    const key = file.originalName || file.filename;
+    const list = map.get(key) ?? [];
+    list.push(file);
+    map.set(key, list);
+  }
+  return [...map.entries()].map(([name, versions]) => ({
+    name,
+    versions: [...versions].sort((a, b) => b.version - a.version),
+  }));
 }
 
 export function CaseFilesPanel({
@@ -35,6 +49,9 @@ export function CaseFilesPanel({
   const [uploading, setUploading] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
+  const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({});
+
+  const groups = useMemo(() => groupByOriginalName(files), [files]);
 
   function onPick(fileList: FileList | null) {
     if (!fileList) return;
@@ -96,7 +113,8 @@ export function CaseFilesPanel({
         <div>
           <h2 className="text-sm font-semibold text-ink">Patient files</h2>
           <p className="mt-1 text-sm text-muted">
-            STL files, scans, photos, and x-rays for production.
+            STL, OBJ, images, PDF, video, and related case files. Re-uploading the same name creates a
+            new version.
           </p>
         </div>
         {files.length > 0 ? (
@@ -117,7 +135,7 @@ export function CaseFilesPanel({
             ref={inputRef}
             type="file"
             multiple
-            accept=".stl,.dcm,.dicom,image/*,.pdf,.zip,.ply,.obj"
+            accept=".stl,.obj,.ply,.dcm,.dicom,image/*,.pdf,.zip,video/*,.mp4,.mov,.webm,.html,.htm"
             onChange={(e) => onPick(e.target.files)}
             className="block w-full text-sm text-ink file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
           />
@@ -171,33 +189,76 @@ export function CaseFilesPanel({
         </form>
       ) : null}
 
-      {files.length === 0 ? (
+      {groups.length === 0 ? (
         <p className="text-sm text-muted">No files attached yet.</p>
       ) : (
-        <ul className="space-y-2 text-sm">
-          {files.map((file) => (
-            <li
-              key={file.id}
-              className="flex flex-col gap-2 rounded-lg border border-line px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <p className="font-medium text-ink">{file.originalName || file.filename}</p>
-                <p className="text-xs text-muted">
-                  {FILE_CATEGORY_LABELS[file.category] ?? file.category} ·{' '}
-                  {formatBytes(file.sizeBytes)} · v{file.version} · {file.uploadedByName}
-                </p>
-                {file.note ? <p className="mt-0.5 text-xs text-muted">{file.note}</p> : null}
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleDownload(file)}
-                disabled={downloadingId === file.id}
-                className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300 disabled:opacity-60"
-              >
-                {downloadingId === file.id ? 'Downloading…' : 'Download'}
-              </button>
-            </li>
-          ))}
+        <ul className="space-y-3 text-sm">
+          {groups.map((group) => {
+            const latest = group.versions[0];
+            const hasHistory = group.versions.length > 1;
+            const open = expandedHistory[group.name] ?? false;
+            return (
+              <li key={group.name} className="rounded-lg border border-line px-3 py-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-medium text-ink">{group.name}</p>
+                    <p className="text-xs text-muted">
+                      {FILE_CATEGORY_LABELS[latest.category] ?? latest.category} ·{' '}
+                      {formatBytes(latest.sizeBytes)} · v{latest.version} (latest) ·{' '}
+                      {latest.uploadedByName} · {new Date(latest.createdAt).toLocaleString()}
+                    </p>
+                    {latest.note ? <p className="mt-0.5 text-xs text-muted">{latest.note}</p> : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {hasHistory ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedHistory((s) => ({ ...s, [group.name]: !open }))
+                        }
+                        className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-brand-300"
+                      >
+                        {open ? 'Hide history' : `Version history (${group.versions.length})`}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => void handleDownload(latest)}
+                      disabled={downloadingId === latest.id}
+                      className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300 disabled:opacity-60"
+                    >
+                      {downloadingId === latest.id ? 'Downloading…' : 'Download'}
+                    </button>
+                  </div>
+                </div>
+
+                {hasHistory && open ? (
+                  <ul className="mt-3 space-y-2 border-t border-line pt-3">
+                    {group.versions.map((file) => (
+                      <li
+                        key={file.id}
+                        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <p className="text-xs text-muted">
+                          v{file.version} · {formatBytes(file.sizeBytes)} · {file.uploadedByName} ·{' '}
+                          {new Date(file.createdAt).toLocaleString()}
+                          {file.note ? ` · ${file.note}` : ''}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => void handleDownload(file)}
+                          disabled={downloadingId === file.id}
+                          className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300 disabled:opacity-60"
+                        >
+                          {downloadingId === file.id ? 'Downloading…' : 'Download v' + file.version}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

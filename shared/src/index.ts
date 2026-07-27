@@ -14,3 +14,4 @@ export * from './supervisor';
 export * from './departments';
 export * from './complaints';
 export * from './deletions';
+export * from './reports';

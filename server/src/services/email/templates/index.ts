@@ -222,3 +222,48 @@ export function caseDeliveredTemplate(input: {
     }),
   };
 }
+
+/** Generic case-event email used for submitted / assigned / QC / doctor events. */
+export function caseEventTemplate(input: {
+  recipientName: string;
+  subject: string;
+  headline: string;
+  message: string;
+  caseId: string;
+  patientName?: string;
+  portalUrl: string;
+  ctaLabel?: string;
+}): RenderedEmail {
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">Hello ${escapeHtml(input.recipientName)},</p>
+    <p style="margin:0 0 12px;">${escapeHtml(input.message)}</p>
+    ${detailsTable([
+      ['Case ID', input.caseId],
+      ...(input.patientName ? [['Patient', input.patientName] as [string, string]] : []),
+    ])}
+  `;
+
+  const text = [
+    `Hello ${input.recipientName},`,
+    '',
+    input.message,
+    `Case ID: ${input.caseId}`,
+    input.patientName ? `Patient: ${input.patientName}` : '',
+    '',
+    `Open portal: ${input.portalUrl}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return {
+    subject: input.subject,
+    text,
+    html: renderEmailLayout({
+      preheader: input.subject,
+      title: input.headline,
+      bodyHtml,
+      cta: { label: input.ctaLabel || 'Open case', url: input.portalUrl },
+      footerNote: 'Ayetis portal notification — open the portal for full case context.',
+    }),
+  };
+}
