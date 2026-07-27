@@ -1,5 +1,6 @@
 import { PERMISSIONS } from '@ayetis/shared';
 import { Router } from 'express';
+import multer from 'multer';
 import {
   authenticate,
   requireAnyPermission,
@@ -12,10 +13,20 @@ import {
   createCaseSchema,
   listCasesQuerySchema,
   reasonSchema,
+  setPrioritySchema,
   updateCaseSchema,
+  uploadFilesMetaSchema,
 } from './cases.schemas';
 
 const router = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100 MB
+    files: 20,
+  },
+});
 
 router.use(authenticate);
 
@@ -55,6 +66,13 @@ router.patch(
 );
 
 router.post(
+  '/:caseId/priority',
+  requirePermission(PERMISSIONS.CASE_SET_PRIORITY),
+  validate(setPrioritySchema),
+  casesController.setPriority,
+);
+
+router.post(
   '/:caseId/cancel',
   requireAnyPermission(PERMISSIONS.CASE_UPDATE, PERMISSIONS.CASE_DELETE),
   validate(reasonSchema),
@@ -77,6 +95,27 @@ router.post(
   ),
   validate(addNoteSchema),
   casesController.addNote,
+);
+
+router.post(
+  '/:caseId/files',
+  requireAnyPermission(
+    PERMISSIONS.CASE_CREATE,
+    PERMISSIONS.CASE_UPDATE,
+  ),
+  upload.array('files', 20),
+  validate(uploadFilesMetaSchema),
+  casesController.uploadFiles,
+);
+
+router.get(
+  '/:caseId/files/:fileId',
+  requireAnyPermission(
+    PERMISSIONS.CASE_VIEW_OWN,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+  ),
+  casesController.downloadFile,
 );
 
 export default router;

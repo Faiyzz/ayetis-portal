@@ -30,6 +30,64 @@ export const CASE_STATUS_LABELS: Record<CaseStatus, string> = {
   [CASE_STATUSES.CANCELLED]: 'Cancelled',
 };
 
+/** Primary happy-path stages shown on the visual timeline. */
+export const CASE_TIMELINE_STATUSES: CaseStatus[] = [
+  CASE_STATUSES.SUBMITTED,
+  CASE_STATUSES.UNDER_VALIDATION,
+  CASE_STATUSES.DESIGNER_WORKING,
+  CASE_STATUSES.QC_REVIEW,
+  CASE_STATUSES.APPROVED,
+  CASE_STATUSES.DELIVERED,
+  CASE_STATUSES.COMPLETED,
+];
+
+/** Maps non-linear statuses onto the nearest timeline stage for visualization. */
+export const CASE_STATUS_TIMELINE_ANCHOR: Record<CaseStatus, CaseStatus> = {
+  [CASE_STATUSES.SUBMITTED]: CASE_STATUSES.SUBMITTED,
+  [CASE_STATUSES.UNDER_VALIDATION]: CASE_STATUSES.UNDER_VALIDATION,
+  [CASE_STATUSES.WAITING_CLARIFICATION]: CASE_STATUSES.UNDER_VALIDATION,
+  [CASE_STATUSES.SENT_FOR_MODIFICATION]: CASE_STATUSES.DESIGNER_WORKING,
+  [CASE_STATUSES.DESIGNER_WORKING]: CASE_STATUSES.DESIGNER_WORKING,
+  [CASE_STATUSES.QC_REVIEW]: CASE_STATUSES.QC_REVIEW,
+  [CASE_STATUSES.ORTHODONTIST_REVIEW]: CASE_STATUSES.QC_REVIEW,
+  [CASE_STATUSES.APPROVED]: CASE_STATUSES.APPROVED,
+  [CASE_STATUSES.DELIVERED]: CASE_STATUSES.DELIVERED,
+  [CASE_STATUSES.COMPLETED]: CASE_STATUSES.COMPLETED,
+  [CASE_STATUSES.CANCELLED]: CASE_STATUSES.CANCELLED,
+};
+
+export type TimelineStepState = 'complete' | 'current' | 'upcoming' | 'cancelled';
+
+export interface TimelineStep {
+  status: CaseStatus;
+  label: string;
+  state: TimelineStepState;
+}
+
+export function buildCaseTimeline(currentStatus: CaseStatus): TimelineStep[] {
+  if (currentStatus === CASE_STATUSES.CANCELLED) {
+    return CASE_TIMELINE_STATUSES.map((status, index) => ({
+      status,
+      label: CASE_STATUS_LABELS[status],
+      state: index === 0 ? 'complete' : 'cancelled',
+    }));
+  }
+
+  const anchor = CASE_STATUS_TIMELINE_ANCHOR[currentStatus];
+  const currentIndex = CASE_TIMELINE_STATUSES.indexOf(anchor);
+
+  return CASE_TIMELINE_STATUSES.map((status, index) => {
+    let state: TimelineStepState = 'upcoming';
+    if (index < currentIndex) state = 'complete';
+    if (index === currentIndex) state = 'current';
+    return {
+      status,
+      label: CASE_STATUS_LABELS[status],
+      state,
+    };
+  });
+}
+
 export const CASE_PRIORITIES = {
   NORMAL: 'normal',
   URGENT: 'urgent',
@@ -44,12 +102,49 @@ export const CASE_PRIORITY_LABELS: Record<CasePriority, string> = {
   [CASE_PRIORITIES.URGENT]: 'Urgent',
 };
 
+export const FILE_CATEGORIES = {
+  STL: 'stl',
+  SCAN: 'scan',
+  PHOTO: 'photo',
+  XRAY: 'xray',
+  OTHER: 'other',
+} as const;
+
+export type FileCategory = (typeof FILE_CATEGORIES)[keyof typeof FILE_CATEGORIES];
+
+export const ALL_FILE_CATEGORIES: FileCategory[] = Object.values(FILE_CATEGORIES);
+
+export const FILE_CATEGORY_LABELS: Record<FileCategory, string> = {
+  [FILE_CATEGORIES.STL]: 'STL',
+  [FILE_CATEGORIES.SCAN]: 'Scan',
+  [FILE_CATEGORIES.PHOTO]: 'Photo',
+  [FILE_CATEGORIES.XRAY]: 'X-ray',
+  [FILE_CATEGORIES.OTHER]: 'Other',
+};
+
+export const CASE_FIELD_LABELS: Record<string, string> = {
+  patientName: 'Patient name',
+  patientAge: 'Patient age',
+  patientGender: 'Gender',
+  clinicName: 'Clinic',
+  country: 'Country',
+  treatmentSummary: 'Treatment summary',
+  instructions: 'Instructions',
+  priority: 'Priority',
+  status: 'Status',
+};
+
 export interface CaseFileDto {
   id: string;
   filename: string;
+  originalName: string;
   mimeType: string;
   sizeBytes: number;
+  category: FileCategory;
+  storageKey: string;
+  uploadedById: string | null;
   uploadedByName: string;
+  version: number;
   createdAt: string;
   note?: string;
 }
@@ -62,6 +157,13 @@ export interface CaseNoteDto {
   createdAt: string;
 }
 
+export interface CaseHistoryChange {
+  field: string;
+  label: string;
+  from: unknown;
+  to: unknown;
+}
+
 export interface CaseHistoryDto {
   id: string;
   action: string;
@@ -70,6 +172,7 @@ export interface CaseHistoryDto {
   actorName: string | null;
   createdAt: string;
   metadata?: Record<string, unknown>;
+  changes?: CaseHistoryChange[];
 }
 
 export interface CaseListItemDto {
@@ -102,6 +205,7 @@ export interface CaseDetailDto extends CaseListItemDto {
   notes: CaseNoteDto[];
   files: CaseFileDto[];
   history: CaseHistoryDto[];
+  timeline: TimelineStep[];
 }
 
 export interface CaseListResult {
@@ -147,10 +251,29 @@ export interface AddCaseNoteInput {
   body: string;
 }
 
+export interface SetCasePriorityInput {
+  priority: CasePriority;
+}
+
 export function isCaseStatus(value: string): value is CaseStatus {
   return (ALL_CASE_STATUSES as string[]).includes(value);
 }
 
 export function isCasePriority(value: string): value is CasePriority {
   return (ALL_CASE_PRIORITIES as string[]).includes(value);
+}
+
+export function isFileCategory(value: string): value is FileCategory {
+  return (ALL_FILE_CATEGORIES as string[]).includes(value);
+}
+
+export function formatHistoryValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (field === 'status' && typeof value === 'string' && isCaseStatus(value)) {
+    return CASE_STATUS_LABELS[value];
+  }
+  if (field === 'priority' && typeof value === 'string' && isCasePriority(value)) {
+    return CASE_PRIORITY_LABELS[value];
+  }
+  return String(value);
 }

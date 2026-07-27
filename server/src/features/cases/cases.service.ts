@@ -1,16 +1,25 @@
 import {
   AUDIT_ACTIONS,
+  CASE_FIELD_LABELS,
   CASE_PRIORITIES,
+  CASE_PRIORITY_LABELS,
   CASE_STATUSES,
   CASE_STATUS_LABELS,
+  FILE_CATEGORIES,
   PERMISSIONS,
+  buildCaseTimeline,
+  formatHistoryValue,
+  isFileCategory,
   permissionsInclude,
   type CaseDetailDto,
+  type CaseHistoryChange,
+  type CaseHistoryDto,
   type CaseListItemDto,
   type CaseListResult,
   type CasePriority,
   type CaseStatus,
   type CreateCaseInput,
+  type FileCategory,
   type Permission,
   type UpdateCaseInput,
 } from '@ayetis/shared';
@@ -24,6 +33,7 @@ import {
   type RequestAuditContext,
 } from '../audit/audit.service';
 import { resolvePermissionsForUserId } from '../users/users.service';
+import { resolveStoragePath, saveCaseFile } from '../../services/storage.service';
 
 export interface CaseActor {
   id: string;
@@ -76,6 +86,37 @@ function toListItem(caseDoc: ICase): CaseListItemDto {
   };
 }
 
+function mapHistory(caseDoc: ICase): CaseHistoryDto[] {
+  return caseDoc.history.map((entry) => {
+    const metadata = entry.metadata ?? {};
+    const rawChanges = metadata.changes;
+    let changes: CaseHistoryChange[] | undefined;
+
+    if (Array.isArray(rawChanges)) {
+      changes = rawChanges as CaseHistoryChange[];
+    } else if (rawChanges && typeof rawChanges === 'object') {
+      // Legacy shape: { field: newValue }
+      changes = Object.entries(rawChanges as Record<string, unknown>).map(([field, to]) => ({
+        field,
+        label: CASE_FIELD_LABELS[field] ?? field,
+        from: null,
+        to,
+      }));
+    }
+
+    return {
+      id: String(entry._id),
+      action: entry.action,
+      summary: entry.summary,
+      actorId: entry.actorId ? String(entry.actorId) : null,
+      actorName: entry.actorName ?? null,
+      createdAt: entry.createdAt.toISOString(),
+      metadata,
+      changes,
+    };
+  });
+}
+
 function toDetail(caseDoc: ICase): CaseDetailDto {
   return {
     ...toListItem(caseDoc),
@@ -101,21 +142,19 @@ function toDetail(caseDoc: ICase): CaseDetailDto {
     files: caseDoc.files.map((file) => ({
       id: String(file._id),
       filename: file.filename,
+      originalName: file.originalName || file.filename,
       mimeType: file.mimeType,
       sizeBytes: file.sizeBytes,
+      category: file.category || FILE_CATEGORIES.OTHER,
+      storageKey: file.storageKey || '',
+      uploadedById: file.uploadedById ? String(file.uploadedById) : null,
       uploadedByName: file.uploadedByName,
-      note: file.note,
+      version: file.version || 1,
       createdAt: file.createdAt.toISOString(),
+      note: file.note,
     })),
-    history: caseDoc.history.map((entry) => ({
-      id: String(entry._id),
-      action: entry.action,
-      summary: entry.summary,
-      actorId: entry.actorId ? String(entry.actorId) : null,
-      actorName: entry.actorName ?? null,
-      createdAt: entry.createdAt.toISOString(),
-      metadata: entry.metadata,
-    })),
+    history: mapHistory(caseDoc),
+    timeline: buildCaseTimeline(caseDoc.status),
   };
 }
 
@@ -140,6 +179,21 @@ function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
   throw new AppError('You do not have permission to view this case', 403);
 }
 
+function assertCanUploadFiles(actor: CaseActor, caseDoc: ICase) {
+  assertCanViewCase(actor, caseDoc);
+
+  if (permissionsInclude(actor.permissions, PERMISSIONS.CASE_UPDATE)) return;
+
+  if (
+    permissionsInclude(actor.permissions, PERMISSIONS.CASE_CREATE) &&
+    String(caseDoc.doctorId) === actor.id
+  ) {
+    return;
+  }
+
+  throw new AppError('You do not have permission to upload files to this case', 403);
+}
+
 function buildVisibilityFilter(actor: CaseActor): Record<string, unknown> {
   if (permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ALL)) {
     return {};
@@ -160,6 +214,44 @@ function buildVisibilityFilter(actor: CaseActor): Record<string, unknown> {
   }
 
   return clauses.length === 1 ? clauses[0]! : { $or: clauses };
+}
+
+function normalizeFieldValue(key: string, value: unknown): unknown {
+  if (typeof value === 'string') return value.trim();
+  return value;
+}
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return String(a) === String(b);
+}
+
+function detectCategory(originalName: string, mimeType: string, explicit?: string): FileCategory {
+  if (explicit && isFileCategory(explicit)) return explicit;
+
+  const lower = originalName.toLowerCase();
+  if (lower.endsWith('.stl') || mimeType.includes('sla') || mimeType.includes('stl')) {
+    return FILE_CATEGORIES.STL;
+  }
+  if (
+    lower.endsWith('.dcm') ||
+    lower.endsWith('.dicom') ||
+    lower.includes('scan') ||
+    mimeType.includes('dicom')
+  ) {
+    return FILE_CATEGORIES.SCAN;
+  }
+  if (
+    mimeType.startsWith('image/') ||
+    /\.(jpe?g|png|gif|webp|heic)$/i.test(lower)
+  ) {
+    if (/x[-_]?ray|radiograph|opg|cbct/i.test(lower)) return FILE_CATEGORIES.XRAY;
+    return FILE_CATEGORIES.PHOTO;
+  }
+  if (/x[-_]?ray|radiograph|opg|cbct/i.test(lower)) return FILE_CATEGORIES.XRAY;
+  return FILE_CATEGORIES.OTHER;
 }
 
 export async function listCases(
@@ -257,6 +349,14 @@ export async function createCase(
     throw new AppError('Doctor account not found', 404);
   }
 
+  let priority = input.priority ?? CASE_PRIORITIES.NORMAL;
+  if (
+    priority === CASE_PRIORITIES.URGENT &&
+    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_SET_PRIORITY)
+  ) {
+    priority = CASE_PRIORITIES.NORMAL;
+  }
+
   const caseId = await generateCaseId();
   const caseDoc = new Case({
     caseId,
@@ -271,7 +371,7 @@ export async function createCase(
     treatmentSummary: input.treatmentSummary.trim(),
     instructions: input.instructions?.trim() ?? '',
     status: CASE_STATUSES.SUBMITTED,
-    priority: input.priority ?? CASE_PRIORITIES.NORMAL,
+    priority,
     notes: [],
     files: [],
     history: [],
@@ -281,6 +381,16 @@ export async function createCase(
     action: 'created',
     summary: `Case ${caseId} submitted`,
     actor,
+    metadata: {
+      changes: [
+        {
+          field: 'status',
+          label: CASE_FIELD_LABELS.status,
+          from: null,
+          to: CASE_STATUSES.SUBMITTED,
+        },
+      ] satisfies CaseHistoryChange[],
+    },
   });
 
   if (input.initialNote?.trim()) {
@@ -335,8 +445,15 @@ export async function updateCase(
     throw new AppError('Cannot edit a deleted case', 400);
   }
 
-  const changes: Record<string, unknown> = {};
+  if (
+    input.priority !== undefined &&
+    input.priority !== caseDoc.priority &&
+    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_SET_PRIORITY)
+  ) {
+    throw new AppError('You do not have permission to change case priority', 403);
+  }
 
+  const changes: CaseHistoryChange[] = [];
   const assignable: Array<keyof UpdateCaseInput> = [
     'patientName',
     'patientAge',
@@ -350,33 +467,60 @@ export async function updateCase(
   ];
 
   for (const key of assignable) {
-    if (input[key] !== undefined) {
-      const value = input[key];
-      (caseDoc as unknown as Record<string, unknown>)[key] =
-        typeof value === 'string' ? value.trim() : value;
-      changes[key] = value;
-    }
+    if (input[key] === undefined) continue;
+
+    const previous = (caseDoc as unknown as Record<string, unknown>)[key];
+    const next = normalizeFieldValue(key, input[key]);
+
+    if (valuesEqual(previous ?? null, next ?? null)) continue;
+
+    (caseDoc as unknown as Record<string, unknown>)[key] = next === null ? undefined : next;
+
+    changes.push({
+      field: key,
+      label: CASE_FIELD_LABELS[key] ?? key,
+      from: previous ?? null,
+      to: next ?? null,
+    });
   }
 
-  if (Object.keys(changes).length === 0) {
+  if (changes.length === 0) {
     throw new AppError('No changes provided', 400);
   }
 
-  if (
-    changes.priority !== undefined &&
-    changes.priority === CASE_PRIORITIES.URGENT &&
-    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_SET_PRIORITY) &&
-    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_UPDATE)
-  ) {
-    // Coordinators already have CASE_SET_PRIORITY; keep check for clarity.
+  const statusChange = changes.find((c) => c.field === 'status');
+  const priorityChange = changes.find((c) => c.field === 'priority');
+
+  if (statusChange) {
+    pushHistory(caseDoc, {
+      action: 'status_changed',
+      summary: `Status changed to ${formatHistoryValue('status', statusChange.to)}`,
+      actor,
+      metadata: { changes: [statusChange] },
+    });
   }
 
-  pushHistory(caseDoc, {
-    action: 'updated',
-    summary: `Case details updated`,
-    actor,
-    metadata: { changes },
-  });
+  if (priorityChange) {
+    pushHistory(caseDoc, {
+      action: 'priority_changed',
+      summary: `Priority set to ${formatHistoryValue('priority', priorityChange.to)}`,
+      actor,
+      metadata: { changes: [priorityChange] },
+    });
+  }
+
+  const otherChanges = changes.filter((c) => c.field !== 'status' && c.field !== 'priority');
+  if (otherChanges.length > 0) {
+    pushHistory(caseDoc, {
+      action: 'updated',
+      summary:
+        otherChanges.length === 1
+          ? `Updated ${otherChanges[0]!.label}`
+          : `Updated ${otherChanges.length} fields`,
+      actor,
+      metadata: { changes: otherChanges },
+    });
+  }
 
   await caseDoc.save();
 
@@ -390,6 +534,66 @@ export async function updateCase(
     targetType: 'case',
     targetId: caseDoc.caseId,
     metadata: { changes },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return toDetail(caseDoc);
+}
+
+export async function setCasePriority(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  priority: CasePriority,
+  audit?: RequestAuditContext,
+) {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_SET_PRIORITY)) {
+    throw new AppError('You do not have permission to set case priority', 403);
+  }
+
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (caseDoc.isDeleted) {
+    throw new AppError('Cannot change priority on a deleted case', 400);
+  }
+
+  if (caseDoc.priority === priority) {
+    return toDetail(caseDoc);
+  }
+
+  const from = caseDoc.priority;
+  caseDoc.priority = priority;
+
+  const change: CaseHistoryChange = {
+    field: 'priority',
+    label: CASE_FIELD_LABELS.priority,
+    from,
+    to: priority,
+  };
+
+  pushHistory(caseDoc, {
+    action: 'priority_changed',
+    summary:
+      priority === CASE_PRIORITIES.URGENT
+        ? 'Marked as Urgent Priority'
+        : `Priority set to ${CASE_PRIORITY_LABELS[priority]}`,
+    actor,
+    metadata: { changes: [change] },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_PRIORITY_SET,
+    summary: `${actor.email} set priority of case ${caseDoc.caseId} to ${priority}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    metadata: { from, to: priority },
     ipAddress: audit?.ipAddress,
     userAgent: audit?.userAgent,
   });
@@ -422,6 +626,7 @@ export async function cancelCase(
     throw new AppError('Case is already cancelled', 400);
   }
 
+  const from = caseDoc.status;
   caseDoc.status = CASE_STATUSES.CANCELLED;
   caseDoc.cancelReason = reason.trim();
 
@@ -429,6 +634,17 @@ export async function cancelCase(
     action: 'cancelled',
     summary: `Case cancelled: ${reason.trim()}`,
     actor,
+    metadata: {
+      changes: [
+        {
+          field: 'status',
+          label: CASE_FIELD_LABELS.status,
+          from,
+          to: CASE_STATUSES.CANCELLED,
+        },
+      ] satisfies CaseHistoryChange[],
+      reason: reason.trim(),
+    },
   });
 
   await caseDoc.save();
@@ -481,6 +697,7 @@ export async function softDeleteCase(
     action: 'deleted',
     summary: `Case soft-deleted: ${reason.trim()}`,
     actor,
+    metadata: { reason: reason.trim() },
   });
 
   await caseDoc.save();
@@ -550,6 +767,120 @@ export async function addCaseNote(
   });
 
   return toDetail(caseDoc);
+}
+
+export async function uploadCaseFiles(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  files: Array<{
+    originalname: string;
+    mimetype: string;
+    size: number;
+    buffer: Buffer;
+  }>,
+  options: { category?: string; note?: string } = {},
+  audit?: RequestAuditContext,
+) {
+  if (!files.length) {
+    throw new AppError('At least one file is required', 400);
+  }
+
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanUploadFiles(actor, caseDoc);
+
+  if (caseDoc.isDeleted) {
+    throw new AppError('Cannot upload files to a deleted case', 400);
+  }
+
+  const uploadedNames: string[] = [];
+
+  for (const file of files) {
+    const category = detectCategory(file.originalname, file.mimetype, options.category);
+    const { storageKey } = await saveCaseFile({
+      caseId: caseDoc.caseId,
+      originalName: file.originalname,
+      buffer: file.buffer,
+    });
+
+    const sameNameCount = caseDoc.files.filter(
+      (existing) => existing.originalName === file.originalname,
+    ).length;
+
+    caseDoc.files.unshift({
+      _id: new Types.ObjectId(),
+      filename: file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'),
+      originalName: file.originalname,
+      mimeType: file.mimetype || 'application/octet-stream',
+      sizeBytes: file.size,
+      category,
+      storageKey,
+      uploadedById: new Types.ObjectId(actor.id),
+      uploadedByName: actorName(actor),
+      version: sameNameCount + 1,
+      note: options.note?.trim() || undefined,
+      createdAt: new Date(),
+    } as ICase['files'][number]);
+
+    uploadedNames.push(file.originalname);
+  }
+
+  pushHistory(caseDoc, {
+    action: 'file_uploaded',
+    summary:
+      uploadedNames.length === 1
+        ? `Uploaded file: ${uploadedNames[0]}`
+        : `Uploaded ${uploadedNames.length} files`,
+    actor,
+    metadata: {
+      files: uploadedNames,
+      category: options.category,
+    },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_FILE_UPLOAD,
+    summary: `${actor.email} uploaded ${uploadedNames.length} file(s) to case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    metadata: { files: uploadedNames },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return toDetail(caseDoc);
+}
+
+export async function getCaseFileForDownload(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  fileId: string,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (
+    caseDoc.isDeleted &&
+    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_DELETE)
+  ) {
+    throw new AppError('Case not found', 404);
+  }
+
+  const file = caseDoc.files.find((item) => String(item._id) === fileId);
+  if (!file || !file.storageKey) {
+    throw new AppError('File not found', 404);
+  }
+
+  return {
+    absolutePath: resolveStoragePath(file.storageKey),
+    originalName: file.originalName || file.filename,
+    mimeType: file.mimeType,
+  };
 }
 
 export async function resolveCaseActor(userId: string): Promise<CaseActor> {

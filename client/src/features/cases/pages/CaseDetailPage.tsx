@@ -1,4 +1,5 @@
 import {
+  CASE_PRIORITIES,
   CASE_PRIORITY_LABELS,
   CASE_STATUS_LABELS,
   PERMISSIONS,
@@ -11,21 +12,30 @@ import { usePermissions } from '@/features/auth/permissions';
 import {
   addCaseNote,
   cancelCase,
+  clearCaseUrgent,
   fetchCase,
+  markCaseUrgent,
   softDeleteCase,
 } from '@/features/cases/api';
+import { CaseFilesPanel } from '@/features/cases/components/CaseFilesPanel';
+import { CaseHistoryPanel } from '@/features/cases/components/CaseHistoryPanel';
+import { CaseStatusTimeline } from '@/features/cases/components/CaseStatusTimeline';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
 export function CaseDetailPage() {
   const { caseId = '' } = useParams();
   const navigate = useNavigate();
-  const { can } = usePermissions();
+  const { can, canAny } = usePermissions();
   const [caseData, setCaseData] = useState<CaseDetailDto | null>(null);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [savingNote, setSavingNote] = useState(false);
+  const [priorityBusy, setPriorityBusy] = useState(false);
+
+  const canUpload = canAny(PERMISSIONS.CASE_CREATE, PERMISSIONS.CASE_UPDATE);
+  const showFullAudit = canAny(PERMISSIONS.AUDIT_VIEW, PERMISSIONS.CASE_VIEW_ALL);
 
   async function load() {
     setLoading(true);
@@ -59,6 +69,27 @@ export function CaseDetailPage() {
       toast().error(getErrorMessage(err, 'Unable to add note'));
     } finally {
       setSavingNote(false);
+    }
+  }
+
+  async function handlePriorityToggle() {
+    if (!caseData) return;
+    setPriorityBusy(true);
+    try {
+      const updated =
+        caseData.priority === CASE_PRIORITIES.URGENT
+          ? await clearCaseUrgent(caseData.caseId)
+          : await markCaseUrgent(caseData.caseId);
+      setCaseData(updated);
+      toast().success(
+        updated.priority === CASE_PRIORITIES.URGENT
+          ? 'Marked as Urgent Priority'
+          : 'Urgent priority cleared',
+      );
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to update priority'));
+    } finally {
+      setPriorityBusy(false);
     }
   }
 
@@ -121,6 +152,9 @@ export function CaseDetailPage() {
     );
   }
 
+  const isUrgent = caseData.priority === CASE_PRIORITIES.URGENT;
+  const isCancelled = caseData.status === 'cancelled';
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -134,7 +168,13 @@ export function CaseDetailPage() {
             <span className="rounded-md bg-brand-50 px-2 py-1 font-medium text-brand-700">
               {CASE_STATUS_LABELS[caseData.status]}
             </span>
-            <span className="rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700">
+            <span
+              className={`rounded-md px-2 py-1 font-medium ${
+                isUrgent
+                  ? 'bg-amber-50 text-amber-800'
+                  : 'bg-slate-100 text-slate-700'
+              }`}
+            >
               {CASE_PRIORITY_LABELS[caseData.priority]}
             </span>
             {caseData.isDeleted ? (
@@ -146,6 +186,24 @@ export function CaseDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {can(PERMISSIONS.CASE_SET_PRIORITY) && !caseData.isDeleted ? (
+            <button
+              type="button"
+              disabled={priorityBusy}
+              onClick={() => void handlePriorityToggle()}
+              className={`rounded-xl border px-4 py-2.5 text-sm font-semibold disabled:opacity-60 ${
+                isUrgent
+                  ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                  : 'border-amber-200 bg-white text-amber-800 hover:bg-amber-50'
+              }`}
+            >
+              {priorityBusy
+                ? 'Updating…'
+                : isUrgent
+                  ? 'Clear urgent'
+                  : 'Mark urgent'}
+            </button>
+          ) : null}
           {can(PERMISSIONS.CASE_UPDATE) && !caseData.isDeleted ? (
             <Link
               to={`/app/cases/${caseData.caseId}/edit`}
@@ -156,7 +214,7 @@ export function CaseDetailPage() {
           ) : null}
           {(can(PERMISSIONS.CASE_UPDATE) || can(PERMISSIONS.CASE_DELETE)) &&
           !caseData.isDeleted &&
-          caseData.status !== 'cancelled' ? (
+          !isCancelled ? (
             <button
               type="button"
               onClick={() => void handleCancel()}
@@ -176,6 +234,12 @@ export function CaseDetailPage() {
           ) : null}
         </div>
       </div>
+
+      <CaseStatusTimeline
+        steps={caseData.timeline}
+        currentLabel={CASE_STATUS_LABELS[caseData.status]}
+        isCancelled={isCancelled}
+      />
 
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <section className="space-y-4 rounded-xl border border-line bg-white p-5">
@@ -211,25 +275,12 @@ export function CaseDetailPage() {
           ) : null}
         </section>
 
-        <section className="space-y-4 rounded-xl border border-line bg-white p-5">
-          <h2 className="text-sm font-semibold text-ink">Files</h2>
-          {caseData.files.length === 0 ? (
-            <p className="text-sm text-muted">
-              No files attached yet. Secure file upload will connect here next.
-            </p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {caseData.files.map((file) => (
-                <li key={file.id} className="rounded-lg border border-line px-3 py-2">
-                  <p className="font-medium text-ink">{file.filename}</p>
-                  <p className="text-xs text-muted">
-                    {file.mimeType} · {(file.sizeBytes / 1024).toFixed(1)} KB · {file.uploadedByName}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <CaseFilesPanel
+          caseId={caseData.caseId}
+          files={caseData.files}
+          canUpload={canUpload && !caseData.isDeleted}
+          onUpdated={setCaseData}
+        />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -267,19 +318,7 @@ export function CaseDetailPage() {
           </ul>
         </section>
 
-        <section className="rounded-xl border border-line bg-white p-5">
-          <h2 className="text-sm font-semibold text-ink">History</h2>
-          <ul className="mt-4 space-y-3">
-            {caseData.history.map((entry) => (
-              <li key={entry.id} className="border-l-2 border-brand-200 pl-3 text-sm">
-                <p className="font-medium text-ink">{entry.summary}</p>
-                <p className="text-xs text-muted">
-                  {entry.actorName ?? 'System'} · {new Date(entry.createdAt).toLocaleString()}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <CaseHistoryPanel history={caseData.history} showFullAudit={showFullAudit} />
       </div>
     </div>
   );

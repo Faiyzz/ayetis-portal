@@ -3,6 +3,7 @@ import {
   ALL_CASE_STATUSES,
   isCasePriority,
   isCaseStatus,
+  isFileCategory,
   type CasePriority,
   type CaseStatus,
 } from '@ayetis/shared';
@@ -85,4 +86,20 @@ export const reasonSchema = z.object({
 
 export const addNoteSchema = z.object({
   body: z.string().trim().min(1, 'Note is required').max(2000),
+});
+
+export const setPrioritySchema = z.object({
+  priority: z
+    .string()
+    .refine((value) => isCasePriority(value), { message: 'Invalid priority' }),
+});
+
+export const uploadFilesMetaSchema = z.object({
+  category: z
+    .string()
+    .optional()
+    .refine((value) => !value || isFileCategory(value), {
+      message: 'Invalid file category',
+    }),
+  note: z.string().trim().max(500).optional(),
 });
