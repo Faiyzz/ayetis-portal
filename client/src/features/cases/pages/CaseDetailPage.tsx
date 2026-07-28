@@ -9,6 +9,7 @@ import {
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import {
@@ -149,12 +150,34 @@ export function CaseDetailPage() {
   }
 
   if (loading) {
-    return <p className="text-sm text-muted">Loading case…</p>;
+    return (
+      <>
+        <PageHeader
+          eyebrow={
+            <Link to="/app/cases" className="hover:text-brand-700">
+              ← Cases
+            </Link>
+          }
+          title={caseId || 'Case'}
+          subtitle="Loading case…"
+        />
+        <p className="text-sm text-muted">Loading case…</p>
+      </>
+    );
   }
 
   if (!caseData) {
     return (
       <div className="space-y-3">
+        <PageHeader
+          eyebrow={
+            <Link to="/app/cases" className="hover:text-brand-700">
+              ← Cases
+            </Link>
+          }
+          title={caseId || 'Case'}
+          subtitle="Unable to load this case"
+        />
         {error ? <Alert>{error}</Alert> : null}
         <Link to="/app/cases" className="text-sm font-semibold text-brand-600">
           Back to cases
@@ -169,14 +192,18 @@ export function CaseDetailPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <Link to="/app/cases" className="text-sm font-medium text-brand-600 hover:text-brand-700">
+      <PageHeader
+        eyebrow={
+          <Link to="/app/cases" className="hover:text-brand-700">
             ← Cases
           </Link>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink">{caseData.caseId}</h1>
-          <p className="mt-1 text-[15px] text-muted">{caseData.treatmentSummary}</p>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        }
+        title={caseData.caseId}
+        subtitle={caseData.treatmentSummary}
+      />
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-wrap gap-2 text-xs">
             <span className="rounded-md bg-brand-50 px-2 py-1 font-medium text-brand-700">
               {CASE_STATUS_LABELS[caseData.status]}
             </span>
@@ -201,7 +228,6 @@ export function CaseDetailPage() {
                 Soft-deleted
               </span>
             ) : null}
-          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">

@@ -5,6 +5,7 @@ import {
 } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { fetchDoctorDeliveries } from '@/features/cases/api';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
@@ -34,15 +35,11 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border border-line bg-white px-5 py-5 sm:px-6">
-        <p className="text-sm font-medium text-brand-600">Doctor portal</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">
-          Welcome, {firstName}
-        </h1>
-        <p className="mt-1.5 text-[15px] text-muted">
-          Review delivered cases, watch explanations, and approve or request modifications.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Doctor portal"
+        title={`Welcome, ${firstName}`}
+        subtitle="Review delivered cases, watch explanations, and approve or request modifications."
+      />
 
       <div className="flex flex-wrap gap-3">
         <Link

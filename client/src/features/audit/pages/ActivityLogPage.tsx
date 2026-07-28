@@ -3,6 +3,7 @@ import {
   type AuditAction,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
+import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { AUDIT_ACTION_OPTIONS, fetchActivityLogs } from '@/features/audit/api';
 import { toast } from '@/features/notifications/toastStore';
@@ -82,13 +83,11 @@ export function ActivityLogPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <p className="text-sm font-medium text-brand-600">Administration</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">Activity log</h1>
-        <p className="mt-1.5 text-[15px] text-muted">
-          Audit user logins and important system activity across the portal.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Administration"
+        title="Activity log"
+        subtitle="Audit user logins and important system activity across the portal."
+      />
 
       <form
         onSubmit={handleFilter}

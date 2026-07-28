@@ -1,6 +1,7 @@
 import { ROLE_LABELS, ROLES, type Permission, type PublicUser } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton } from '@/features/auth/components/AuthUI';
 import { toast } from '@/features/notifications/toastStore';
 import { PermissionEditor } from '@/features/users/components/PermissionEditor';
@@ -81,17 +82,15 @@ export function UserPermissionsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link to="/app/users" className="text-sm font-medium text-brand-600 hover:text-brand-700">
-          ← Users
-        </Link>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">
-          {user.firstName} {user.lastName}
-        </h1>
-        <p className="mt-1 text-[15px] text-muted">
-          {user.email} · {ROLE_LABELS[user.role]} · {user.permissions.length} effective permissions
-        </p>
-      </div>
+      <PageHeader
+        eyebrow={
+          <Link to="/app/users" className="hover:text-brand-700">
+            ← Users
+          </Link>
+        }
+        title={`${user.firstName} ${user.lastName}`}
+        subtitle={`${user.email} · ${ROLE_LABELS[user.role]} · ${user.permissions.length} effective permissions`}
+      />
 
       {error ? <Alert>{error}</Alert> : null}
 

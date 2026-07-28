@@ -1,6 +1,7 @@
 import { PASSWORD_POLICY_DESCRIPTION } from '@ayetis/shared';
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { changePassword } from '@/features/auth/api';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { useAuthStore } from '@/features/auth/store';
@@ -54,17 +55,17 @@ export function ChangePasswordPage() {
 
   return (
     <div className="w-full max-w-md">
-      <h1 className="text-2xl font-bold tracking-tight text-ink">
-        {forced ? 'Password update required' : 'Change password'}
-      </h1>
-      <p className="mt-1 text-sm text-muted">
-        {forced
-          ? user?.passwordExpired
-            ? 'Your password has expired. Set a new one to continue.'
-            : 'You must set a new password before using the portal.'
-          : 'Update your password regularly to keep your account secure.'}
-      </p>
-      <p className="mt-2 text-xs text-muted">{PASSWORD_POLICY_DESCRIPTION}</p>
+      <PageHeader
+        title={forced ? 'Password update required' : 'Change password'}
+        subtitle={
+          forced
+            ? user?.passwordExpired
+              ? 'Your password has expired. Set a new one to continue.'
+              : 'You must set a new password before using the portal.'
+            : 'Update your password regularly to keep your account secure.'
+        }
+      />
+      <p className="text-xs text-muted">{PASSWORD_POLICY_DESCRIPTION}</p>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-4">
         {error ? <Alert>{error}</Alert> : null}

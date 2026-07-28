@@ -6,6 +6,7 @@ import {
   type RoleDashboardConfig,
 } from '@ayetis/shared';
 import { Link, Navigate } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { useAuthStore } from '@/features/auth/store';
 import { AdminDashboard } from '@/portals/AdminDashboard';
 import { AnalyticsDashboard } from '@/portals/AnalyticsDashboard';
@@ -75,13 +76,11 @@ function DashboardView({
 }) {
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border border-line bg-white px-5 py-5 sm:px-6">
-        <p className="text-sm font-medium text-brand-600">{config.title}</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink sm:text-[1.75rem]">
-          Welcome, {firstName}
-        </h1>
-        <p className="mt-1.5 text-[15px] text-muted">{config.subtitle}</p>
-      </header>
+      <PageHeader
+        eyebrow={config.title}
+        title={`Welcome, ${firstName}`}
+        subtitle={config.subtitle}
+      />
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {config.highlights.map((item) => (

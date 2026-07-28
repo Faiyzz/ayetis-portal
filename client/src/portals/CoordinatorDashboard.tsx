@@ -11,6 +11,7 @@ import {
 } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { fetchCoordinatorDashboard } from '@/features/cases/api';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
@@ -125,58 +126,51 @@ export function CoordinatorDashboard({ firstName }: { firstName: string }) {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border border-line bg-white px-5 py-5 sm:px-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-brand-600">Coordinator portal</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">
-              Welcome, {firstName}
-            </h1>
-            <p className="mt-1.5 text-[15px] text-muted">
-              Validate submissions, chase clarifications, and route ready cases to designers.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="rounded-xl border border-line px-4 py-2 text-sm font-semibold text-ink hover:border-brand-300"
-          >
-            Refresh
-          </button>
-        </div>
+      <PageHeader
+        eyebrow="Coordinator portal"
+        title={`Welcome, ${firstName}`}
+        subtitle="Validate submissions, chase clarifications, and route ready cases to designers."
+      >
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:border-brand-300"
+        >
+          Refresh
+        </button>
+      </PageHeader>
 
-        <div className="mt-5 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
-            <span>Review delay colour bar</span>
-            <span>
-              Green &lt;{DELAY_THRESHOLDS_HOURS.greenMax}h · Yellow &lt;
-              {DELAY_THRESHOLDS_HOURS.yellowMax}h · Blue &lt;{DELAY_THRESHOLDS_HOURS.blueMax}h · Red
-              older
-            </span>
-          </div>
-          {data ? (
-            <DelayBar breakdown={data.delayBreakdown} total={totalCases} />
-          ) : (
-            <div className="h-2.5 w-full rounded-full bg-slate-100" />
-          )}
-          <div className="flex flex-wrap gap-3 text-xs">
-            {(
-              [
-                DELAY_LEVELS.GREEN,
-                DELAY_LEVELS.YELLOW,
-                DELAY_LEVELS.BLUE,
-                DELAY_LEVELS.RED,
-              ] as const
-            ).map((level) => (
-              <span key={level} className="inline-flex items-center gap-1.5 text-muted">
-                <span className={`h-2.5 w-2.5 rounded-full ${DELAY_BAR_COLORS[level]}`} />
-                {DELAY_LEVEL_LABELS[level]}
-                {data ? ` (${data.delayBreakdown[level]})` : ''}
-              </span>
-            ))}
-          </div>
+      <div className="space-y-2 rounded-xl border border-line bg-white px-5 py-4 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+          <span>Review delay colour bar</span>
+          <span>
+            Green &lt;{DELAY_THRESHOLDS_HOURS.greenMax}h · Yellow &lt;
+            {DELAY_THRESHOLDS_HOURS.yellowMax}h · Blue &lt;{DELAY_THRESHOLDS_HOURS.blueMax}h · Red
+            older
+          </span>
         </div>
-      </header>
+        {data ? (
+          <DelayBar breakdown={data.delayBreakdown} total={totalCases} />
+        ) : (
+          <div className="h-2.5 w-full rounded-full bg-slate-100" />
+        )}
+        <div className="flex flex-wrap gap-3 text-xs">
+          {(
+            [
+              DELAY_LEVELS.GREEN,
+              DELAY_LEVELS.YELLOW,
+              DELAY_LEVELS.BLUE,
+              DELAY_LEVELS.RED,
+            ] as const
+          ).map((level) => (
+            <span key={level} className="inline-flex items-center gap-1.5 text-muted">
+              <span className={`h-2.5 w-2.5 rounded-full ${DELAY_BAR_COLORS[level]}`} />
+              {DELAY_LEVEL_LABELS[level]}
+              {data ? ` (${data.delayBreakdown[level]})` : ''}
+            </span>
+          ))}
+        </div>
+      </div>
 
       {loading && !data ? (
         <p className="text-sm text-muted">Loading queues…</p>

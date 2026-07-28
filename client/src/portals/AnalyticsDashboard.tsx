@@ -1,5 +1,6 @@
 import type { AnalyticsDashboardDto } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
+import { PageHeader } from '@/components/PageHeader';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import { toast } from '@/features/notifications/toastStore';
 import api, { getErrorMessage } from '@/lib/api';
@@ -66,16 +67,11 @@ export function AnalyticsDashboard({ firstName }: { firstName: string }) {
 
   return (
     <div className="space-y-6 print:space-y-3">
-      <header className="rounded-xl border border-line bg-white px-5 py-5 sm:px-6 print:border-0 print:px-0">
-        <p className="text-sm font-medium text-brand-600">Reporting & Analytics</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">
-          Welcome, {firstName}
-        </h1>
-        <p className="mt-1.5 text-[15px] text-muted">
-          Pipeline health and department performance. Filter by month or quarter, then export CSV or
-          print/PDF.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Reporting & Analytics"
+        title={`Welcome, ${firstName}`}
+        subtitle="Pipeline health and department performance. Filter by month or quarter, then export CSV or print/PDF."
+      />
 
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-white p-4 print:hidden">
         {data ? (

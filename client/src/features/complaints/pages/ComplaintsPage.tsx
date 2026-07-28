@@ -10,6 +10,7 @@ import {
 } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/features/auth/permissions';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import * as complaintsApi from '@/features/complaints/api';
@@ -98,13 +99,12 @@ export function ComplaintsWorkspace({
   return (
     <div className="space-y-4">
       {!embedded ? (
-        <header className="rounded-xl border border-line bg-white px-5 py-5 sm:px-6">
-          <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-          <p className="mt-1.5 text-sm text-muted">
-            Log issues against cases, track resolution, and review doctor decision rates
-            {canViewReports ? ' and explicit ratings' : ''}.
-          </p>
-        </header>
+        <PageHeader
+          title={title}
+          subtitle={`Log issues against cases, track resolution, and review doctor decision rates${
+            canViewReports ? ' and explicit ratings' : ''
+          }.`}
+        />
       ) : null}
 
       {loading && !items.length && !reports ? (

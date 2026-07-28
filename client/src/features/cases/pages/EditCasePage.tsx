@@ -10,6 +10,7 @@ import {
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import { fetchCase, updateCase } from '@/features/cases/api';
@@ -81,16 +82,15 @@ export function EditCasePage() {
 
   return (
     <div className="w-full max-w-3xl space-y-5">
-      <div>
-        <Link
-          to={`/app/cases/${caseId}`}
-          className="text-sm font-medium text-brand-600 hover:text-brand-700"
-        >
-          ← Case detail
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink">Edit case</h1>
-        <p className="mt-1.5 text-[15px] text-muted">Update case information for {caseId}.</p>
-      </div>
+      <PageHeader
+        eyebrow={
+          <Link to={`/app/cases/${caseId}`} className="hover:text-brand-700">
+            ← Case detail
+          </Link>
+        }
+        title="Edit case"
+        subtitle={`Update case information for ${caseId}.`}
+      />
 
       <form
         onSubmit={handleSubmit}

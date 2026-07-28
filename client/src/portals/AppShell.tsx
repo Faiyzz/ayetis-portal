@@ -1,6 +1,7 @@
 import { getDashboardPath, PERMISSIONS, ROLE_LABELS, type Permission, type Role } from '@ayetis/shared';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { PageHeaderProvider } from '@/components/PageHeader';
 import { BrandMark } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import { useAuthStore } from '@/features/auth/store';
@@ -198,6 +199,8 @@ export function AppShell() {
   const { can, canAny } = usePermissions();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const titleSlotRef = useRef<HTMLDivElement>(null);
+  const actionsSlotRef = useRef<HTMLDivElement>(null);
 
   const dashboardPath = getDashboardPath(user.role);
   const navItems = buildNavItems(dashboardPath).filter((item) => {
@@ -211,103 +214,103 @@ export function AppShell() {
   }
 
   return (
-    <div className="min-h-screen bg-surface lg:flex lg:h-screen lg:overflow-hidden">
-      {mobileOpen ? (
-        <button
-          type="button"
-          aria-label="Close navigation"
-          className="fixed inset-0 z-30 bg-ink/40 lg:hidden"
-          onClick={closeMobile}
-        />
-      ) : null}
-
-      <aside
-        className={[
-          'fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0',
-          mobileOpen ? 'translate-x-0' : '-translate-x-full',
-        ].join(' ')}
-      >
-        <div className="border-b border-line px-4 py-4">
-          <BrandMark />
-          <p className="mt-2 text-xs text-muted">{ROLE_LABELS[user.role as Role]} portal</p>
-        </div>
-
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
-          {navItems.map((item) => {
-            const active = item.isActive(location.pathname);
-            return (
-              <Link
-                key={item.id}
-                to={item.to}
-                onClick={closeMobile}
-                aria-current={active ? 'page' : undefined}
-                className={[
-                  'flex items-center rounded-lg px-3 py-2 text-sm font-medium transition',
-                  active
-                    ? 'bg-brand-500 text-white'
-                    : 'text-muted hover:bg-brand-50 hover:text-brand-700',
-                ].join(' ')}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="border-t border-line p-3">
-          <div className="rounded-lg bg-surface px-3 py-2.5">
-            <p className="truncate text-sm font-semibold text-ink">
-              {user.firstName} {user.lastName}
-            </p>
-            <p className="mt-0.5 truncate text-xs text-muted">{user.email}</p>
-          </div>
+    <PageHeaderProvider titleRef={titleSlotRef} actionsRef={actionsSlotRef}>
+      <div className="min-h-screen bg-surface lg:flex lg:h-screen lg:overflow-hidden">
+        {mobileOpen ? (
           <button
             type="button"
-            onClick={() => {
-              void logout();
-            }}
-            className="mt-2 w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-muted transition hover:bg-red-50 hover:text-red-600"
-          >
-            Log out
-          </button>
+            aria-label="Close navigation"
+            className="fixed inset-0 z-30 bg-ink/40 lg:hidden"
+            onClick={closeMobile}
+          />
+        ) : null}
+
+        <aside
+          className={[
+            'fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0',
+            mobileOpen ? 'translate-x-0' : '-translate-x-full',
+          ].join(' ')}
+        >
+          <div className="border-b border-line px-4 py-4">
+            <BrandMark />
+            <p className="mt-2 text-xs text-muted">{ROLE_LABELS[user.role as Role]} portal</p>
+          </div>
+
+          <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
+            {navItems.map((item) => {
+              const active = item.isActive(location.pathname);
+              return (
+                <Link
+                  key={item.id}
+                  to={item.to}
+                  onClick={closeMobile}
+                  aria-current={active ? 'page' : undefined}
+                  className={[
+                    'flex items-center rounded-lg px-3 py-2 text-sm font-medium transition',
+                    active
+                      ? 'bg-brand-500 text-white'
+                      : 'text-muted hover:bg-brand-50 hover:text-brand-700',
+                  ].join(' ')}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="border-t border-line p-3">
+            <div className="rounded-lg bg-surface px-3 py-2.5">
+              <p className="truncate text-sm font-semibold text-ink">
+                {user.firstName} {user.lastName}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-muted">{user.email}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                void logout();
+              }}
+              className="mt-2 w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-muted transition hover:bg-red-50 hover:text-red-600"
+            >
+              Log out
+            </button>
+          </div>
+        </aside>
+
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:h-full lg:min-h-0">
+          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-white px-4 py-2.5 lg:px-8">
+            <button
+              type="button"
+              aria-label="Open navigation"
+              onClick={() => setMobileOpen(true)}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line text-ink lg:hidden"
+            >
+              <span className="sr-only">Menu</span>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path
+                  d="M3 4.5h12M3 9h12M3 13.5h12"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+
+            <div ref={titleSlotRef} className="min-w-0 flex-1" />
+
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <div ref={actionsSlotRef} className="flex items-center gap-2" />
+              <NotificationBell />
+            </div>
+          </header>
+
+          <main className="min-h-0 flex-1 overflow-y-auto">
+            <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+              <Outlet context={{ user }} />
+            </div>
+          </main>
         </div>
-      </aside>
-
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:h-full lg:min-h-0">
-        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-white px-4 py-3 lg:px-8">
-          <button
-            type="button"
-            aria-label="Open navigation"
-            onClick={() => setMobileOpen(true)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line text-ink lg:hidden"
-          >
-            <span className="sr-only">Menu</span>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <path
-                d="M3 4.5h12M3 9h12M3 13.5h12"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-          <div className="min-w-0 flex-1 lg:hidden">
-            <p className="truncate text-sm font-semibold text-ink">
-              {user.firstName} {user.lastName}
-            </p>
-            <p className="truncate text-xs text-muted">{ROLE_LABELS[user.role as Role]}</p>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <NotificationBell />
-          </div>
-        </header>
-
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-            <Outlet context={{ user }} />
-          </div>
-        </main>
       </div>
-    </div>
+    </PageHeaderProvider>
   );
 }

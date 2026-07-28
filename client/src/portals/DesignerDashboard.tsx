@@ -7,6 +7,7 @@ import {
 } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import {
   fetchCases,
   fetchDesignerPerformance,
@@ -100,16 +101,11 @@ export function DesignerDashboard({ firstName }: { firstName: string }) {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border border-line bg-white px-5 py-5 sm:px-6">
-        <p className="text-sm font-medium text-brand-600">Designer portal</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">
-          Welcome, {firstName}
-        </h1>
-        <p className="mt-1.5 text-[15px] text-muted">
-          Cases assigned to you appear here. Open a case to download files, review instructions, or
-          raise a clarification.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Designer portal"
+        title={`Welcome, ${firstName}`}
+        subtitle="Cases assigned to you appear here. Open a case to download files, review instructions, or raise a clarification."
+      />
 
       <div className="flex gap-2 border-b border-line pb-px">
         {(
@@ -271,13 +267,11 @@ export function EscalatedOversightDashboard({
 
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border border-line bg-white px-5 py-5 sm:px-6">
-        <p className="text-sm font-medium text-brand-600">{title}</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">
-          Welcome, {firstName}
-        </h1>
-        <p className="mt-1.5 text-[15px] text-muted">{subtitle}</p>
-      </header>
+      <PageHeader
+        eyebrow={title}
+        title={`Welcome, ${firstName}`}
+        subtitle={subtitle}
+      />
 
       <div className="flex gap-2 border-b border-line pb-px">
         {(

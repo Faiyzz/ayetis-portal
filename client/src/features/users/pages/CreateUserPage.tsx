@@ -7,6 +7,7 @@ import {
 } from '@ayetis/shared';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { toast } from '@/features/notifications/toastStore';
 import * as usersApi from '@/features/users/api';
@@ -52,16 +53,15 @@ export function CreateUserPage() {
 
   return (
     <div className="w-full max-w-xl space-y-5">
-      <div>
-        <Link to="/app/users" className="text-sm font-medium text-brand-600 hover:text-brand-700">
-          ← Users
-        </Link>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">Create user</h1>
-        <p className="mt-2 text-[15px] text-muted">
-          Register a team member for one of the fixed system roles. Permissions can be refined
-          after creation.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow={
+          <Link to="/app/users" className="hover:text-brand-700">
+            ← Users
+          </Link>
+        }
+        title="Create user"
+        subtitle="Register a team member for one of the fixed system roles. Permissions can be refined after creation."
+      />
 
       <form
         onSubmit={handleSubmit}

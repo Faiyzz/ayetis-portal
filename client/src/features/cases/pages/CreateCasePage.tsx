@@ -10,6 +10,7 @@ import {
 } from '@ayetis/shared';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { createCase, uploadCaseFiles } from '@/features/cases/api';
 import { TreatmentInstructionsFields } from '@/features/cases/components/TreatmentInstructionsPanel';
@@ -144,15 +145,15 @@ export function CreateCasePage() {
 
   return (
     <div className="w-full max-w-3xl space-y-5">
-      <div>
-        <Link to="/app/cases" className="text-sm font-medium text-brand-600 hover:text-brand-700">
-          ← Cases
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink">Submit a new case</h1>
-        <p className="mt-1.5 text-[15px] text-muted">
-          Guided form for sending a patient case to Ayetis for processing.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow={
+          <Link to="/app/cases" className="hover:text-brand-700">
+            ← Cases
+          </Link>
+        }
+        title="Submit a new case"
+        subtitle="Guided form for sending a patient case to Ayetis for processing."
+      />
 
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2">

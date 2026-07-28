@@ -10,6 +10,7 @@ import {
 } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import {
   fetchConsultantDashboard,
   fetchConsultantPerformance,
@@ -103,16 +104,11 @@ export function ConsultantDashboard({ firstName }: { firstName: string }) {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border border-line bg-white px-5 py-5 sm:px-6">
-        <p className="text-sm font-medium text-brand-600">Consultant portal</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">
-          Welcome, {firstName}
-        </h1>
-        <p className="mt-1.5 text-[15px] text-muted">
-          Review treatment plans, add clinical remarks with colour indicators, and act as QC when
-          needed.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Consultant portal"
+        title={`Welcome, ${firstName}`}
+        subtitle="Review treatment plans, add clinical remarks with colour indicators, and act as QC when needed."
+      />
 
       <div className="flex gap-2 border-b border-line pb-px">
         {(

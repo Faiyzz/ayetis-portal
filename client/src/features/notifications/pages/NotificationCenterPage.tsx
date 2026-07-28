@@ -2,6 +2,7 @@ import type { NotificationDto } from '@ayetis/shared';
 import { NOTIFICATION_TYPE_LABELS } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import {
   fetchNotifications,
@@ -65,12 +66,10 @@ export function NotificationCenterPage() {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border border-line bg-white px-5 py-5 sm:px-6">
-        <h1 className="text-xl font-bold tracking-tight text-ink">Notification center</h1>
-        <p className="mt-1.5 text-sm text-muted">
-          {unreadCount} unread · portal alerts for case events also arrive by email when configured.
-        </p>
-      </header>
+      <PageHeader
+        title="Notification center"
+        subtitle={`${unreadCount} unread · portal alerts for case events also arrive by email when configured.`}
+      />
 
       <div className="flex flex-wrap gap-2">
         <button

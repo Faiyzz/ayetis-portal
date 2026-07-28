@@ -1,6 +1,7 @@
 import { ROLE_LABELS, type PublicUser } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/features/auth/permissions';
 import { toast } from '@/features/notifications/toastStore';
 import * as usersApi from '@/features/users/api';
@@ -55,24 +56,20 @@ export function UsersPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-brand-600">Administration</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">Users</h1>
-          <p className="mt-1.5 text-[15px] text-muted">
-            Manage accounts for fixed system roles, then refine permissions per user.
-          </p>
-        </div>
-
+      <PageHeader
+        eyebrow="Administration"
+        title="Users"
+        subtitle="Manage accounts for fixed system roles, then refine permissions per user."
+      >
         {can(PERMISSIONS.USER_CREATE) ? (
           <Link
             to="/app/users/create"
-            className="inline-flex items-center justify-center rounded-xl bg-brand-500 px-4 py-3 text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(103,61,230,0.28)] hover:bg-brand-600"
+            className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-600"
           >
             Create user
           </Link>
         ) : null}
-      </div>
+      </PageHeader>
 
       <section className="overflow-hidden rounded-xl border border-line bg-white">
         <header className="border-b border-line px-5 py-4">

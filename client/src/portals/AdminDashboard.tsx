@@ -7,6 +7,7 @@ import {
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { PageHeader } from '@/components/PageHeader';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { ComplaintsWorkspace } from '@/features/complaints/pages/ComplaintsPage';
 import { toast } from '@/features/notifications/toastStore';
@@ -18,15 +19,11 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border border-line bg-white px-5 py-5 sm:px-6">
-        <p className="text-sm font-medium text-brand-600">Admin portal</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">
-          Welcome, {firstName}
-        </h1>
-        <p className="mt-1.5 text-[15px] text-muted">
-          Manage users, departments, complaints, priorities, and deletion approvals.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Admin portal"
+        title={`Welcome, ${firstName}`}
+        subtitle="Manage users, departments, complaints, priorities, and deletion approvals."
+      />
 
       <div className="flex flex-wrap gap-2 border-b border-line pb-px">
         {(

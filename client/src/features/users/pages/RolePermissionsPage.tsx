@@ -5,6 +5,7 @@ import {
   type RolePermissionConfigDto,
 } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
+import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import { toast } from '@/features/notifications/toastStore';
@@ -91,14 +92,11 @@ export function RolePermissionsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-sm font-medium text-brand-600">Administration</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink">Role permissions</h1>
-        <p className="mt-2 text-[15px] text-muted">
-          System roles are fixed. Adjust grants and denies on top of each role&apos;s default
-          permission set.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Administration"
+        title="Role permissions"
+        subtitle="System roles are fixed. Adjust grants and denies on top of each role's default permission set."
+      />
 
       {error ? <Alert>{error}</Alert> : null}
 
