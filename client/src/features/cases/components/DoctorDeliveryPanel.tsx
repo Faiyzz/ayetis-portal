@@ -5,6 +5,7 @@ import {
   type DoctorDecision,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
+import { dialog } from '@/components/dialog';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import {
   downloadAllCaseFiles,
@@ -49,7 +50,13 @@ export function DoctorDeliveryPanel({
 
   async function handleDecision(event: FormEvent) {
     event.preventDefault();
-    if (!window.confirm(`Record decision: ${DOCTOR_DECISION_LABELS[decision]}?`)) return;
+    const confirmed = await dialog.confirm({
+      title: 'Record doctor decision',
+      message: `Record decision: ${DOCTOR_DECISION_LABELS[decision]}?`,
+      confirmLabel: 'Record decision',
+      tone: decision === DOCTOR_DECISIONS.CANCEL ? 'danger' : 'default',
+    });
+    if (!confirmed) return;
     setBusy('decision');
     try {
       onUpdated(

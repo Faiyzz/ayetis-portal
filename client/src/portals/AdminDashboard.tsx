@@ -8,6 +8,7 @@ import {
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
+import { dialog } from '@/components/dialog';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { ComplaintsWorkspace } from '@/features/complaints/pages/ComplaintsPage';
 import { toast } from '@/features/notifications/toastStore';
@@ -144,9 +145,25 @@ function DepartmentsPanel() {
   }
 
   async function requestDelete(dept: DepartmentDto) {
-    const reason = window.prompt(`Reason for deleting ${dept.code}:`);
-    if (!reason || reason.trim().length < 3) return;
-    if (!window.confirm('Submit delete request for admin approval?')) return;
+    const reason = await dialog.prompt({
+      title: 'Request department deletion',
+      message: `Provide a reason for deleting ${dept.code}.`,
+      label: 'Reason',
+      placeholder: 'Why should this department be deleted?',
+      confirmLabel: 'Continue',
+      tone: 'danger',
+      minLength: 3,
+    });
+    if (!reason) return;
+
+    const confirmed = await dialog.confirm({
+      title: 'Submit delete request?',
+      message: 'This will send a delete request for admin approval.',
+      confirmLabel: 'Submit request',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+
     try {
       await api.post(`/departments/${dept.id}/delete-request`, { reason: reason.trim() });
       toast().success('Delete request submitted');
@@ -276,14 +293,25 @@ function DeletionsPanel() {
   }, []);
 
   async function review(request: DeleteRequestDto, decision: 'approve' | 'reject') {
-    if (!window.confirm(`${decision === 'approve' ? 'Approve' : 'Reject'} delete for ${request.recordLabel}?`)) {
-      return;
-    }
-    const confirmation = window.prompt('Type DELETE to confirm this irreversible review step:');
-    if (confirmation !== 'DELETE') {
-      toast().warning('Confirmation cancelled — you must type DELETE');
-      return;
-    }
+    const confirmed = await dialog.confirm({
+      title: `${decision === 'approve' ? 'Approve' : 'Reject'} delete request`,
+      message: `${decision === 'approve' ? 'Approve' : 'Reject'} delete for ${request.recordLabel}?`,
+      confirmLabel: decision === 'approve' ? 'Approve' : 'Reject',
+      tone: decision === 'approve' ? 'danger' : 'warning',
+    });
+    if (!confirmed) return;
+
+    const confirmation = await dialog.prompt({
+      title: 'Type DELETE to confirm',
+      message: 'This review step is irreversible. Type DELETE exactly to continue.',
+      label: 'Confirmation',
+      placeholder: 'DELETE',
+      confirmLabel: 'Confirm review',
+      tone: 'danger',
+      matchValue: 'DELETE',
+    });
+    if (!confirmation) return;
+
     try {
       await api.post(`/deletions/${request.id}/review`, { decision, confirmation });
       toast().success(`Request ${decision}d`);

@@ -1,6 +1,7 @@
 import { ROLE_LABELS, type PublicUser } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { dialog } from '@/components/dialog';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/features/auth/permissions';
 import { toast } from '@/features/notifications/toastStore';
@@ -38,13 +39,33 @@ export function UsersPage() {
   }
 
   async function handleDelete(user: PublicUser) {
-    const reason = window.prompt(`Reason for deleting ${user.email}:`);
-    if (!reason || reason.trim().length < 3) {
-      toast().warning('Deletion requires a reason');
-      return;
-    }
-    if (!window.confirm(`Request deletion of ${user.email}?`)) return;
-    if (!window.confirm('Second confirmation: submit delete request to admin?')) return;
+    const reason = await dialog.prompt({
+      title: 'Request user deletion',
+      message: `Provide a reason for deleting ${user.email}. This is sent to an admin for approval.`,
+      label: 'Reason',
+      placeholder: 'Why should this account be deleted?',
+      confirmLabel: 'Continue',
+      tone: 'danger',
+      minLength: 3,
+    });
+    if (!reason) return;
+
+    const confirmed = await dialog.confirm({
+      title: 'Confirm delete request',
+      message: `Request deletion of ${user.email}?`,
+      confirmLabel: 'Request deletion',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+
+    const doubleConfirmed = await dialog.confirm({
+      title: 'Final confirmation',
+      message: 'Submit this delete request to admin for approval? This cannot be undone from here.',
+      confirmLabel: 'Submit request',
+      tone: 'danger',
+    });
+    if (!doubleConfirmed) return;
+
     try {
       await usersApi.deleteUser(user.id, reason.trim());
       toast().success('Delete request submitted for admin approval');

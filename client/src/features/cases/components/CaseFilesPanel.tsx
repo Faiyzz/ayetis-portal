@@ -5,9 +5,10 @@ import {
   type CaseFileDto,
   type FileCategory,
 } from '@ayetis/shared';
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useMemo, useRef, useState, type FormEvent } from 'react';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import { downloadAllCaseFiles, downloadCaseFile, uploadCaseFiles } from '@/features/cases/api';
+import { EmptyState } from '@/features/cases/components/detail/EmptyState';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
@@ -31,6 +32,11 @@ function groupByOriginalName(files: CaseFileDto[]) {
   }));
 }
 
+function categoryIcon(category: FileCategory) {
+  const label = (FILE_CATEGORY_LABELS[category] ?? category).slice(0, 3).toUpperCase();
+  return label;
+}
+
 export function CaseFilesPanel({
   caseId,
   files,
@@ -50,8 +56,25 @@ export function CaseFilesPanel({
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState('');
+  const [filterCategory, setFilterCategory] = useState<FileCategory | ''>('');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [showUpload, setShowUpload] = useState(false);
 
-  const groups = useMemo(() => groupByOriginalName(files), [files]);
+  const groups = useMemo(() => {
+    const all = groupByOriginalName(files);
+    const q = search.trim().toLowerCase();
+    return all.filter((group) => {
+      const latest = group.versions[0]!;
+      if (filterCategory && latest.category !== filterCategory) return false;
+      if (!q) return true;
+      return (
+        group.name.toLowerCase().includes(q) ||
+        (latest.note ?? '').toLowerCase().includes(q) ||
+        latest.uploadedByName.toLowerCase().includes(q)
+      );
+    });
+  }, [files, search, filterCategory]);
 
   function onPick(fileList: FileList | null) {
     if (!fileList) return;
@@ -76,6 +99,7 @@ export function CaseFilesPanel({
       setNote('');
       setCategory('');
       if (inputRef.current) inputRef.current.value = '';
+      setShowUpload(false);
       toast().success(selected.length === 1 ? 'File uploaded' : `${selected.length} files uploaded`);
     } catch (err) {
       toast().error(getErrorMessage(err, 'Unable to upload files'));
@@ -108,29 +132,84 @@ export function CaseFilesPanel({
   }
 
   return (
-    <section className="space-y-4 rounded-xl border border-line bg-white p-5">
-      <div className="flex flex-wrap items-start justify-between gap-2">
+    <section className="overflow-hidden rounded-xl border border-line bg-white">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-ink">Patient files</h2>
-          <p className="mt-1 text-sm text-muted">
-            STL, OBJ, images, PDF, video, and related case files. Re-uploading the same name creates a
-            new version.
+          <p className="mt-0.5 text-sm text-muted">
+            STL, scans, images, PDF, and delivery assets. Same name creates a new version.
           </p>
         </div>
-        {files.length > 0 ? (
-          <button
-            type="button"
-            disabled={downloadingAll}
-            onClick={() => void handleDownloadAll()}
-            className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300 disabled:opacity-60"
-          >
-            {downloadingAll ? 'Preparing zip…' : 'Download all'}
-          </button>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {files.length > 0 ? (
+            <button
+              type="button"
+              disabled={downloadingAll}
+              onClick={() => void handleDownloadAll()}
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300 disabled:opacity-60"
+            >
+              {downloadingAll ? 'Preparing zip…' : 'Download all'}
+            </button>
+          ) : null}
+          {canUpload ? (
+            <button
+              type="button"
+              onClick={() => setShowUpload((v) => !v)}
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-brand-300"
+            >
+              {showUpload ? 'Hide upload' : 'Upload'}
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      {canUpload ? (
-        <form onSubmit={handleUpload} className="space-y-3 rounded-lg border border-dashed border-line bg-surface/60 p-4">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface/40 px-4 py-2.5">
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search files…"
+          className="min-w-[10rem] flex-1 rounded-lg border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+        />
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory((e.target.value || '') as FileCategory | '')}
+          className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-brand-500"
+        >
+          <option value="">All categories</option>
+          {ALL_FILE_CATEGORIES.map((value) => (
+            <option key={value} value={value}>
+              {FILE_CATEGORY_LABELS[value]}
+            </option>
+          ))}
+        </select>
+        <div className="flex rounded-lg border border-line bg-white p-0.5">
+          <button
+            type="button"
+            onClick={() => setViewMode('list')}
+            className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
+              viewMode === 'list' ? 'bg-brand-50 text-brand-700' : 'text-muted'
+            }`}
+          >
+            List
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('grid')}
+            className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
+              viewMode === 'grid' ? 'bg-brand-50 text-brand-700' : 'text-muted'
+            }`}
+          >
+            Grid
+          </button>
+        </div>
+      </div>
+
+      {showUpload && canUpload ? (
+        <form
+          onSubmit={handleUpload}
+          className="space-y-3 border-b border-line bg-surface/30 px-4 py-4"
+        >
           <input
             ref={inputRef}
             type="file"
@@ -139,7 +218,6 @@ export function CaseFilesPanel({
             onChange={(e) => onPick(e.target.files)}
             className="block w-full text-sm text-ink file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
           />
-
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-ink">Category (optional)</span>
@@ -159,7 +237,6 @@ export function CaseFilesPanel({
                 </option>
               </select>
             </label>
-
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-ink">Note (optional)</span>
               <input
@@ -170,7 +247,6 @@ export function CaseFilesPanel({
               />
             </label>
           </div>
-
           {selected.length > 0 ? (
             <ul className="space-y-1 text-xs text-muted">
               {selected.map((file) => (
@@ -180,7 +256,6 @@ export function CaseFilesPanel({
               ))}
             </ul>
           ) : null}
-
           <div className="max-w-xs">
             <AuthButton loading={uploading} disabled={selected.length === 0}>
               Upload files
@@ -189,78 +264,146 @@ export function CaseFilesPanel({
         </form>
       ) : null}
 
-      {groups.length === 0 ? (
-        <p className="text-sm text-muted">No files attached yet.</p>
-      ) : (
-        <ul className="space-y-3 text-sm">
-          {groups.map((group) => {
-            const latest = group.versions[0];
-            const hasHistory = group.versions.length > 1;
-            const open = expandedHistory[group.name] ?? false;
-            return (
-              <li key={group.name} className="rounded-lg border border-line px-3 py-2">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-medium text-ink">{group.name}</p>
-                    <p className="text-xs text-muted">
-                      {FILE_CATEGORY_LABELS[latest.category] ?? latest.category} ·{' '}
-                      {formatBytes(latest.sizeBytes)} · v{latest.version} (latest) ·{' '}
-                      {latest.uploadedByName} · {new Date(latest.createdAt).toLocaleString()}
-                    </p>
-                    {latest.note ? <p className="mt-0.5 text-xs text-muted">{latest.note}</p> : null}
+      <div className="p-4">
+        {groups.length === 0 ? (
+          <EmptyState
+            title={files.length === 0 ? 'No files attached' : 'No matching files'}
+            description={
+              files.length === 0
+                ? 'Upload patient scans, photos, X-rays, or models so the design team has everything they need.'
+                : 'Try a different search or category filter.'
+            }
+            icon={
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-6 4h4M7 3h8l4 4v12a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
+              </svg>
+            }
+          />
+        ) : viewMode === 'grid' ? (
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {groups.map((group) => {
+              const latest = group.versions[0]!;
+              return (
+                <li key={group.name} className="rounded-xl border border-line p-3">
+                  <div className="flex h-20 items-center justify-center rounded-lg bg-surface text-xs font-bold tracking-wide text-brand-700">
+                    {categoryIcon(latest.category)}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {hasHistory ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedHistory((s) => ({ ...s, [group.name]: !open }))
-                        }
-                        className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-brand-300"
-                      >
-                        {open ? 'Hide history' : `Version history (${group.versions.length})`}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => void handleDownload(latest)}
-                      disabled={downloadingId === latest.id}
-                      className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300 disabled:opacity-60"
-                    >
-                      {downloadingId === latest.id ? 'Downloading…' : 'Download'}
-                    </button>
-                  </div>
-                </div>
-
-                {hasHistory && open ? (
-                  <ul className="mt-3 space-y-2 border-t border-line pt-3">
-                    {group.versions.map((file) => (
-                      <li
-                        key={file.id}
-                        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <p className="text-xs text-muted">
-                          v{file.version} · {formatBytes(file.sizeBytes)} · {file.uploadedByName} ·{' '}
-                          {new Date(file.createdAt).toLocaleString()}
-                          {file.note ? ` · ${file.note}` : ''}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => void handleDownload(file)}
-                          disabled={downloadingId === file.id}
-                          className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300 disabled:opacity-60"
-                        >
-                          {downloadingId === file.id ? 'Downloading…' : 'Download v' + file.version}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                  <p className="mt-2 truncate text-sm font-semibold text-ink" title={group.name}>
+                    {group.name}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {FILE_CATEGORY_LABELS[latest.category]} · {formatBytes(latest.sizeBytes)} · v
+                    {latest.version}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-muted">
+                    {latest.uploadedByName} · {new Date(latest.createdAt).toLocaleDateString()}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void handleDownload(latest)}
+                    disabled={downloadingId === latest.id}
+                    className="mt-3 w-full rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300 disabled:opacity-60"
+                  >
+                    {downloadingId === latest.id ? 'Downloading…' : 'Download'}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[40rem] text-left text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs uppercase tracking-[0.05em] text-muted">
+                  <th className="px-2 py-2 font-semibold">File</th>
+                  <th className="px-2 py-2 font-semibold">Category</th>
+                  <th className="px-2 py-2 font-semibold">Size</th>
+                  <th className="px-2 py-2 font-semibold">Uploader</th>
+                  <th className="px-2 py-2 font-semibold">Uploaded</th>
+                  <th className="px-2 py-2 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((group) => {
+                  const latest = group.versions[0]!;
+                  const hasHistory = group.versions.length > 1;
+                  const open = expandedHistory[group.name] ?? false;
+                  return (
+                    <Fragment key={group.name}>
+                      <tr className="border-b border-line">
+                        <td className="px-2 py-2.5">
+                          <p className="font-medium text-ink">{group.name}</p>
+                          {latest.note ? (
+                            <p className="text-xs text-muted">{latest.note}</p>
+                          ) : null}
+                          <p className="text-xs text-muted">v{latest.version} (latest)</p>
+                        </td>
+                        <td className="px-2 py-2.5 text-muted">
+                          {FILE_CATEGORY_LABELS[latest.category]}
+                        </td>
+                        <td className="px-2 py-2.5 tabular-nums text-muted">
+                          {formatBytes(latest.sizeBytes)}
+                        </td>
+                        <td className="px-2 py-2.5 text-muted">{latest.uploadedByName}</td>
+                        <td className="px-2 py-2.5 text-muted">
+                          {new Date(latest.createdAt).toLocaleString()}
+                        </td>
+                        <td className="px-2 py-2.5 text-right">
+                          <div className="flex flex-wrap justify-end gap-1.5">
+                            {hasHistory ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedHistory((s) => ({ ...s, [group.name]: !open }))
+                                }
+                                className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-ink"
+                              >
+                                {open ? 'Hide' : `v${group.versions.length}`}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => void handleDownload(latest)}
+                              disabled={downloadingId === latest.id}
+                              className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-brand-700 disabled:opacity-60"
+                            >
+                              {downloadingId === latest.id ? '…' : 'Download'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {hasHistory && open
+                        ? group.versions.map((file) => (
+                            <tr key={file.id} className="border-b border-line bg-surface/40">
+                              <td className="px-2 py-2 pl-6 text-xs text-muted" colSpan={4}>
+                                v{file.version} · {formatBytes(file.sizeBytes)} ·{' '}
+                                {file.uploadedByName}
+                                {file.note ? ` · ${file.note}` : ''}
+                              </td>
+                              <td className="px-2 py-2 text-xs text-muted">
+                                {new Date(file.createdAt).toLocaleString()}
+                              </td>
+                              <td className="px-2 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDownload(file)}
+                                  disabled={downloadingId === file.id}
+                                  className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-brand-700 disabled:opacity-60"
+                                >
+                                  Download
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        : null}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

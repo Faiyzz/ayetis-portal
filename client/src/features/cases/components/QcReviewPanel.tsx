@@ -9,6 +9,7 @@ import {
   type QcErrorCode,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
+import { dialog } from '@/components/dialog';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import {
   addQcComment,
@@ -74,7 +75,12 @@ export function QcReviewPanel({
       toast().warning('Upload a delivery video or provide an HTML/view link');
       return;
     }
-    if (!window.confirm(`Approve ${caseData.caseId} and release delivery assets?`)) return;
+    const confirmed = await dialog.confirm({
+      title: 'Approve case',
+      message: `Approve ${caseData.caseId} and release delivery assets?`,
+      confirmLabel: 'Approve & release',
+    });
+    if (!confirmed) return;
 
     setBusy('approve');
     try {
@@ -95,7 +101,13 @@ export function QcReviewPanel({
 
   async function handleReject(event: FormEvent) {
     event.preventDefault();
-    if (!window.confirm(`Reject ${caseData.caseId} and return it to the designer?`)) return;
+    const confirmed = await dialog.confirm({
+      title: 'Reject case',
+      message: `Reject ${caseData.caseId} and return it to the designer?`,
+      confirmLabel: 'Reject & return',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
 
     setBusy('reject');
     try {

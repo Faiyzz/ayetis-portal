@@ -7,6 +7,7 @@ import {
   type CaseDetailDto,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
+import { dialog } from '@/components/dialog';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import {
   startProduction,
@@ -67,7 +68,12 @@ export function DesignerProductionPanel({
 
   async function handleSubmitQc() {
     const label = needsResubmit ? 'Resubmit' : 'Submit';
-    if (!window.confirm(`${label} ${caseData.caseId} to the QC queue?`)) return;
+    const confirmed = await dialog.confirm({
+      title: `${label} to QC`,
+      message: `${label} ${caseData.caseId} to the QC queue?`,
+      confirmLabel: needsResubmit ? 'Resubmit to QC' : 'Submit to QC',
+    });
+    if (!confirmed) return;
     setBusy('qc');
     try {
       onUpdated(await submitCaseToQc(caseData.caseId, { notes: notes.trim() || undefined }));

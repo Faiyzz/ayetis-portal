@@ -7,6 +7,10 @@ import {
 } from '@ayetis/shared';
 import { useState, type FormEvent } from 'react';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { PropertyTable } from '@/features/cases/components/detail/PropertyTable';
+
+const fieldClass =
+  'w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:opacity-60';
 
 export function TreatmentInstructionsFields({
   value,
@@ -22,84 +26,107 @@ export function TreatmentInstructionsFields({
   }
 
   return (
-    <div className="space-y-4">
-      <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-ink">Arches</span>
-        <select
-          disabled={disabled}
-          value={value.arches}
-          onChange={(e) => update('arches', e.target.value as ArchOption | '')}
-          className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:opacity-60"
-        >
-          <option value="">Select arches</option>
-          {ALL_ARCH_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {ARCH_OPTION_LABELS[option]}
-            </option>
-          ))}
-        </select>
-      </label>
+    <div className="space-y-6">
+      <fieldset className="space-y-3">
+        <legend className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">
+          Appliance
+        </legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-ink">Arches</span>
+            <select
+              disabled={disabled}
+              value={value.arches}
+              onChange={(e) => update('arches', e.target.value as ArchOption | '')}
+              className={fieldClass}
+            >
+              <option value="">Select arches</option>
+              {ALL_ARCH_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {ARCH_OPTION_LABELS[option]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <TextField
+            label="Appliance type"
+            disabled={disabled}
+            value={value.applianceType}
+            onChange={(e) => update('applianceType', e.target.value)}
+            placeholder="e.g. Clear aligners, retainer, expander"
+          />
+        </div>
+      </fieldset>
 
-      <TextField
-        label="Appliance type"
-        disabled={disabled}
-        value={value.applianceType}
-        onChange={(e) => update('applianceType', e.target.value)}
-        placeholder="e.g. Clear aligners, retainer, expander"
-      />
+      <fieldset className="space-y-3">
+        <legend className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">
+          Goals
+        </legend>
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-ink">Treatment goal</span>
+          <textarea
+            disabled={disabled}
+            rows={3}
+            value={value.treatmentGoal}
+            onChange={(e) => update('treatmentGoal', e.target.value)}
+            placeholder="Primary clinical objectives…"
+            className={fieldClass}
+          />
+        </label>
+      </fieldset>
 
-      <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-ink">Treatment goal</span>
-        <textarea
-          disabled={disabled}
-          rows={3}
-          value={value.treatmentGoal}
-          onChange={(e) => update('treatmentGoal', e.target.value)}
-          placeholder="Primary clinical objectives…"
-          className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:opacity-60"
-        />
-      </label>
+      <fieldset className="space-y-3">
+        <legend className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">
+          Bite & retainers
+        </legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block space-y-1.5 sm:col-span-2">
+            <span className="text-sm font-medium text-ink">Bite / occlusion details</span>
+            <textarea
+              disabled={disabled}
+              rows={3}
+              value={value.biteDetails}
+              onChange={(e) => update('biteDetails', e.target.value)}
+              className={fieldClass}
+            />
+          </label>
+          <TextField
+            label="Retainers"
+            disabled={disabled}
+            value={value.retainers}
+            onChange={(e) => update('retainers', e.target.value)}
+            placeholder="Retainer preferences or schedule"
+          />
+        </div>
+      </fieldset>
 
-      <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-ink">Bite / occlusion details</span>
-        <textarea
-          disabled={disabled}
-          rows={3}
-          value={value.biteDetails}
-          onChange={(e) => update('biteDetails', e.target.value)}
-          className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:opacity-60"
-        />
-      </label>
-
-      <TextField
-        label="Retainers"
-        disabled={disabled}
-        value={value.retainers}
-        onChange={(e) => update('retainers', e.target.value)}
-        placeholder="Retainer preferences or schedule"
-      />
-
-      <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-ink">Special requirements</span>
-        <textarea
-          disabled={disabled}
-          rows={3}
-          value={value.specialRequirements}
-          onChange={(e) => update('specialRequirements', e.target.value)}
-          className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:opacity-60"
-        />
-      </label>
-
-      <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-ink">Additional notes</span>
-        <textarea
-          disabled={disabled}
-          rows={3}
-          value={value.additionalNotes}
-          onChange={(e) => update('additionalNotes', e.target.value)}
-          className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:opacity-60"
-        />
-      </label>
+      <fieldset className="space-y-3">
+        <legend className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">
+          Special requirements
+        </legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-ink">Special requirements</span>
+            <textarea
+              disabled={disabled}
+              rows={3}
+              value={value.specialRequirements}
+              onChange={(e) => update('specialRequirements', e.target.value)}
+              className={fieldClass}
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-ink">Additional notes</span>
+            <textarea
+              disabled={disabled}
+              rows={3}
+              value={value.additionalNotes}
+              onChange={(e) => update('additionalNotes', e.target.value)}
+              className={fieldClass}
+            />
+          </label>
+        </div>
+      </fieldset>
     </div>
   );
 }
@@ -128,11 +155,11 @@ export function TreatmentInstructionsPanel({
   }
 
   return (
-    <section className="rounded-xl border border-line bg-white p-5">
-      <div className="flex flex-wrap items-start justify-between gap-2">
+    <section className="overflow-hidden rounded-xl border border-line bg-white">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-line px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-ink">Treatment instructions</h2>
-          <p className="mt-1 text-sm text-muted">Structured requirements for production.</p>
+          <p className="mt-0.5 text-sm text-muted">Structured requirements for production.</p>
         </div>
         {canEdit && !editing ? (
           <button
@@ -148,42 +175,83 @@ export function TreatmentInstructionsPanel({
         ) : null}
       </div>
 
-      {editing ? (
-        <form onSubmit={handleSave} className="mt-4 space-y-4">
-          <TreatmentInstructionsFields value={draft} onChange={setDraft} />
-          <div className="flex flex-wrap gap-2">
-            <div className="min-w-[8rem]">
-              <AuthButton loading={saving}>Save instructions</AuthButton>
+      <div className="p-4">
+        {editing ? (
+          <form onSubmit={handleSave} className="space-y-4">
+            <TreatmentInstructionsFields value={draft} onChange={setDraft} />
+            <div className="flex flex-wrap gap-2">
+              <div className="min-w-[8rem]">
+                <AuthButton loading={saving}>Save instructions</AuthButton>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="rounded-xl border border-line px-4 py-2.5 text-sm font-semibold text-ink"
+              >
+                Cancel
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="rounded-xl border border-line px-4 py-2.5 text-sm font-semibold text-ink"
-            >
-              Cancel
-            </button>
+          </form>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <PropertyTable
+              title="Appliance"
+              rows={[
+                {
+                  label: 'Arches',
+                  value: value.arches
+                    ? ARCH_OPTION_LABELS[value.arches as ArchOption]
+                    : '—',
+                },
+                { label: 'Appliance', value: value.applianceType || '—' },
+                { label: 'Retainers', value: value.retainers || '—' },
+              ]}
+            />
+            <PropertyTable
+              title="Goals & details"
+              rows={[
+                {
+                  label: 'Treatment goal',
+                  value: (
+                    <span className="whitespace-pre-wrap">
+                      {value.treatmentGoal || '—'}
+                    </span>
+                  ),
+                },
+                {
+                  label: 'Bite details',
+                  value: (
+                    <span className="whitespace-pre-wrap">{value.biteDetails || '—'}</span>
+                  ),
+                },
+              ]}
+            />
+            <div className="lg:col-span-2">
+              <PropertyTable
+                title="Special"
+                rows={[
+                  {
+                    label: 'Special requirements',
+                    value: (
+                      <span className="whitespace-pre-wrap">
+                        {value.specialRequirements || '—'}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: 'Additional notes',
+                    value: (
+                      <span className="whitespace-pre-wrap">
+                        {value.additionalNotes || '—'}
+                      </span>
+                    ),
+                  },
+                ]}
+              />
+            </div>
           </div>
-        </form>
-      ) : (
-        <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
-          {(
-            [
-              ['Arches', value.arches ? ARCH_OPTION_LABELS[value.arches as ArchOption] : '—'],
-              ['Appliance', value.applianceType || '—'],
-              ['Retainers', value.retainers || '—'],
-              ['Treatment goal', value.treatmentGoal || '—'],
-              ['Bite details', value.biteDetails || '—'],
-              ['Special requirements', value.specialRequirements || '—'],
-              ['Additional notes', value.additionalNotes || '—'],
-            ] as Array<[string, string]>
-          ).map(([label, text]) => (
-            <div key={label} className={label.includes('goal') || label.includes('Bite') || label.includes('Special') || label.includes('Additional') ? 'sm:col-span-2' : ''}>
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted">{label}</dt>
-              <dd className="mt-1 whitespace-pre-wrap text-ink">{text}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+        )}
+      </div>
     </section>
   );
 }

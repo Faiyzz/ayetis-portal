@@ -18,7 +18,6 @@ import {
 import { BrandMark } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import { useAuthStore } from '@/features/auth/store';
-import { useCaseDetailNav } from '@/features/cases/caseDetailNav';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
 
 export function RequireAuth() {
@@ -138,7 +137,6 @@ function buildNavItems(
   options: {
     canCreateCase: boolean;
     canCreateUser: boolean;
-    caseDetail: { caseId: string; sections: { id: string; label: string }[] } | null;
   },
 ): NavItem[] {
   const caseChildren: NavChild[] = [
@@ -150,20 +148,6 @@ function buildNavItems(
       isActive: (pathname, hash) => pathname === '/app/cases' && !hash,
     },
   ];
-
-  if (options.caseDetail) {
-    for (const section of options.caseDetail.sections) {
-      caseChildren.push({
-        id: `case-section-${section.id}`,
-        label: section.label,
-        to: `/app/cases/${options.caseDetail.caseId}`,
-        hash: section.id,
-        isActive: (pathname, hash) =>
-          pathname === `/app/cases/${options.caseDetail!.caseId}` &&
-          (hash === section.id || (!hash && section.id === options.caseDetail!.sections[0]?.id)),
-      });
-    }
-  }
 
   if (options.canCreateCase) {
     caseChildren.push({
@@ -341,7 +325,6 @@ function SidebarNav({
 }) {
   const location = useLocation();
   const hash = location.hash.replace(/^#/, '');
-  const activeSectionId = useCaseDetailNav((s) => s.activeSectionId);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -418,15 +401,7 @@ function SidebarNav({
             {hasChildren && isOpen ? (
               <div className="relative ml-4 mt-0.5 space-y-0.5 border-l border-line pl-2.5">
                 {item.children!.map((child) => {
-                  const sectionActive =
-                    child.hash &&
-                    location.pathname === child.to &&
-                    (activeSectionId === child.hash ||
-                      hash === child.hash ||
-                      (!hash && !activeSectionId && child.isActive(location.pathname, hash)));
-                  const active = child.hash
-                    ? Boolean(sectionActive)
-                    : child.isActive(location.pathname, hash);
+                  const active = child.isActive(location.pathname, hash);
 
                   return (
                     <NavLinkRow
@@ -462,9 +437,6 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const titleSlotRef = useRef<HTMLDivElement>(null);
   const actionsSlotRef = useRef<HTMLDivElement>(null);
-  const caseId = useCaseDetailNav((s) => s.caseId);
-  const sections = useCaseDetailNav((s) => s.sections);
-
   const dashboardPath = getDashboardPath(user.role);
   const canCreateCase = can(PERMISSIONS.CASE_CREATE);
   const canCreateUser = can(PERMISSIONS.USER_CREATE);
@@ -487,7 +459,6 @@ export function AppShell() {
       buildNavItems(dashboardPath, {
         canCreateCase,
         canCreateUser,
-        caseDetail: caseId ? { caseId, sections } : null,
       }).filter((item) => {
         if (item.id === 'cases') return canViewCases;
         if (item.id === 'users') return canListUsers;
@@ -500,8 +471,6 @@ export function AppShell() {
       dashboardPath,
       canCreateCase,
       canCreateUser,
-      caseId,
-      sections,
       canViewCases,
       canListUsers,
       canViewRoles,

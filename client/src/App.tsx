@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { AppRouter } from '@/app/router';
+import { DialogHost } from '@/components/dialog';
 import { ToastHost } from '@/features/notifications/ToastHost';
 import { useAuthStore } from '@/features/auth/store';
 
@@ -14,6 +15,7 @@ export function App() {
   return (
     <BrowserRouter>
       <ToastHost />
+      <DialogHost />
       <AppRouter />
     </BrowserRouter>
   );

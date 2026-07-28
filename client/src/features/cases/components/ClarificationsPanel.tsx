@@ -5,7 +5,7 @@ import {
   type ClarificationDto,
   type Role,
 } from '@ayetis/shared';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import {
@@ -13,8 +13,16 @@ import {
   replyToClarification,
   resolveClarification,
 } from '@/features/clarifications/api';
+import { EmptyState } from '@/features/cases/components/detail/EmptyState';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase();
+}
 
 export function ClarificationsPanel({
   caseId,
@@ -33,8 +41,22 @@ export function ClarificationsPanel({
   const [subject, setSubject] = useState('');
   const [requiredInfo, setRequiredInfo] = useState('');
   const [creating, setCreating] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(clarifications[0]?.id ?? null);
+
+  useEffect(() => {
+    if (clarifications.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !clarifications.some((c) => c.id === selectedId)) {
+      setSelectedId(clarifications[0]!.id);
+    }
+  }, [clarifications, selectedId]);
+
+  const selected = clarifications.find((c) => c.id === selectedId) ?? null;
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
@@ -46,6 +68,7 @@ export function ClarificationsPanel({
       });
       setSubject('');
       setRequiredInfo('');
+      setShowCreate(false);
       toast().success('Clarification request sent');
       await onChanged();
     } catch (err) {
@@ -88,18 +111,28 @@ export function ClarificationsPanel({
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className="border-b border-line px-5 py-3.5">
-        <h2 className="text-[15px] font-semibold tracking-tight text-ink">Clarification thread</h2>
-        <p className="mt-0.5 text-sm text-muted">
-          Requests and replies linked to this Case ID.
-        </p>
+    <section className="overflow-hidden rounded-xl border border-line bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+        <div>
+          <h2 className="text-sm font-semibold text-ink">Clarifications</h2>
+          <p className="mt-0.5 text-sm text-muted">Threaded requests and replies for this case.</p>
+        </div>
+        {canCreate ? (
+          <button
+            type="button"
+            onClick={() => setShowCreate((v) => !v)}
+            className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300"
+          >
+            {showCreate ? 'Cancel' : 'New request'}
+          </button>
+        ) : null}
       </div>
 
-      <div className="space-y-4 p-5">
-      {canCreate ? (
-        <form onSubmit={handleCreate} className="space-y-3 rounded-lg border border-dashed border-line bg-surface/50 p-4">
-          <p className="text-sm font-medium text-ink">Create clarification request</p>
+      {showCreate && canCreate ? (
+        <form
+          onSubmit={handleCreate}
+          className="space-y-3 border-b border-line bg-surface/40 px-4 py-4"
+        >
           <TextField
             label="Subject"
             required
@@ -127,99 +160,144 @@ export function ClarificationsPanel({
       ) : null}
 
       {clarifications.length === 0 ? (
-        <p className="text-sm text-muted">No clarifications yet.</p>
+        <div className="p-4">
+          <EmptyState
+            title="No clarifications yet"
+            description="When information is missing or unclear, start a clarification thread so the doctor and team can resolve it in one place."
+            icon={
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5M7 4h10a2 2 0 012 2v9a2 2 0 01-2 2H9l-4 3v-3H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
+              </svg>
+            }
+          />
+        </div>
       ) : (
-        <ul className="space-y-4">
-          {clarifications.map((item) => {
-            const open = item.status !== 'resolved';
-            return (
-              <li key={item.id} className="rounded-xl border border-line p-4">
+        <div className="grid min-h-[22rem] lg:grid-cols-[16rem_minmax(0,1fr)]">
+          <ul
+            className="divide-y divide-line border-b border-line lg:border-b-0 lg:border-r"
+            role="listbox"
+            aria-label="Clarification threads"
+          >
+            {clarifications.map((item) => {
+              const active = item.id === selectedId;
+              const open = item.status !== 'resolved';
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    onClick={() => setSelectedId(item.id)}
+                    className={`w-full px-3.5 py-3 text-left transition ${
+                      active ? 'bg-brand-50/70' : 'hover:bg-surface/80'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate text-sm font-semibold text-ink">{item.subject}</p>
+                      {open ? (
+                        <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-label="Open" />
+                      ) : null}
+                    </div>
+                    <p className="mt-1 truncate text-xs text-muted">
+                      {CLARIFICATION_STATUS_LABELS[item.status]} ·{' '}
+                      {new Date(item.updatedAt).toLocaleDateString()}
+                    </p>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          {selected ? (
+            <div className="flex min-h-0 flex-col">
+              <div className="border-b border-line px-4 py-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold text-ink">{item.subject}</p>
-                    <p className="mt-1 text-xs text-muted">
-                      {item.createdByName} ·{' '}
-                      {ROLE_LABELS[item.createdByRole as Role] ?? item.createdByRole} ·{' '}
-                      {new Date(item.createdAt).toLocaleString()}
+                    <h3 className="text-sm font-semibold text-ink">{selected.subject}</h3>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {selected.createdByName} ·{' '}
+                      {ROLE_LABELS[selected.createdByRole as Role] ?? selected.createdByRole} ·{' '}
+                      {new Date(selected.createdAt).toLocaleString()}
                     </p>
                   </div>
                   <span className="rounded-md bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700">
-                    {CLARIFICATION_STATUS_LABELS[item.status]}
+                    {CLARIFICATION_STATUS_LABELS[selected.status]}
                   </span>
                 </div>
-
-                <div className="mt-3 rounded-lg bg-surface px-3 py-2 text-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2 text-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-amber-800">
                     Required information
                   </p>
-                  <p className="mt-1 whitespace-pre-wrap text-ink">{item.requiredInfo}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-ink">{selected.requiredInfo}</p>
                 </div>
+              </div>
 
-                <ul className="mt-4 space-y-3 border-l-2 border-brand-100 pl-3">
-                  {item.messages.map((message) => (
-                    <li key={message.id} className="text-sm">
-                      <p className="font-medium text-ink">
+              <ul className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+                {selected.messages.map((message) => (
+                  <li key={message.id} className="flex gap-3">
+                    <div
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-[11px] font-semibold text-brand-700"
+                      aria-hidden
+                    >
+                      {initials(message.authorName)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-ink">
                         {message.authorName}{' '}
-                        <span className="text-xs font-normal text-muted">
+                        <span className="font-normal text-muted">
                           · {ROLE_LABELS[message.authorRole as Role] ?? message.authorRole} ·{' '}
                           {new Date(message.createdAt).toLocaleString()}
                         </span>
                       </p>
-                      <p className="mt-1 whitespace-pre-wrap text-ink">{message.body}</p>
-                    </li>
-                  ))}
-                </ul>
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                        {message.body}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
 
-                {open && canReply ? (
-                  <div className="mt-4 space-y-2">
+              {selected.status !== 'resolved' && (canReply || canResolve) ? (
+                <div className="sticky bottom-0 space-y-2 border-t border-line bg-white px-4 py-3">
+                  {canReply ? (
                     <textarea
-                      rows={3}
-                      value={replyDrafts[item.id] ?? ''}
+                      rows={2}
+                      value={replyDrafts[selected.id] ?? ''}
                       onChange={(e) =>
-                        setReplyDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
+                        setReplyDrafts((prev) => ({ ...prev, [selected.id]: e.target.value }))
                       }
                       placeholder="Write your reply…"
-                      className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+                      className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
                     />
-                    <div className="flex flex-wrap gap-2">
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    {canReply ? (
                       <button
                         type="button"
-                        disabled={busyId === item.id}
-                        onClick={() => void handleReply(item.id)}
+                        disabled={busyId === selected.id}
+                        onClick={() => void handleReply(selected.id)}
                         className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
                       >
-                        {busyId === item.id ? 'Sending…' : 'Send reply'}
+                        {busyId === selected.id ? 'Sending…' : 'Send reply'}
                       </button>
-                      {canResolve ? (
-                        <button
-                          type="button"
-                          disabled={busyId === item.id}
-                          onClick={() => void handleResolve(item.id)}
-                          className="rounded-xl border border-line px-4 py-2 text-sm font-semibold text-ink hover:border-brand-300 disabled:opacity-60"
-                        >
-                          Mark resolved
-                        </button>
-                      ) : null}
-                    </div>
+                    ) : null}
+                    {canResolve ? (
+                      <button
+                        type="button"
+                        disabled={busyId === selected.id}
+                        onClick={() => void handleResolve(selected.id)}
+                        className="rounded-xl border border-line px-4 py-2 text-sm font-semibold text-ink hover:border-brand-300 disabled:opacity-60"
+                      >
+                        Mark resolved
+                      </button>
+                    ) : null}
                   </div>
-                ) : null}
-
-                {open && canResolve && !canReply ? (
-                  <button
-                    type="button"
-                    disabled={busyId === item.id}
-                    onClick={() => void handleResolve(item.id)}
-                    className="mt-3 rounded-xl border border-line px-4 py-2 text-sm font-semibold text-ink"
-                  >
-                    Mark resolved
-                  </button>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       )}
-      </div>
     </section>
   );
 }

@@ -12,6 +12,7 @@ import {
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
+import { dialog } from '@/components/dialog';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { toast } from '@/features/notifications/toastStore';
 import api, { getErrorMessage } from '@/lib/api';
@@ -176,7 +177,13 @@ export function SupervisorDashboard({ firstName }: { firstName: string }) {
   }
 
   async function deactivate(userId: string, email: string) {
-    if (!window.confirm(`Deactivate ${email}?`)) return;
+    const confirmed = await dialog.confirm({
+      title: 'Deactivate member',
+      message: `Deactivate ${email}? They will no longer be able to sign in.`,
+      confirmLabel: 'Deactivate',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await api.post(`/supervisor/members/${userId}/deactivate`);
       toast().success('Member deactivated');
