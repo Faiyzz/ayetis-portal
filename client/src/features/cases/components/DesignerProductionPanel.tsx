@@ -80,14 +80,15 @@ export function DesignerProductionPanel({
   }
 
   return (
-    <section className="space-y-5 rounded-xl border border-line bg-white p-5">
-      <div>
-        <h2 className="text-sm font-semibold text-ink">Designer workspace</h2>
-        <p className="mt-1 text-sm text-muted">
+    <section className="overflow-hidden rounded-xl border border-line bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="border-b border-line px-5 py-3.5">
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">Designer workspace</h2>
+        <p className="mt-0.5 text-sm text-muted">
           Review instructions, run production, clarify missing info, then send to QC.
         </p>
       </div>
 
+      <div className="space-y-5 p-5">
       {needsResubmit ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <p className="font-semibold">QC rejected — changes required</p>
@@ -258,6 +259,7 @@ export function DesignerProductionPanel({
           {caseData.submittedToQcByName ? ` (submitted by ${caseData.submittedToQcByName})` : ''}.
         </p>
       ) : null}
+      </div>
     </section>
   );
 }

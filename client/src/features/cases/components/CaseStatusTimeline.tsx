@@ -36,11 +36,11 @@ export function CaseStatusTimeline({
   isCancelled?: boolean;
 }) {
   return (
-    <section className="rounded-xl border border-line bg-white p-5">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <section className="overflow-hidden rounded-xl border border-line bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="flex flex-wrap items-end justify-between gap-2 border-b border-line px-5 py-3.5">
         <div>
-          <h2 className="text-sm font-semibold text-ink">Status timeline</h2>
-          <p className="mt-1 text-sm text-muted">
+          <h2 className="text-[15px] font-semibold tracking-tight text-ink">Status timeline</h2>
+          <p className="mt-0.5 text-sm text-muted">
             {isCancelled
               ? 'This case was cancelled and is no longer progressing.'
               : `Current stage: ${currentLabel}`}
@@ -53,7 +53,7 @@ export function CaseStatusTimeline({
         ) : null}
       </div>
 
-      <ol className="mt-6 flex flex-col gap-0 sm:flex-row sm:items-start">
+      <ol className="flex flex-col gap-0 p-5 sm:flex-row sm:items-start">
         {steps.map((step, index) => {
           const styles = stateStyles[step.state];
           const isLast = index === steps.length - 1;

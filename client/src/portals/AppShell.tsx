@@ -1,10 +1,24 @@
 import { getDashboardPath, PERMISSIONS, ROLE_LABELS, type Permission, type Role } from '@ayetis/shared';
-import { useRef, useState } from 'react';
-import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { PageHeaderProvider } from '@/components/PageHeader';
+import {
+  IconActivity,
+  IconBell,
+  IconBriefcase,
+  IconChevron,
+  IconKey,
+  IconLayoutDashboard,
+  IconList,
+  IconMessageSquare,
+  IconPlus,
+  IconShield,
+  IconUsers,
+} from '@/components/NavIcons';
 import { BrandMark } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import { useAuthStore } from '@/features/auth/store';
+import { useCaseDetailNav } from '@/features/cases/caseDetailNav';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
 
 export function RequireAuth() {
@@ -99,64 +113,125 @@ export function RequireAnyPermission({
   return <Outlet />;
 }
 
-interface NavItem {
+type NavChild = {
   id: string;
   label: string;
   to: string;
-  /** Returns whether this item should appear active for the current path. */
+  hash?: string;
+  icon?: ReactNode;
+  isActive: (pathname: string, hash: string) => boolean;
+};
+
+type NavItem = {
+  id: string;
+  label: string;
+  to: string;
+  icon: ReactNode;
   isActive: (pathname: string) => boolean;
   permission?: Permission;
   anyOf?: Permission[];
-}
+  children?: NavChild[];
+};
 
-function buildNavItems(dashboardPath: string): NavItem[] {
+function buildNavItems(
+  dashboardPath: string,
+  options: {
+    canCreateCase: boolean;
+    canCreateUser: boolean;
+    caseDetail: { caseId: string; sections: { id: string; label: string }[] } | null;
+  },
+): NavItem[] {
+  const caseChildren: NavChild[] = [
+    {
+      id: 'all-cases',
+      label: 'All cases',
+      to: '/app/cases',
+      icon: <IconList className="h-3.5 w-3.5" />,
+      isActive: (pathname, hash) => pathname === '/app/cases' && !hash,
+    },
+  ];
+
+  if (options.caseDetail) {
+    for (const section of options.caseDetail.sections) {
+      caseChildren.push({
+        id: `case-section-${section.id}`,
+        label: section.label,
+        to: `/app/cases/${options.caseDetail.caseId}`,
+        hash: section.id,
+        isActive: (pathname, hash) =>
+          pathname === `/app/cases/${options.caseDetail!.caseId}` &&
+          (hash === section.id || (!hash && section.id === options.caseDetail!.sections[0]?.id)),
+      });
+    }
+  }
+
+  if (options.canCreateCase) {
+    caseChildren.push({
+      id: 'create-case',
+      label: 'Create case',
+      to: '/app/cases/new',
+      icon: <IconPlus className="h-3.5 w-3.5" />,
+      isActive: (pathname) => pathname === '/app/cases/new',
+    });
+  }
+
+  const userChildren: NavChild[] = [
+    {
+      id: 'all-users',
+      label: 'Directory',
+      to: '/app/users',
+      icon: <IconList className="h-3.5 w-3.5" />,
+      isActive: (pathname) =>
+        pathname === '/app/users' ||
+        (pathname.startsWith('/app/users/') && !pathname.startsWith('/app/users/create')),
+    },
+  ];
+
+  if (options.canCreateUser) {
+    userChildren.push({
+      id: 'create-user',
+      label: 'Create user',
+      to: '/app/users/create',
+      icon: <IconPlus className="h-3.5 w-3.5" />,
+      isActive: (pathname) => pathname === '/app/users/create',
+    });
+  }
+
   return [
     {
       id: 'dashboard',
       label: 'Dashboard',
       to: dashboardPath,
+      icon: <IconLayoutDashboard />,
       isActive: (pathname) => pathname === dashboardPath || pathname === '/app',
     },
     {
       id: 'cases',
       label: 'Cases',
       to: '/app/cases',
+      icon: <IconBriefcase />,
       anyOf: [
         PERMISSIONS.CASE_VIEW_OWN,
         PERMISSIONS.CASE_VIEW_ALL,
         PERMISSIONS.CASE_VIEW_ASSIGNED,
       ],
-      isActive: (pathname) =>
-        pathname === '/app/cases' ||
-        (pathname.startsWith('/app/cases/') && pathname !== '/app/cases/new'),
-    },
-    {
-      id: 'create-case',
-      label: 'Create case',
-      to: '/app/cases/new',
-      permission: PERMISSIONS.CASE_CREATE,
-      isActive: (pathname) => pathname === '/app/cases/new',
+      isActive: (pathname) => pathname.startsWith('/app/cases'),
+      children: caseChildren,
     },
     {
       id: 'users',
       label: 'Users',
       to: '/app/users',
+      icon: <IconUsers />,
       permission: PERMISSIONS.USER_LIST,
-      isActive: (pathname) =>
-        pathname === '/app/users' ||
-        (pathname.startsWith('/app/users/') && !pathname.startsWith('/app/users/create')),
-    },
-    {
-      id: 'create-user',
-      label: 'Create user',
-      to: '/app/users/create',
-      permission: PERMISSIONS.USER_CREATE,
-      isActive: (pathname) => pathname === '/app/users/create',
+      isActive: (pathname) => pathname.startsWith('/app/users'),
+      children: userChildren,
     },
     {
       id: 'roles',
       label: 'Roles',
       to: '/app/roles',
+      icon: <IconShield />,
       permission: PERMISSIONS.ROLE_VIEW_PERMISSIONS,
       isActive: (pathname) => pathname.startsWith('/app/roles'),
     },
@@ -164,6 +239,7 @@ function buildNavItems(dashboardPath: string): NavItem[] {
       id: 'complaints',
       label: 'Complaints',
       to: '/app/complaints',
+      icon: <IconMessageSquare />,
       anyOf: [
         PERMISSIONS.COMPLAINT_CREATE,
         PERMISSIONS.COMPLAINT_VIEW,
@@ -175,12 +251,14 @@ function buildNavItems(dashboardPath: string): NavItem[] {
       id: 'notifications',
       label: 'Notifications',
       to: '/app/notifications',
+      icon: <IconBell />,
       isActive: (pathname) => pathname.startsWith('/app/notifications'),
     },
     {
       id: 'activity',
       label: 'Activity log',
       to: '/app/activity',
+      icon: <IconActivity />,
       permission: PERMISSIONS.AUDIT_VIEW,
       isActive: (pathname) => pathname.startsWith('/app/activity'),
     },
@@ -188,26 +266,249 @@ function buildNavItems(dashboardPath: string): NavItem[] {
       id: 'password',
       label: 'Password',
       to: '/app/change-password',
+      icon: <IconKey />,
       isActive: (pathname) => pathname === '/app/change-password',
     },
   ];
+}
+
+function NavLinkRow({
+  to,
+  hash,
+  active,
+  onNavigate,
+  children,
+  depth = 0,
+}: {
+  to: string;
+  hash?: string;
+  active: boolean;
+  onNavigate: () => void;
+  children: ReactNode;
+  depth?: number;
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  function handleClick(event: MouseEvent) {
+    if (!hash) {
+      onNavigate();
+      return;
+    }
+
+    event.preventDefault();
+    const targetPath = to;
+    if (location.pathname === targetPath) {
+      const el = document.getElementById(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        window.history.replaceState(null, '', `#${hash}`);
+      }
+    } else {
+      void navigate(`${targetPath}#${hash}`);
+    }
+    onNavigate();
+  }
+
+  return (
+    <Link
+      to={hash ? `${to}#${hash}` : to}
+      onClick={handleClick}
+      aria-current={active ? 'page' : undefined}
+      className={[
+        'group flex items-center gap-2.5 rounded-lg text-[13px] font-medium transition',
+        depth > 0 ? 'px-2.5 py-1.5' : 'px-3 py-2',
+        active
+          ? depth > 0
+            ? 'bg-brand-50 text-brand-700'
+            : 'bg-brand-500 text-white'
+          : depth > 0
+            ? 'text-muted hover:bg-brand-50/70 hover:text-brand-700'
+            : 'text-slate-600 hover:bg-brand-50 hover:text-brand-700',
+      ].join(' ')}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function SidebarNav({
+  items,
+  onNavigate,
+}: {
+  items: NavItem[];
+  onNavigate: () => void;
+}) {
+  const location = useLocation();
+  const hash = location.hash.replace(/^#/, '');
+  const activeSectionId = useCaseDetailNav((s) => s.activeSectionId);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setExpanded((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const item of items) {
+        if (item.children && item.isActive(location.pathname) && !next[item.id]) {
+          next[item.id] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [location.pathname, items]);
+
+  return (
+    <nav className="flex-1 space-y-1 overflow-y-auto px-2.5 py-3">
+      {items.map((item) => {
+        const parentActive = item.isActive(location.pathname);
+        const isOpen = Boolean(expanded[item.id] ?? parentActive);
+        const hasChildren = Boolean(item.children?.length);
+
+        return (
+          <div key={item.id}>
+            <div className="flex items-center gap-0.5">
+              <Link
+                to={item.to}
+                onClick={onNavigate}
+                aria-current={parentActive && !hasChildren ? 'page' : undefined}
+                className={[
+                  'flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-semibold tracking-tight transition',
+                  parentActive && !hasChildren
+                    ? 'bg-brand-500 text-white'
+                    : parentActive
+                      ? 'bg-brand-50 text-brand-800'
+                      : 'text-slate-700 hover:bg-brand-50 hover:text-brand-700',
+                ].join(' ')}
+              >
+                <span
+                  className={[
+                    'shrink-0 opacity-90',
+                    parentActive && !hasChildren ? 'text-white' : 'text-slate-500',
+                    parentActive && hasChildren ? 'text-brand-600' : '',
+                  ].join(' ')}
+                >
+                  {item.icon}
+                </span>
+                <span className="truncate">{item.label}</span>
+              </Link>
+              {hasChildren ? (
+                <button
+                  type="button"
+                  aria-label={isOpen ? `Collapse ${item.label}` : `Expand ${item.label}`}
+                  aria-expanded={isOpen}
+                  onClick={() =>
+                    setExpanded((prev) => ({ ...prev, [item.id]: !isOpen }))
+                  }
+                  className={[
+                    'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-brand-50 hover:text-brand-700',
+                    isOpen ? 'text-brand-600' : '',
+                  ].join(' ')}
+                >
+                  <IconChevron
+                    className={[
+                      'h-4 w-4 transition-transform duration-200',
+                      isOpen ? 'rotate-90' : '',
+                    ].join(' ')}
+                  />
+                </button>
+              ) : null}
+            </div>
+
+            {hasChildren && isOpen ? (
+              <div className="relative ml-4 mt-0.5 space-y-0.5 border-l border-line pl-2.5">
+                {item.children!.map((child) => {
+                  const sectionActive =
+                    child.hash &&
+                    location.pathname === child.to &&
+                    (activeSectionId === child.hash ||
+                      hash === child.hash ||
+                      (!hash && !activeSectionId && child.isActive(location.pathname, hash)));
+                  const active = child.hash
+                    ? Boolean(sectionActive)
+                    : child.isActive(location.pathname, hash);
+
+                  return (
+                    <NavLinkRow
+                      key={child.id}
+                      to={child.to}
+                      hash={child.hash}
+                      active={active}
+                      onNavigate={onNavigate}
+                      depth={1}
+                    >
+                      {child.icon ? (
+                        <span className="shrink-0 opacity-70">{child.icon}</span>
+                      ) : (
+                        <span className="inline-block h-1 w-1 shrink-0 rounded-full bg-current opacity-40" />
+                      )}
+                      <span className="truncate leading-snug">{child.label}</span>
+                    </NavLinkRow>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </nav>
+  );
 }
 
 export function AppShell() {
   const user = useAuthStore((s) => s.user)!;
   const logout = useAuthStore((s) => s.logout);
   const { can, canAny } = usePermissions();
-  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const titleSlotRef = useRef<HTMLDivElement>(null);
   const actionsSlotRef = useRef<HTMLDivElement>(null);
+  const caseId = useCaseDetailNav((s) => s.caseId);
+  const sections = useCaseDetailNav((s) => s.sections);
 
   const dashboardPath = getDashboardPath(user.role);
-  const navItems = buildNavItems(dashboardPath).filter((item) => {
-    if (item.anyOf) return canAny(...item.anyOf);
-    if (item.permission) return can(item.permission);
-    return true;
-  });
+  const canCreateCase = can(PERMISSIONS.CASE_CREATE);
+  const canCreateUser = can(PERMISSIONS.USER_CREATE);
+  const canListUsers = can(PERMISSIONS.USER_LIST);
+  const canViewRoles = can(PERMISSIONS.ROLE_VIEW_PERMISSIONS);
+  const canViewActivity = can(PERMISSIONS.AUDIT_VIEW);
+  const canViewCases = canAny(
+    PERMISSIONS.CASE_VIEW_OWN,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+  );
+  const canViewComplaints = canAny(
+    PERMISSIONS.COMPLAINT_CREATE,
+    PERMISSIONS.COMPLAINT_VIEW,
+    PERMISSIONS.COMPLAINT_MANAGE,
+  );
+
+  const navItems = useMemo(
+    () =>
+      buildNavItems(dashboardPath, {
+        canCreateCase,
+        canCreateUser,
+        caseDetail: caseId ? { caseId, sections } : null,
+      }).filter((item) => {
+        if (item.id === 'cases') return canViewCases;
+        if (item.id === 'users') return canListUsers;
+        if (item.id === 'roles') return canViewRoles;
+        if (item.id === 'activity') return canViewActivity;
+        if (item.id === 'complaints') return canViewComplaints;
+        return true;
+      }),
+    [
+      dashboardPath,
+      canCreateCase,
+      canCreateUser,
+      caseId,
+      sections,
+      canViewCases,
+      canListUsers,
+      canViewRoles,
+      canViewActivity,
+      canViewComplaints,
+    ],
+  );
 
   function closeMobile() {
     setMobileOpen(false);
@@ -227,36 +528,18 @@ export function AppShell() {
 
         <aside
           className={[
-            'fixed inset-y-0 left-0 z-40 flex w-[240px] flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0',
+            'fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0',
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           ].join(' ')}
         >
           <div className="border-b border-line px-4 py-4">
             <BrandMark />
-            <p className="mt-2 text-xs text-muted">{ROLE_LABELS[user.role as Role]} portal</p>
+            <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+              {ROLE_LABELS[user.role as Role]} portal
+            </p>
           </div>
 
-          <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
-            {navItems.map((item) => {
-              const active = item.isActive(location.pathname);
-              return (
-                <Link
-                  key={item.id}
-                  to={item.to}
-                  onClick={closeMobile}
-                  aria-current={active ? 'page' : undefined}
-                  className={[
-                    'flex items-center rounded-lg px-3 py-2 text-sm font-medium transition',
-                    active
-                      ? 'bg-brand-500 text-white'
-                      : 'text-muted hover:bg-brand-50 hover:text-brand-700',
-                  ].join(' ')}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <SidebarNav items={navItems} onNavigate={closeMobile} />
 
           <div className="border-t border-line p-3">
             <div className="rounded-lg bg-surface px-3 py-2.5">

@@ -88,14 +88,15 @@ export function ClarificationsPanel({
   }
 
   return (
-    <section className="space-y-4 rounded-xl border border-line bg-white p-5">
-      <div>
-        <h2 className="text-sm font-semibold text-ink">Clarification thread</h2>
-        <p className="mt-1 text-sm text-muted">
+    <section className="overflow-hidden rounded-xl border border-line bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="border-b border-line px-5 py-3.5">
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">Clarification thread</h2>
+        <p className="mt-0.5 text-sm text-muted">
           Requests and replies linked to this Case ID.
         </p>
       </div>
 
+      <div className="space-y-4 p-5">
       {canCreate ? (
         <form onSubmit={handleCreate} className="space-y-3 rounded-lg border border-dashed border-line bg-surface/50 p-4">
           <p className="text-sm font-medium text-ink">Create clarification request</p>
@@ -218,6 +219,7 @@ export function ClarificationsPanel({
           })}
         </ul>
       )}
+      </div>
     </section>
   );
 }

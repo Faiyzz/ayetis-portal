@@ -115,11 +115,11 @@ export function QcReviewPanel({
   }
 
   return (
-    <section className="space-y-5 rounded-xl border border-line bg-white p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="overflow-hidden rounded-xl border border-line bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-3.5">
         <div>
-          <h2 className="text-sm font-semibold text-ink">QC review</h2>
-          <p className="mt-1 text-sm text-muted">
+          <h2 className="text-[15px] font-semibold tracking-tight text-ink">QC review</h2>
+          <p className="mt-0.5 text-sm text-muted">
             Open files, document findings, approve with delivery assets, or reject with an error
             code.
           </p>
@@ -132,12 +132,13 @@ export function QcReviewPanel({
               toast().error(getErrorMessage(err, 'Unable to download files')),
             );
           }}
-          className="rounded-xl border border-line px-4 py-2 text-sm font-semibold text-ink hover:border-brand-300 disabled:opacity-60"
+          className="rounded-lg border border-line px-3.5 py-2 text-sm font-semibold text-ink hover:border-brand-300 disabled:opacity-60"
         >
           Download all files
         </button>
       </div>
 
+      <div className="space-y-5 p-5">
       {(caseData.qcRejectionCount > 0 || caseData.escalatedForOversight) && (
         <div className="flex flex-wrap gap-2 text-xs">
           {caseData.qcRejectionCount > 0 ? (
@@ -360,6 +361,7 @@ export function QcReviewPanel({
           . Priority: {CASE_PRIORITY_LABELS[caseData.priority]}.
         </p>
       ) : null}
+      </div>
     </section>
   );
 }
