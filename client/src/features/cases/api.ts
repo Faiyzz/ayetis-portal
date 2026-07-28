@@ -351,6 +351,11 @@ export async function fetchDesignerAssignees() {
   return data.data as import('@ayetis/shared').DesignerAssigneeDto[];
 }
 
+export async function fetchDoctorAssignees() {
+  const { data } = await api.get('/cases/assignees/doctors');
+  return data.data as import('@ayetis/shared').DoctorAssigneeDto[];
+}
+
 export async function startCaseValidation(caseId: string): Promise<CaseDetailDto> {
   const { data } = await api.post(`/cases/${caseId}/validation/start`);
   return data.data;

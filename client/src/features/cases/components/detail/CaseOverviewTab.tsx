@@ -1,20 +1,31 @@
 import {
+  ARCH_OPTION_LABELS,
   ASSIGNMENT_MODE_LABELS,
   CASE_STATUS_LABELS,
+  EMPTY_TREATMENT_INSTRUCTIONS,
   type CaseDetailDto,
 } from '@ayetis/shared';
 import { useState } from 'react';
 import { Alert } from '@/features/auth/components/AuthUI';
 import { CaseStatusTimeline } from '@/features/cases/components/CaseStatusTimeline';
+import { CaseValidationAssignPanel } from '@/features/cases/components/CaseValidationAssignPanel';
 import { AttentionCallout, buildAttentionItems } from './AttentionCallout';
 import { PropertyTable } from './PropertyTable';
 
 export function CaseOverviewTab({
   caseData,
   onOpenTab,
+  onUpdated,
+  canAssign = false,
+  canValidate = false,
+  canSetPriority = false,
 }: {
   caseData: CaseDetailDto;
   onOpenTab: (tabId: string) => void;
+  onUpdated: (next: CaseDetailDto) => void;
+  canAssign?: boolean;
+  canValidate?: boolean;
+  canSetPriority?: boolean;
 }) {
   const [showAllInstructions, setShowAllInstructions] = useState(false);
   const instructions = caseData.instructions?.trim() || '';
@@ -24,9 +35,12 @@ export function CaseOverviewTab({
       ? instructions || 'No free-text instructions provided.'
       : `${instructions.slice(0, 220).trimEnd()}…`;
 
+  const ti = { ...EMPTY_TREATMENT_INSTRUCTIONS, ...caseData.treatmentInstructions };
   const attention = buildAttentionItems(caseData, {
     onOpenCommunication: () => onOpenTab('communication'),
     onOpenWork: () => onOpenTab('work'),
+    onOpenAssignment: canAssign || canValidate ? () => onOpenTab('assignment') : undefined,
+    canAssign,
   });
 
   return (
@@ -89,6 +103,49 @@ export function CaseOverviewTab({
             },
           ]}
         />
+
+        {(canAssign || canValidate) && !caseData.isDeleted ? (
+          <div id="assignment-actions" className="scroll-mt-40">
+            <CaseValidationAssignPanel
+              caseData={caseData}
+              canValidate={canValidate}
+              canAssign={canAssign}
+              canSetPriority={canSetPriority}
+              onUpdated={onUpdated}
+              onOpenClarifications={() => onOpenTab('communication')}
+            />
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <PropertyTable
+            title="Appliance"
+            rows={[
+              {
+                label: 'Arches',
+                value: ti.arches ? ARCH_OPTION_LABELS[ti.arches] : '—',
+              },
+              { label: 'Appliance', value: ti.applianceType || '—' },
+              { label: 'Retainers', value: ti.retainers || '—' },
+            ]}
+          />
+          <PropertyTable
+            title="Goals & details"
+            rows={[
+              { label: 'Treatment goal', value: ti.treatmentGoal || '—' },
+              { label: 'Bite details', value: ti.biteDetails || '—' },
+            ]}
+          />
+          <div className="lg:col-span-2">
+            <PropertyTable
+              title="Special"
+              rows={[
+                { label: 'Special requirements', value: ti.specialRequirements || '—' },
+                { label: 'Additional notes', value: ti.additionalNotes || '—' },
+              ]}
+            />
+          </div>
+        </div>
 
         <div className="rounded-xl border border-line bg-white">
           <div className="border-b border-line px-4 py-3">

@@ -81,6 +81,7 @@ export const createCaseSchema = z.object({
       message: 'Invalid priority',
     }),
   initialNote: z.string().trim().max(2000).optional(),
+  doctorId: z.string().trim().min(1).optional(),
 });
 
 export const updateCaseSchema = z

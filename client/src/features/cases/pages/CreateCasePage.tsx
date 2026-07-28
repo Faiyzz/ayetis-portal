@@ -1,18 +1,24 @@
 import {
   ALL_FILE_CATEGORIES,
   CASE_PRIORITIES,
+  COUNTRIES,
   EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORIES,
   FILE_CATEGORY_LABELS,
+  GENDER_OPTIONS,
+  ROLES,
   type CreateCaseInput,
+  type DoctorAssigneeDto,
   type FileCategory,
   type TreatmentInstructions,
 } from '@ayetis/shared';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
+import { SearchableSelect } from '@/components/SearchableSelect';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
-import { createCase, uploadCaseFiles } from '@/features/cases/api';
+import { useAuthStore } from '@/features/auth/store';
+import { createCase, fetchDoctorAssignees, uploadCaseFiles } from '@/features/cases/api';
 import { TreatmentInstructionsFields } from '@/features/cases/components/TreatmentInstructionsPanel';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
@@ -37,7 +43,10 @@ const INITIAL: CreateCaseInput = {
   treatmentInstructions: { ...EMPTY_TREATMENT_INSTRUCTIONS },
   priority: CASE_PRIORITIES.NORMAL,
   initialNote: '',
+  doctorId: '',
 };
+
+const COUNTRY_OPTIONS = COUNTRIES.map((name) => ({ value: name, label: name }));
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -45,10 +54,30 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function tiSummary(ti: Partial<TreatmentInstructions> | undefined) {
+  if (!ti) return [];
+  return [
+    ['Arches', ti.arches || '—'],
+    ['Appliance', ti.applianceType || '—'],
+    ['Goal', ti.treatmentGoal || '—'],
+    ['Bite', ti.biteDetails || '—'],
+    ['Retainers', ti.retainers || '—'],
+    ['Special', ti.specialRequirements || '—'],
+  ] as const;
+}
+
 export function CreateCasePage() {
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const isDoctor = user?.role === ROLES.DOCTOR;
+  const needsDoctorPicker = Boolean(user && !isDoctor);
+
   const [stepIndex, setStepIndex] = useState(0);
-  const [form, setForm] = useState<CreateCaseInput>(INITIAL);
+  const [form, setForm] = useState<CreateCaseInput>(() => ({
+    ...INITIAL,
+    doctorId: isDoctor ? user?.id : '',
+  }));
+  const [doctors, setDoctors] = useState<DoctorAssigneeDto[]>([]);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [fileCategory, setFileCategory] = useState<FileCategory | ''>('');
   const [error, setError] = useState('');
@@ -60,6 +89,21 @@ export function CreateCasePage() {
     [stepIndex],
   );
 
+  const treatmentInstructions: TreatmentInstructions = {
+    ...EMPTY_TREATMENT_INSTRUCTIONS,
+    ...(form.treatmentInstructions ?? {}),
+  };
+
+  useEffect(() => {
+    if (!needsDoctorPicker) return;
+    void fetchDoctorAssignees()
+      .then(setDoctors)
+      .catch(() => {
+        setDoctors([]);
+        toast().error('Unable to load doctor list');
+      });
+  }, [needsDoctorPicker]);
+
   function update<K extends keyof CreateCaseInput>(key: K, value: CreateCaseInput[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -67,6 +111,7 @@ export function CreateCasePage() {
   function validateStep(id: StepId): string | null {
     if (id === 'patient') {
       if (!form.patientName.trim()) return 'Patient name is required';
+      if (needsDoctorPicker && !form.doctorId) return 'Select the treating doctor';
       return null;
     }
     if (id === 'treatment') {
@@ -108,7 +153,9 @@ export function CreateCasePage() {
     try {
       const created = await createCase({
         ...form,
+        doctorId: needsDoctorPicker ? form.doctorId : undefined,
         priority: CASE_PRIORITIES.NORMAL,
+        treatmentInstructions: { ...treatmentInstructions },
         patientAge:
           form.patientAge === null || form.patientAge === undefined || Number.isNaN(form.patientAge)
             ? null
@@ -118,30 +165,27 @@ export function CreateCasePage() {
       if (pendingFiles.length > 0) {
         try {
           await uploadCaseFiles(created.caseId, pendingFiles, {
-            category: fileCategory || undefined,
+            category: fileCategory || FILE_CATEGORIES.OTHER,
           });
         } catch (uploadErr) {
           toast().warning(
-            getErrorMessage(
-              uploadErr,
-              'Case created, but some files failed to upload. You can add them on the case page.',
-            ),
+            getErrorMessage(uploadErr, 'Case created, but some files failed to upload'),
           );
-          navigate(`/app/cases/${created.caseId}`, { replace: true });
-          return;
         }
       }
 
       toast().success(`Case ${created.caseId} submitted`);
       navigate(`/app/cases/${created.caseId}`, { replace: true });
     } catch (err) {
-      const message = getErrorMessage(err, 'Unable to submit case');
+      const message = getErrorMessage(err, 'Unable to create case');
       setError(message);
       toast().error(message);
     } finally {
       setLoading(false);
     }
   }
+
+  const selectedDoctor = doctors.find((d) => d.id === form.doctorId);
 
   return (
     <div className="w-full max-w-3xl space-y-5">
@@ -200,6 +244,25 @@ export function CreateCasePage() {
 
         {step.id === 'patient' ? (
           <div className="grid gap-4 sm:grid-cols-2">
+            {needsDoctorPicker ? (
+              <div className="sm:col-span-2">
+                <SearchableSelect
+                  label="Treating doctor"
+                  required
+                  value={form.doctorId ?? ''}
+                  onChange={(next) => update('doctorId', next)}
+                  placeholder="Search doctors…"
+                  options={doctors.map((doctor) => ({
+                    value: doctor.id,
+                    label: `${doctor.firstName} ${doctor.lastName}`,
+                    meta: doctor.email,
+                  }))}
+                />
+                <p className="mt-1.5 text-xs text-muted">
+                  Cases must belong to a doctor account — not the admin creating them.
+                </p>
+              </div>
+            ) : null}
             <TextField
               label="Patient name"
               required
@@ -216,21 +279,34 @@ export function CreateCasePage() {
                 update('patientAge', e.target.value === '' ? null : Number(e.target.value))
               }
             />
-            <TextField
-              label="Gender"
-              value={form.patientGender ?? ''}
-              onChange={(e) => update('patientGender', e.target.value)}
-            />
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-ink">Gender</span>
+              <select
+                value={form.patientGender ?? ''}
+                onChange={(e) => update('patientGender', e.target.value)}
+                className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+              >
+                <option value="">Select gender</option>
+                {GENDER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <TextField
               label="Clinic"
               value={form.clinicName ?? ''}
               onChange={(e) => update('clinicName', e.target.value)}
             />
             <div className="sm:col-span-2">
-              <TextField
+              <SearchableSelect
                 label="Country"
                 value={form.country ?? ''}
-                onChange={(e) => update('country', e.target.value)}
+                onChange={(next) => update('country', next)}
+                options={COUNTRY_OPTIONS}
+                placeholder="Search countries…"
+                allowCustom
               />
             </div>
           </div>
@@ -257,10 +333,7 @@ export function CreateCasePage() {
               </p>
               <div className="mt-4">
                 <TreatmentInstructionsFields
-                  value={{
-                    ...EMPTY_TREATMENT_INSTRUCTIONS,
-                    ...(form.treatmentInstructions as TreatmentInstructions | undefined),
-                  }}
+                  value={treatmentInstructions}
                   onChange={(next) => update('treatmentInstructions', next)}
                 />
               </div>
@@ -298,83 +371,108 @@ export function CreateCasePage() {
               multiple
               accept=".stl,.dcm,.dicom,image/*,.pdf,.zip,.ply,.obj"
               onChange={(e) => setPendingFiles(Array.from(e.target.files ?? []))}
-              className="block w-full text-sm text-ink file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
+              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700"
             />
-            <label className="block max-w-sm space-y-1.5">
-              <span className="text-sm font-medium text-ink">Category (optional)</span>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-ink">File category</span>
               <select
                 value={fileCategory}
-                onChange={(e) => setFileCategory((e.target.value || '') as FileCategory | '')}
-                className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+                onChange={(e) => setFileCategory(e.target.value as FileCategory | '')}
+                className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
               >
-                <option value="">Auto-detect</option>
-                {ALL_FILE_CATEGORIES.filter((c) => c !== FILE_CATEGORIES.OTHER).map((value) => (
-                  <option key={value} value={value}>
-                    {FILE_CATEGORY_LABELS[value]}
+                <option value="">Other / mixed</option>
+                {ALL_FILE_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {FILE_CATEGORY_LABELS[category]}
                   </option>
                 ))}
               </select>
             </label>
             {pendingFiles.length > 0 ? (
-              <ul className="space-y-1 rounded-lg bg-surface px-3 py-2 text-sm">
+              <ul className="space-y-1 text-sm text-muted">
                 {pendingFiles.map((file) => (
-                  <li key={`${file.name}-${file.size}`} className="text-ink">
-                    {file.name}{' '}
-                    <span className="text-muted">· {formatBytes(file.size)}</span>
+                  <li key={`${file.name}-${file.size}`}>
+                    {file.name} · {formatBytes(file.size)}
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="text-sm text-muted">No files selected.</p>
-            )}
+            ) : null}
           </div>
         ) : null}
 
         {step.id === 'review' ? (
           <div className="space-y-4 text-sm">
             <dl className="grid gap-3 sm:grid-cols-2">
-              {[
-                ['Patient', form.patientName || '—'],
-                ['Age', form.patientAge?.toString() ?? '—'],
-                ['Gender', form.patientGender || '—'],
-                ['Clinic', form.clinicName || '—'],
-                ['Country', form.country || '—'],
-                ['Files ready', String(pendingFiles.length)],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <dt className="text-xs font-medium uppercase tracking-wide text-muted">{label}</dt>
-                  <dd className="mt-1 text-ink">{value}</dd>
+              {needsDoctorPicker ? (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted">Doctor</dt>
+                  <dd className="mt-1 text-ink">
+                    {selectedDoctor
+                      ? `${selectedDoctor.firstName} ${selectedDoctor.lastName} (${selectedDoctor.email})`
+                      : '—'}
+                  </dd>
                 </div>
-              ))}
-            </dl>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                Treatment summary
-              </p>
-              <p className="mt-1 whitespace-pre-wrap text-ink">{form.treatmentSummary}</p>
-            </div>
-            {form.instructions ? (
+              ) : null}
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                  Instructions
-                </p>
-                <p className="mt-1 whitespace-pre-wrap text-ink">{form.instructions}</p>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Patient</dt>
+                <dd className="mt-1 text-ink">{form.patientName || '—'}</dd>
               </div>
-            ) : null}
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">
+                  Age / gender
+                </dt>
+                <dd className="mt-1 text-ink">
+                  {form.patientAge ?? '—'} · {form.patientGender || '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Clinic</dt>
+                <dd className="mt-1 text-ink">{form.clinicName || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Country</dt>
+                <dd className="mt-1 text-ink">{form.country || '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Summary</dt>
+                <dd className="mt-1 whitespace-pre-wrap text-ink">
+                  {form.treatmentSummary || '—'}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="rounded-xl border border-line bg-surface/40 p-4">
+              <p className="text-sm font-semibold text-ink">Clinical instructions</p>
+              <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                {tiSummary(treatmentInstructions).map(([label, value]) => (
+                  <div key={label}>
+                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                      {label}
+                    </dt>
+                    <dd className="mt-0.5 whitespace-pre-wrap text-ink">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+
+            <p className="text-muted">
+              {pendingFiles.length} file{pendingFiles.length === 1 ? '' : 's'} ready to upload after
+              submit.
+            </p>
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <button
-            type="button"
-            onClick={goBack}
-            disabled={stepIndex === 0 || loading}
-            className="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink hover:border-brand-300 disabled:opacity-50"
-          >
-            Back
-          </button>
-
-          {step.id !== 'review' ? (
+        <div className="flex flex-wrap gap-3 pt-2">
+          {stepIndex > 0 ? (
+            <button
+              type="button"
+              onClick={goBack}
+              className="rounded-xl border border-line px-4 py-2.5 text-sm font-semibold text-ink hover:border-brand-300"
+            >
+              Back
+            </button>
+          ) : null}
+          {stepIndex < STEPS.length - 1 ? (
             <button
               type="button"
               onClick={goNext}
@@ -383,7 +481,7 @@ export function CreateCasePage() {
               Continue
             </button>
           ) : (
-            <div className="min-w-[10rem]">
+            <div className="max-w-xs">
               <AuthButton loading={loading}>Submit case</AuthButton>
             </div>
           )}

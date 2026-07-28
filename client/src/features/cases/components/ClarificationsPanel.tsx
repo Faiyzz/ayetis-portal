@@ -28,15 +28,17 @@ export function ClarificationsPanel({
   caseId,
   clarifications,
   onChanged,
+  readOnly = false,
 }: {
   caseId: string;
   clarifications: ClarificationDto[];
   onChanged: () => Promise<void> | void;
+  readOnly?: boolean;
 }) {
   const { can } = usePermissions();
-  const canCreate = can(PERMISSIONS.CLARIFICATION_CREATE);
-  const canReply = can(PERMISSIONS.CLARIFICATION_REPLY) || canCreate;
-  const canResolve = can(PERMISSIONS.CLARIFICATION_RESOLVE);
+  const canCreate = !readOnly && can(PERMISSIONS.CLARIFICATION_CREATE);
+  const canReply = !readOnly && (can(PERMISSIONS.CLARIFICATION_REPLY) || can(PERMISSIONS.CLARIFICATION_CREATE));
+  const canResolve = !readOnly && can(PERMISSIONS.CLARIFICATION_RESOLVE);
 
   const [subject, setSubject] = useState('');
   const [requiredInfo, setRequiredInfo] = useState('');

@@ -317,6 +317,8 @@ export interface CreateCaseInput {
   treatmentInstructions?: Partial<TreatmentInstructions>;
   priority?: CasePriority;
   initialNote?: string;
+  /** Treating doctor. Required when the creator is not a doctor. */
+  doctorId?: string;
 }
 
 export interface UpdateCaseInput {
@@ -354,6 +356,22 @@ export function isCaseStatus(value: string): value is CaseStatus {
 
 export function isCasePriority(value: string): value is CasePriority {
   return (ALL_CASE_PRIORITIES as string[]).includes(value);
+}
+
+/**
+ * After delivery (or cancel/complete), production-side editing is closed.
+ * Doctor decision on `delivered` remains allowed separately in the delivery UI.
+ * Modification requests move the case back to `sent_for_modification` and unlock again.
+ */
+export const CASE_DELIVERY_LOCKED_STATUSES: CaseStatus[] = [
+  CASE_STATUSES.DELIVERED,
+  CASE_STATUSES.APPROVED,
+  CASE_STATUSES.COMPLETED,
+  CASE_STATUSES.CANCELLED,
+];
+
+export function isCaseDeliveryLocked(status: CaseStatus): boolean {
+  return (CASE_DELIVERY_LOCKED_STATUSES as CaseStatus[]).includes(status);
 }
 
 export function isFileCategory(value: string): value is FileCategory {

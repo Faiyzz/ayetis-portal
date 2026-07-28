@@ -151,6 +151,15 @@ export async function listDesigners(req: AuthenticatedRequest, res: Response, ne
   }
 }
 
+export async function listDoctors(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.listDoctorAssignees(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function startValidation(
   req: AuthenticatedRequest,
   res: Response,

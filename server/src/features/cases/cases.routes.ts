@@ -120,6 +120,12 @@ router.get(
 );
 
 router.get(
+  '/assignees/doctors',
+  requirePermission(PERMISSIONS.CASE_CREATE),
+  casesController.listDoctors,
+);
+
+router.get(
   '/:caseId',
   requireAnyPermission(
     PERMISSIONS.CASE_VIEW_OWN,

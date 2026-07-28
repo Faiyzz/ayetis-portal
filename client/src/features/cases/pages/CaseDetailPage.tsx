@@ -1,6 +1,7 @@
 import {
   CASE_PRIORITIES,
   EMPTY_TREATMENT_INSTRUCTIONS,
+  isCaseDeliveryLocked,
   PERMISSIONS,
   type CaseDetailDto,
 } from '@ayetis/shared';
@@ -28,7 +29,6 @@ import {
 import { CaseFilesPanel } from '@/features/cases/components/CaseFilesPanel';
 import { CaseHistoryPanel } from '@/features/cases/components/CaseHistoryPanel';
 import { CasePaymentPanel } from '@/features/cases/components/CasePaymentPanel';
-import { CaseValidationAssignPanel } from '@/features/cases/components/CaseValidationAssignPanel';
 import { ClarificationsPanel } from '@/features/cases/components/ClarificationsPanel';
 import { ClinicalRemarksPanel } from '@/features/cases/components/ClinicalRemarksPanel';
 import { DesignerProductionPanel } from '@/features/cases/components/DesignerProductionPanel';
@@ -65,6 +65,7 @@ function isTabId(value: string): value is TabId {
 function buildSections(args: {
   caseData: CaseDetailDto;
   showWorkTab: boolean;
+  workLabel: string;
 }): CaseDetailNavSection[] {
   const clarifications = args.caseData.clarifications.length;
   const files = args.caseData.files.length;
@@ -74,7 +75,7 @@ function buildSections(args: {
   ];
 
   if (args.showWorkTab) {
-    sections.push({ id: 'work', label: 'Work' });
+    sections.push({ id: 'work', label: args.workLabel });
   }
 
   sections.push(
@@ -119,6 +120,8 @@ export function CaseDetailPage() {
   const canDesign = can(PERMISSIONS.CASE_DESIGN);
   const canQc = can(PERMISSIONS.CASE_QC_REVIEW);
   const canConsult = can(PERMISSIONS.CASE_CONSULT);
+  const deliveryLocked = Boolean(caseData && isCaseDeliveryLocked(caseData.status));
+  const editsLocked = Boolean(caseData && (caseData.isDeleted || deliveryLocked));
 
   async function load() {
     setLoading(true);
@@ -160,17 +163,57 @@ export function CaseDetailPage() {
   const showWorkTab = Boolean(
     caseData &&
       !caseData.isDeleted &&
-      (canValidateOrAssign ||
-        canDesign ||
-        canQc ||
+      ((!deliveryLocked && (canDesign || canQc || canConsult)) ||
         showDoctorDelivery ||
         showDeliveryPackage),
   );
 
+  const workLabel = useMemo(() => {
+    if (deliveryLocked) return 'Delivery';
+    const kinds = [
+      canDesign ? 'design' : null,
+      canQc ? 'qc' : null,
+      canConsult ? 'consult' : null,
+      showDoctorDelivery || showDeliveryPackage ? 'delivery' : null,
+    ].filter(Boolean);
+    if (kinds.length === 1 && kinds[0] === 'qc') return 'QC review';
+    if (kinds.length === 1 && kinds[0] === 'design') return 'Designer work';
+    if (kinds.length === 1 && kinds[0] === 'consult') return 'Consultation';
+    if (kinds.length === 1 && kinds[0] === 'delivery') return 'Delivery';
+    return 'Work';
+  }, [canDesign, canQc, canConsult, showDoctorDelivery, showDeliveryPackage, deliveryLocked]);
+
   const sections = useMemo(() => {
     if (!caseData) return [];
-    return buildSections({ caseData, showWorkTab });
-  }, [caseData, showWorkTab]);
+    return buildSections({ caseData, showWorkTab, workLabel });
+  }, [caseData, showWorkTab, workLabel]);
+
+  const [workFocus, setWorkFocus] = useState<string>('auto');
+
+  const workOptions = useMemo(() => {
+    const options: { id: string; label: string }[] = [];
+    if (!deliveryLocked) {
+      if (canDesign) options.push({ id: 'design', label: 'Designer workspace' });
+      if (canQc) options.push({ id: 'qc', label: 'QC review' });
+      if (canConsult) options.push({ id: 'consult', label: 'Consultation' });
+    }
+    if (showDoctorDelivery || showDeliveryPackage) {
+      options.push({ id: 'delivery', label: 'Delivery' });
+    }
+    return options;
+  }, [
+    canDesign,
+    canQc,
+    canConsult,
+    showDoctorDelivery,
+    showDeliveryPackage,
+    deliveryLocked,
+  ]);
+
+  const resolvedWorkFocus =
+    workFocus !== 'auto' && workOptions.some((o) => o.id === workFocus)
+      ? workFocus
+      : workOptions[0]?.id ?? '';
 
   const activeTab: TabId = useMemo(() => {
     if (activeSectionId && isTabId(activeSectionId)) {
@@ -185,6 +228,17 @@ export function CaseDetailPage() {
     if (id === 'work' && !showWorkTab) return;
     setActiveSection(id);
     window.history.replaceState(null, '', `#${id}`);
+  }
+
+  function openAssignment() {
+    setActiveSection('overview');
+    window.history.replaceState(null, '', '#overview');
+    window.setTimeout(() => {
+      document.getElementById('assignment-actions')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 60);
   }
 
   useEffect(() => {
@@ -361,101 +415,92 @@ export function CaseDetailPage() {
   const workPanels = (
     <div className="space-y-5">
       <div>
-        <h2 className="text-sm font-semibold text-ink">Production work</h2>
+        <h2 className="text-sm font-semibold text-ink">{workLabel}</h2>
         <p className="mt-0.5 text-sm text-muted">
-          Validation, design, QC, and delivery tools available for your role.
+          Tools for your role only — switch panels below if you have more than one capability.
         </p>
       </div>
 
-      {canValidateOrAssign && !caseData.isDeleted ? (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">
-            Validation & assignment
-          </h3>
-          <CaseValidationAssignPanel
-            caseData={caseData}
-            canValidate={can(PERMISSIONS.CASE_VALIDATE)}
-            canAssign={can(PERMISSIONS.CASE_ASSIGN)}
-            canSetPriority={can(PERMISSIONS.CASE_SET_PRIORITY)}
-            onUpdated={setCaseData}
-            onOpenClarifications={openClarifications}
-          />
+      {workOptions.length > 1 ? (
+        <div className="flex flex-wrap gap-2 border-b border-line pb-3">
+          {workOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setWorkFocus(option.id)}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                resolvedWorkFocus === option.id
+                  ? 'bg-brand-600 text-white'
+                  : 'border border-line text-ink hover:border-brand-300'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
       ) : null}
 
-      {canDesign && !caseData.isDeleted ? (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">
-            Designer workspace
-          </h3>
-          <DesignerProductionPanel
-            caseData={caseData}
-            onUpdated={setCaseData}
-            onOpenClarifications={openClarifications}
-          />
-        </div>
+      {resolvedWorkFocus === 'design' && canDesign && !caseData.isDeleted ? (
+        <DesignerProductionPanel
+          caseData={caseData}
+          onUpdated={setCaseData}
+          onOpenClarifications={openClarifications}
+        />
       ) : null}
 
-      {canQc && !caseData.isDeleted ? (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">
-            QC review
-          </h3>
-          <QcReviewPanel caseData={caseData} onUpdated={setCaseData} />
-        </div>
+      {resolvedWorkFocus === 'qc' && canQc && !caseData.isDeleted ? (
+        <QcReviewPanel caseData={caseData} onUpdated={setCaseData} />
       ) : null}
 
-      {showDoctorDelivery ? (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">
-            Delivery review
-          </h3>
-          <DoctorDeliveryPanel caseData={caseData} onUpdated={setCaseData} />
-        </div>
+      {resolvedWorkFocus === 'consult' && canConsult && !caseData.isDeleted ? (
+        <ClinicalRemarksPanel caseData={caseData} onUpdated={setCaseData} />
       ) : null}
 
-      {showDeliveryPackage && caseData.delivery ? (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">
-            Delivery package
-          </h3>
-          <DetailSection
-            id="delivery-package"
-            title="Delivery package"
-            description={
-              caseData.delivery.uploadedByName
-                ? `Delivered by ${caseData.delivery.uploadedByName}`
-                : 'Delivered package links and files'
-            }
-            tone="success"
-          >
-            <div className="flex flex-wrap gap-3 text-sm">
-              {caseData.delivery.viewLink ? (
-                <a
-                  href={caseData.delivery.viewLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-semibold text-brand-700 underline"
-                >
-                  Open HTML / view link
-                </a>
-              ) : null}
-              {caseData.delivery.videoFilename ? (
-                <button
-                  type="button"
-                  className="font-semibold text-brand-700 underline"
-                  onClick={() => {
-                    void downloadDeliveryVideo(caseData.caseId).catch((err) =>
-                      toast().error(getErrorMessage(err, 'Unable to download video')),
-                    );
-                  }}
-                >
-                  Download {caseData.delivery.videoFilename}
-                </button>
-              ) : null}
-            </div>
-          </DetailSection>
-        </div>
+      {resolvedWorkFocus === 'delivery' && showDoctorDelivery ? (
+        <DoctorDeliveryPanel caseData={caseData} onUpdated={setCaseData} />
+      ) : null}
+
+      {resolvedWorkFocus === 'delivery' && showDeliveryPackage && caseData.delivery ? (
+        <DetailSection
+          id="delivery-package"
+          title="Delivery package"
+          description={
+            caseData.delivery.uploadedByName
+              ? `Delivered by ${caseData.delivery.uploadedByName}`
+              : 'Delivered package links and files'
+          }
+          tone="success"
+        >
+          <div className="flex flex-wrap gap-3 text-sm">
+            {caseData.delivery.viewLink ? (
+              <a
+                href={caseData.delivery.viewLink}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-brand-700 underline"
+              >
+                Open HTML / view link
+              </a>
+            ) : null}
+            {caseData.delivery.videoFilename ? (
+              <button
+                type="button"
+                className="font-semibold text-brand-700 underline"
+                onClick={() => {
+                  void downloadDeliveryVideo(caseData.caseId).catch((err) =>
+                    toast().error(getErrorMessage(err, 'Unable to download video')),
+                  );
+                }}
+              >
+                Download {caseData.delivery.videoFilename}
+              </button>
+            ) : null}
+          </div>
+        </DetailSection>
+      ) : null}
+
+      {!resolvedWorkFocus ? (
+        <p className="text-sm text-muted">No work actions available for your role on this case.</p>
       ) : null}
     </div>
   );
@@ -486,7 +531,7 @@ export function CaseDetailPage() {
             onJumpToTab={selectTab}
             actions={
               <>
-                {can(PERMISSIONS.CASE_SET_PRIORITY) && !caseData.isDeleted ? (
+                {can(PERMISSIONS.CASE_SET_PRIORITY) && !editsLocked ? (
                   <CaseDetailActionButton
                     tone={isUrgent ? 'urgent' : 'default'}
                     disabled={priorityBusy}
@@ -495,18 +540,18 @@ export function CaseDetailPage() {
                     {priorityBusy ? 'Updating…' : isUrgent ? 'Clear urgent' : 'Mark urgent'}
                   </CaseDetailActionButton>
                 ) : null}
-                {can(PERMISSIONS.CASE_UPDATE) && !caseData.isDeleted ? (
+                {can(PERMISSIONS.CASE_UPDATE) && !editsLocked ? (
                   <CaseDetailActionButton to={`/app/cases/${caseData.caseId}/edit`}>
                     Edit
                   </CaseDetailActionButton>
                 ) : null}
-                {showWorkTab && canValidateOrAssign && !caseData.isDeleted ? (
-                  <CaseDetailActionButton onClick={() => selectTab('work')}>
+                {canValidateOrAssign && !editsLocked ? (
+                  <CaseDetailActionButton onClick={openAssignment}>
                     Assign / validate
                   </CaseDetailActionButton>
                 ) : null}
                 {(can(PERMISSIONS.CASE_UPDATE) || can(PERMISSIONS.CASE_DELETE)) &&
-                !caseData.isDeleted &&
+                !editsLocked &&
                 !isCancelled ? (
                   <CaseDetailActionButton tone="warning" onClick={() => void handleCancel()}>
                     Cancel case
@@ -540,7 +585,30 @@ export function CaseDetailPage() {
               {selected ? (
                 <>
                   {tabId === 'overview' ? (
-                    <CaseOverviewTab caseData={caseData} onOpenTab={selectTab} />
+                    <CaseOverviewTab
+                      caseData={caseData}
+                      onOpenTab={(id) => {
+                        if (id === 'assignment') {
+                          openAssignment();
+                          return;
+                        }
+                        if (id === 'work' && canQc) {
+                          setWorkFocus('qc');
+                          selectTab('work');
+                          return;
+                        }
+                        if (id === 'work' && canDesign) {
+                          setWorkFocus('design');
+                          selectTab('work');
+                          return;
+                        }
+                        selectTab(id);
+                      }}
+                      onUpdated={setCaseData}
+                      canAssign={can(PERMISSIONS.CASE_ASSIGN) && !editsLocked}
+                      canValidate={can(PERMISSIONS.CASE_VALIDATE) && !editsLocked}
+                      canSetPriority={can(PERMISSIONS.CASE_SET_PRIORITY) && !editsLocked}
+                    />
                   ) : null}
 
                   {tabId === 'work' ? workPanels : null}
@@ -552,7 +620,7 @@ export function CaseDetailPage() {
                           ...EMPTY_TREATMENT_INSTRUCTIONS,
                           ...caseData.treatmentInstructions,
                         }}
-                        canEdit={Boolean(canEditTreatment) && !caseData.isDeleted}
+                        canEdit={Boolean(canEditTreatment) && !editsLocked}
                         saving={treatmentBusy}
                         onSave={async (next) => {
                           setTreatmentBusy(true);
@@ -573,12 +641,6 @@ export function CaseDetailPage() {
                           }
                         }}
                       />
-                      {canConsult && !caseData.isDeleted ? (
-                        <ClinicalRemarksPanel
-                          caseData={caseData}
-                          onUpdated={setCaseData}
-                        />
-                      ) : null}
                     </div>
                   ) : null}
 
@@ -586,7 +648,7 @@ export function CaseDetailPage() {
                     <CaseFilesPanel
                       caseId={caseData.caseId}
                       files={caseData.files}
-                      canUpload={canUpload && !caseData.isDeleted}
+                      canUpload={canUpload && !editsLocked}
                       onUpdated={setCaseData}
                     />
                   ) : null}
@@ -597,10 +659,11 @@ export function CaseDetailPage() {
                         caseId={caseData.caseId}
                         clarifications={caseData.clarifications}
                         onChanged={load}
+                        readOnly={editsLocked}
                       />
                       <ActivityNotes
                         notes={caseData.notes}
-                        canAdd={!caseData.isDeleted}
+                        canAdd={!editsLocked}
                         saving={savingNote}
                         onAdd={async (body) => {
                           setSavingNote(true);
@@ -624,7 +687,7 @@ export function CaseDetailPage() {
                       <CasePaymentPanel
                         payment={caseData.payment}
                         canManage={
-                          can(PERMISSIONS.CASE_MANAGE_PAYMENT) && !caseData.isDeleted
+                          can(PERMISSIONS.CASE_MANAGE_PAYMENT) && !editsLocked
                         }
                         saving={paymentBusy}
                         onSave={async (payload) => {

@@ -5,6 +5,7 @@ export * from './portals';
 export * from './audit';
 export * from './cases';
 export * from './treatment';
+export * from './geo';
 export * from './clarifications';
 export * from './notifications';
 export * from './coordinator';

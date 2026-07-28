@@ -730,9 +730,22 @@ export async function createCase(
     throw new AppError('You do not have permission to create cases', 403);
   }
 
-  const doctor = await User.findById(actor.id);
-  if (!doctor || !doctor.isActive) {
-    throw new AppError('Doctor account not found', 404);
+  let doctor;
+  if (input.doctorId) {
+    if (actor.role === ROLES.DOCTOR && input.doctorId !== actor.id) {
+      throw new AppError('Doctors can only create cases for themselves', 403);
+    }
+    doctor = await User.findById(input.doctorId);
+    if (!doctor || !doctor.isActive || doctor.role !== ROLES.DOCTOR) {
+      throw new AppError('Select a valid active doctor account', 400);
+    }
+  } else if (actor.role === ROLES.DOCTOR) {
+    doctor = await User.findById(actor.id);
+    if (!doctor || !doctor.isActive) {
+      throw new AppError('Doctor account not found', 404);
+    }
+  } else {
+    throw new AppError('Select the treating doctor for this case', 400);
   }
 
   let priority = input.priority ?? CASE_PRIORITIES.NORMAL;
@@ -2762,6 +2775,27 @@ export async function listDesignerAssignees(
     lastName: designer.lastName,
     email: designer.email,
     isActive: designer.isActive,
+  }));
+}
+
+export async function listDoctorAssignees(
+  actor: CaseActor,
+): Promise<DesignerAssigneeDto[]> {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_CREATE)) {
+    throw new AppError('You do not have permission to list doctors', 403);
+  }
+
+  const doctors = await User.find({
+    role: ROLES.DOCTOR,
+    isActive: true,
+  }).sort({ firstName: 1, lastName: 1 });
+
+  return doctors.map((doctor) => ({
+    id: doctor.id,
+    firstName: doctor.firstName,
+    lastName: doctor.lastName,
+    email: doctor.email,
+    isActive: doctor.isActive,
   }));
 }
 

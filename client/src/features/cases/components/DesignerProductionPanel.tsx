@@ -3,6 +3,7 @@ import {
   CASE_STATUS_LABELS,
   EMPTY_TREATMENT_INSTRUCTIONS,
   QC_ERROR_CODE_LABELS,
+  isCaseDeliveryLocked,
   type ArchOption,
   type CaseDetailDto,
 } from '@ayetis/shared';
@@ -39,7 +40,9 @@ export function DesignerProductionPanel({
   const waiting = caseData.status === 'waiting_clarification';
   const ti = { ...EMPTY_TREATMENT_INSTRUCTIONS, ...caseData.treatmentInstructions };
   const canWork =
-    inProduction || needsResubmit || Boolean(caseData.productionStartedAt && !inQc);
+    (inProduction || needsResubmit) &&
+    !isCaseDeliveryLocked(caseData.status);
+  const locked = isCaseDeliveryLocked(caseData.status) || caseData.isDeleted;
 
   async function handleStart() {
     setBusy('start');
@@ -200,6 +203,11 @@ export function DesignerProductionPanel({
         </p>
       ) : null}
 
+      {locked ? (
+        <p className="rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-muted">
+          This case has been delivered (or closed). Production actions are no longer available.
+        </p>
+      ) : (
       <form onSubmit={handleUpdate} className="space-y-3">
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-ink">Production notes</span>
@@ -258,6 +266,7 @@ export function DesignerProductionPanel({
           ) : null}
         </div>
       </form>
+      )}
 
       {inQc ? (
         <p className="text-sm text-muted">

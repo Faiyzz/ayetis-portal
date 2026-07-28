@@ -160,6 +160,10 @@ export interface DesignerAssigneeDto {
   isActive: boolean;
 }
 
+/** Treating-doctor picker row (same shape as designer assignees). */
+export type DoctorAssigneeDto = DesignerAssigneeDto;
+
+
 export function resolveCoordinatorQueue(input: {
   status: CaseStatus;
   validatedAt?: Date | string | null;

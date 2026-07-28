@@ -1,4 +1,4 @@
-import type { CaseDetailDto } from '@ayetis/shared';
+import { isCaseDeliveryLocked, type CaseDetailDto } from '@ayetis/shared';
 import type { ReactNode } from 'react';
 
 export type AttentionItem = {
@@ -11,9 +11,15 @@ export type AttentionItem = {
 
 export function buildAttentionItems(
   caseData: CaseDetailDto,
-  opts?: { onOpenCommunication?: () => void; onOpenWork?: () => void },
+  opts?: {
+    onOpenCommunication?: () => void;
+    onOpenWork?: () => void;
+    onOpenAssignment?: () => void;
+    canAssign?: boolean;
+  },
 ): AttentionItem[] {
   const items: AttentionItem[] = [];
+  const deliveryLocked = isCaseDeliveryLocked(caseData.status);
 
   if (caseData.status === 'waiting_clarification') {
     items.push({
@@ -51,7 +57,7 @@ export function buildAttentionItems(
     });
   }
 
-  if (caseData.qcRejectionCount > 0 || caseData.lastQcComments) {
+  if (!deliveryLocked && (caseData.qcRejectionCount > 0 || caseData.lastQcComments)) {
     items.push({
       id: 'qc-rejection',
       title:
@@ -72,16 +78,22 @@ export function buildAttentionItems(
     });
   }
 
-  if (!caseData.assignedDesignerId && caseData.status !== 'cancelled' && !caseData.isDeleted) {
+  if (
+    opts?.canAssign &&
+    !deliveryLocked &&
+    !caseData.assignedDesignerId &&
+    caseData.status !== 'cancelled' &&
+    !caseData.isDeleted
+  ) {
     items.push({
       id: 'unassigned',
       title: 'No designer assigned',
       detail: 'Assign a designer or queue this case for auto pick-up.',
       tone: 'info',
-      action: opts?.onOpenWork ? (
+      action: opts?.onOpenAssignment ? (
         <button
           type="button"
-          onClick={opts.onOpenWork}
+          onClick={opts.onOpenAssignment}
           className="text-xs font-semibold text-brand-700 underline"
         >
           Go to assignment
