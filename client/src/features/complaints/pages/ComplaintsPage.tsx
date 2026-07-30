@@ -8,9 +8,10 @@ import {
   type ComplaintReportsDto,
   type ComplaintStatus,
 } from '@ayetis/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
+import { PageTabs, type PageTab } from '@/components/PageTabs';
 import { usePermissions } from '@/features/auth/permissions';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import * as complaintsApi from '@/features/complaints/api';
@@ -20,6 +21,92 @@ import { getErrorMessage } from '@/lib/api';
 
 function formatRate(value: number | null | undefined) {
   return value == null ? '—' : `${value}%`;
+}
+
+const COMPLAINT_TABS: PageTab[] = [
+  { id: 'all-complaints', label: 'All complaints' },
+  { id: 'monthly-trend', label: 'Monthly trend' },
+];
+
+function NewComplaintButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
+    >
+      <span aria-hidden>+</span>
+      New complaint
+    </button>
+  );
+}
+
+function LogComplaintDialog({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    panelRef.current?.querySelector<HTMLElement>('input, select, textarea, button')?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previous?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-80 flex items-end justify-center p-4 sm:items-center">
+      <button
+        type="button"
+        aria-label="Close new complaint dialog"
+        onClick={onClose}
+        className="absolute inset-0 bg-ink/45 backdrop-blur-[1px]"
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative z-10 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+      >
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-white px-5 py-4">
+          <div>
+            <h2 id={titleId} className="text-lg font-semibold text-ink">
+              Log a new complaint
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              Link a Case ID when possible. The complaint code is assigned automatically.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close dialog"
+            className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-ink"
+          >
+            <span className="text-xl leading-none" aria-hidden>
+              ×
+            </span>
+          </button>
+        </div>
+        <div className="p-5">
+          <LogComplaintForm inDialog onCreated={onCreated} />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function ComplaintsWorkspace({
@@ -45,6 +132,10 @@ export function ComplaintsWorkspace({
   const [reports, setReports] = useState<ComplaintReportsDto | null>(null);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('all-complaints');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+
+  const tabs = canViewReports ? COMPLAINT_TABS : COMPLAINT_TABS.slice(0, 1);
 
   async function load() {
     setLoading(true);
@@ -104,15 +195,39 @@ export function ComplaintsWorkspace({
           subtitle={`Log issues against cases, track resolution, and review doctor decision rates${
             canViewReports ? ' and explicit ratings' : ''
           }.`}
-        />
+        >
+          {canCreate ? <NewComplaintButton onClick={() => setShowCreateDialog(true)} /> : null}
+        </PageHeader>
       ) : null}
+
+      {embedded && canCreate ? (
+        <div className="flex justify-end">
+          <NewComplaintButton onClick={() => setShowCreateDialog(true)} />
+        </div>
+      ) : null}
+
+      <div className="rounded-t-xl border-x border-t border-line bg-white px-3">
+        <PageTabs
+          tabs={tabs}
+          activeId={activeTab}
+          onChange={setActiveTab}
+          ariaLabel="Complaint sections"
+        />
+      </div>
 
       {loading && !items.length && !reports ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : null}
 
-      {overview ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {activeTab === 'monthly-trend' ? (
+        <div
+          id="monthly-trend"
+          role="tabpanel"
+          aria-labelledby="tab-monthly-trend"
+          className="space-y-4"
+        >
+        {overview ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
             ['Avg rating (1–5)', overview.averageRating ?? '—'],
             ['Approval rate', formatRate(overview.approvalRate)],
@@ -124,17 +239,17 @@ export function ComplaintsWorkspace({
               <p className="mt-1 text-2xl font-bold text-ink">{value}</p>
             </div>
           ))}
-        </div>
-      ) : null}
+          </div>
+        ) : null}
 
-      {reports ? (
+        {reports ? (
         <>
           <section className="rounded-xl border border-line bg-white p-5 overflow-x-auto">
             <h2 className="text-sm font-semibold text-ink">Monthly trends</h2>
             <p className="mt-1 text-sm text-muted">
               Complaint volume, explicit ratings, and doctor approve / modification rates by month.
             </p>
-            <table className="mt-4 w-full min-w-[640px] text-left text-sm">
+            <table className="mt-4 w-full min-w-160 text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-muted">
                 <tr>
                   <th className="pb-2 pr-3 font-medium">Month</th>
@@ -180,7 +295,7 @@ export function ComplaintsWorkspace({
               Approval / modification rates from doctor decisions. Avg rating is the mean of explicit
               1–5 ratings on complaints for that doctor (not a derived score).
             </p>
-            <table className="mt-4 w-full min-w-[720px] text-left text-sm">
+            <table className="mt-4 w-full min-w-180 text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-muted">
                 <tr>
                   <th className="pb-2 pr-3 font-medium">Doctor</th>
@@ -224,11 +339,17 @@ export function ComplaintsWorkspace({
             </table>
           </section>
         </>
+        ) : null}
+        </div>
       ) : null}
 
-      {canCreate ? <LogComplaintForm onCreated={() => void load()} /> : null}
-
-      <section className="rounded-xl border border-line bg-white p-5">
+      {activeTab === 'all-complaints' ? (
+      <section
+        id="all-complaints"
+        role="tabpanel"
+        aria-labelledby="tab-all-complaints"
+        className="rounded-xl border border-line bg-white p-5"
+      >
         <h2 className="text-sm font-semibold text-ink">
           {canViewReports ? 'All complaints' : 'Your filed complaints'}
         </h2>
@@ -305,7 +426,7 @@ export function ComplaintsWorkspace({
                       ))}
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                      <label className="block flex-1 space-y-1.5 text-sm">
+                      <label className="block min-w-0 flex-1 space-y-1.5 text-sm">
                         <span className="font-medium text-ink">Add resolution comment</span>
                         <textarea
                           rows={2}
@@ -316,9 +437,11 @@ export function ComplaintsWorkspace({
                           className="w-full rounded-xl border border-line px-3 py-2.5"
                         />
                       </label>
-                      <AuthButton type="button" onClick={() => void addComment(item.id)}>
-                        Add comment
-                      </AuthButton>
+                      <div className="sm:w-40 sm:flex-none">
+                        <AuthButton type="button" onClick={() => void addComment(item.id)}>
+                          Add comment
+                        </AuthButton>
+                      </div>
                     </div>
                   </div>
                 ) : null}
@@ -327,6 +450,18 @@ export function ComplaintsWorkspace({
           )}
         </ul>
       </section>
+      ) : null}
+
+      {showCreateDialog ? (
+        <LogComplaintDialog
+          onClose={() => setShowCreateDialog(false)}
+          onCreated={() => {
+            setShowCreateDialog(false);
+            setActiveTab('all-complaints');
+            void load();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

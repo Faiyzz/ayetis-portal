@@ -47,7 +47,13 @@ function StaffSelect({
   );
 }
 
-export function LogComplaintForm({ onCreated }: { onCreated?: () => void }) {
+export function LogComplaintForm({
+  onCreated,
+  inDialog = false,
+}: {
+  onCreated?: () => void;
+  inDialog?: boolean;
+}) {
   const [staff, setStaff] = useState<ComplaintStaffOptionDto[]>([]);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
@@ -114,14 +120,21 @@ export function LogComplaintForm({ onCreated }: { onCreated?: () => void }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-line bg-white p-5">
-      <div>
-        <h2 className="text-sm font-semibold text-ink">Log a complaint</h2>
-        <p className="mt-1 text-sm text-muted">
-          Code is assigned automatically. Link a Case ID when possible so doctor and assignees can be
-          inferred.
-        </p>
-      </div>
+    <form
+      onSubmit={handleSubmit}
+      className={
+        inDialog ? 'space-y-3' : 'space-y-3 rounded-xl border border-line bg-white p-5'
+      }
+    >
+      {!inDialog ? (
+        <div>
+          <h2 className="text-sm font-semibold text-ink">Log a complaint</h2>
+          <p className="mt-1 text-sm text-muted">
+            Code is assigned automatically. Link a Case ID when possible so doctor and assignees can
+            be inferred.
+          </p>
+        </div>
+      ) : null}
       <TextField
         label="Case ID"
         value={form.caseId}

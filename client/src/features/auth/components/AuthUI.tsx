@@ -31,7 +31,7 @@ interface AuthButtonProps {
   children: ReactNode;
   loading?: boolean;
   type?: 'button' | 'submit';
-  variant?: 'primary' | 'ghost';
+  variant?: 'primary' | 'ghost' | 'dark';
   onClick?: () => void;
   disabled?: boolean;
 }
@@ -47,10 +47,12 @@ export function AuthButton({
   const base =
     'inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-[15px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60';
 
-  const styles =
-    variant === 'primary'
-      ? 'bg-brand-500 text-white shadow-[0_8px_24px_rgba(103,61,230,0.28)] hover:bg-brand-600 active:bg-brand-700'
-      : 'bg-transparent text-brand-600 hover:bg-brand-50';
+  const styles = {
+    primary:
+      'bg-brand-500 text-white shadow-[0_8px_24px_rgba(15,23,42,0.20)] hover:bg-brand-600 active:bg-brand-700',
+    ghost: 'bg-transparent text-brand-600 hover:bg-brand-50',
+    dark: 'bg-slate-900 text-white shadow-[0_10px_28px_rgba(15,23,42,0.22)] hover:bg-slate-800 active:bg-slate-950',
+  }[variant];
 
   return (
     <button
@@ -70,13 +72,21 @@ interface AuthCardProps {
   children: ReactNode;
   footer?: ReactNode;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  brandTone?: 'brand' | 'dark';
 }
 
-export function AuthCard({ title, subtitle, children, footer, onSubmit }: AuthCardProps) {
+export function AuthCard({
+  title,
+  subtitle,
+  children,
+  footer,
+  onSubmit,
+  brandTone = 'brand',
+}: AuthCardProps) {
   return (
-    <div className="w-full max-w-[420px]">
+    <div className="w-full max-w-105">
       <div className="mb-8">
-        <BrandMark />
+        <BrandMark tone={brandTone} />
         <h1 className="mt-8 text-[1.75rem] font-bold tracking-tight text-ink">{title}</h1>
         <p className="mt-2 text-[15px] leading-relaxed text-muted">{subtitle}</p>
       </div>
@@ -90,16 +100,24 @@ export function AuthCard({ title, subtitle, children, footer, onSubmit }: AuthCa
   );
 }
 
-export function BrandMark() {
+export function BrandMark({ tone = 'brand' }: { tone?: 'brand' | 'dark' }) {
+  const dark = tone === 'dark';
   return (
     <div className="inline-flex items-center gap-2.5">
-      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-white shadow-[0_6px_18px_rgba(103,61,230,0.35)]">
+      <span
+        className={[
+          'flex h-9 w-9 items-center justify-center rounded-xl text-white',
+          dark
+            ? 'bg-slate-900 shadow-[0_6px_18px_rgba(15,23,42,0.25)]'
+            : 'bg-brand-500 shadow-[0_6px_18px_rgba(15,23,42,0.22)]',
+        ].join(' ')}
+      >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
           <path d="M5 19L12 5L19 19H15.2L12 12.5L8.8 19H5Z" fill="currentColor" />
         </svg>
       </span>
       <span className="text-xl font-bold tracking-tight text-ink">
-        Ayetis<span className="text-brand-500">.</span>
+        Ayetis<span className={dark ? 'text-slate-500' : 'text-brand-500'}>.</span>
       </span>
     </div>
   );

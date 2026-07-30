@@ -497,12 +497,12 @@ export function AppShell() {
 
         <aside
           className={[
-            'fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0',
+            'fixed inset-y-0 left-0 z-40 flex w-65 flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0',
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           ].join(' ')}
         >
           <div className="border-b border-line px-4 py-4">
-            <BrandMark />
+            <BrandMark tone="dark" />
             <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
               {ROLE_LABELS[user.role as Role]} portal
             </p>

@@ -43,6 +43,15 @@ export function CasesPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
+
+  async function copyCaseId(caseId: string) {
+    try {
+      await navigator.clipboard.writeText(caseId);
+      toast().success(`Copied ${caseId}`);
+    } catch {
+      toast().error('Unable to copy case ID');
+    }
+  }
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<CaseStatus | ''>('');
   const [priority, setPriority] = useState<CasePriority | ''>('');
@@ -201,12 +210,33 @@ export function CasesPage() {
                 items.map((item) => (
                   <tr key={item.id} className={item.isDeleted ? 'opacity-60' : undefined}>
                     <td className="px-4 py-3">
-                      <Link
-                        to={`/app/cases/${item.caseId}`}
-                        className="font-semibold text-brand-600 hover:text-brand-700"
-                      >
-                        {item.caseId}
-                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          to={`/app/cases/${item.caseId}`}
+                          className="font-semibold text-brand-600 hover:text-brand-700"
+                        >
+                          {item.caseId}
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => void copyCaseId(item.caseId)}
+                          aria-label={`Copy case ID ${item.caseId}`}
+                          title="Copy case ID"
+                          className="rounded p-1 text-muted transition hover:bg-surface hover:text-brand-700"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            className="size-4"
+                          >
+                            <rect x="8" y="8" width="11" height="11" rx="2" />
+                            <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+                          </svg>
+                        </button>
+                      </div>
                       {item.openClarificationCount > 0 ? (
                         <p className="mt-0.5 text-xs text-amber-700">
                           {item.openClarificationCount} clarification
