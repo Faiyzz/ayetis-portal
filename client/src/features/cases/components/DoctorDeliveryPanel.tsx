@@ -1,6 +1,8 @@
 import {
   DOCTOR_DECISIONS,
   DOCTOR_DECISION_LABELS,
+  FILE_RESTORE_PENDING_CODE,
+  FILE_STORAGE_TIERS,
   type CaseDetailDto,
   type DoctorDecision,
 } from '@ayetis/shared';
@@ -10,11 +12,13 @@ import { AuthButton } from '@/features/auth/components/AuthUI';
 import {
   downloadAllCaseFiles,
   downloadDeliveryVideo,
+  getDeliveryVideoRestoreStatus,
   recordDoctorCaseView,
+  restoreDeliveryVideo,
   submitDoctorDecision,
 } from '@/features/cases/api';
 import { toast } from '@/features/notifications/toastStore';
-import { getErrorMessage } from '@/lib/api';
+import { getErrorCode, getErrorMessage } from '@/lib/api';
 
 export function DoctorDeliveryPanel({
   caseData,
@@ -43,6 +47,22 @@ export function DoctorDeliveryPanel({
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseData.caseId, awaiting]);
+
+  useEffect(() => {
+    if (caseData.delivery?.storageTier !== FILE_STORAGE_TIERS.RESTORING) return;
+    const timer = window.setInterval(() => {
+      void getDeliveryVideoRestoreStatus(caseData.caseId)
+        .then(async (status) => {
+          if (status.storageTier === FILE_STORAGE_TIERS.HOT) {
+            toast().success('Delivery video restore complete');
+            const { fetchCase } = await import('@/features/cases/api');
+            onUpdated(await fetchCase(caseData.caseId));
+          }
+        })
+        .catch(() => undefined);
+    }, 15_000);
+    return () => window.clearInterval(timer);
+  }, [caseData.caseId, caseData.delivery?.storageTier, onUpdated]);
 
   if (!caseData.delivery && !awaiting && caseData.status !== 'completed') {
     return null;
@@ -100,17 +120,48 @@ export function DoctorDeliveryPanel({
             </a>
           ) : null}
           {caseData.delivery.videoFilename ? (
-            <button
-              type="button"
-              className="font-semibold text-brand-700 underline"
-              onClick={() => {
-                void downloadDeliveryVideo(caseData.caseId)
-                  .then(() => recordDoctorCaseView(caseData.caseId).then(onUpdated))
-                  .catch((err) => toast().error(getErrorMessage(err, 'Unable to download video')));
-              }}
-            >
-              View / download {caseData.delivery.videoFilename}
-            </button>
+            caseData.delivery.storageTier === FILE_STORAGE_TIERS.COLD ? (
+              <button
+                type="button"
+                className="font-semibold text-brand-700 underline"
+                onClick={() => {
+                  setBusy('restore-video');
+                  void restoreDeliveryVideo(caseData.caseId)
+                    .then((updated) => {
+                      onUpdated(updated);
+                      toast().success('Video restore started');
+                    })
+                    .catch((err) => toast().error(getErrorMessage(err, 'Unable to restore video')))
+                    .finally(() => setBusy(null));
+                }}
+              >
+                {busy === 'restore-video'
+                  ? 'Starting restore…'
+                  : `Restore cold video (${caseData.delivery.videoFilename})`}
+              </button>
+            ) : caseData.delivery.storageTier === FILE_STORAGE_TIERS.RESTORING ? (
+              <span className="font-medium text-amber-800">Restoring delivery video…</span>
+            ) : caseData.delivery.storageTier === FILE_STORAGE_TIERS.PURGED ? (
+              <span className="text-muted">Delivery video removed from storage</span>
+            ) : (
+              <button
+                type="button"
+                className="font-semibold text-brand-700 underline"
+                onClick={() => {
+                  void downloadDeliveryVideo(caseData.caseId)
+                    .then(() => recordDoctorCaseView(caseData.caseId).then(onUpdated))
+                    .catch((err) => {
+                      if (getErrorCode(err) === FILE_RESTORE_PENDING_CODE) {
+                        toast().warning('Video is in cold storage. Restore it first.');
+                      } else {
+                        toast().error(getErrorMessage(err, 'Unable to download video'));
+                      }
+                    });
+                }}
+              >
+                View / download {caseData.delivery.videoFilename}
+              </button>
+            )
           ) : null}
         </div>
       ) : (

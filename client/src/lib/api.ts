@@ -18,7 +18,9 @@ api.interceptors.request.use((config) => {
 
 export function getErrorMessage(error: unknown, fallback = 'Something went wrong'): string {
   if (axios.isAxiosError(error)) {
-    const data = error.response?.data as ApiResponse<unknown> | undefined;
+    const data = error.response?.data as
+      | (ApiResponse<unknown> & { code?: string })
+      | undefined;
     if (data && data.success === false && data.message) {
       return data.message;
     }
@@ -30,6 +32,18 @@ export function getErrorMessage(error: unknown, fallback = 'Something went wrong
   }
 
   return fallback;
+}
+
+export function getErrorCode(error: unknown): string | undefined {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data as { code?: string } | undefined;
+    return data?.code;
+  }
+  if (error && typeof error === 'object' && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
 }
 
 export default api;

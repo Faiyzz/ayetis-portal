@@ -21,6 +21,7 @@ export function errorHandler(
       success: false,
       message: err.message,
       errors: err.errors,
+      code: err.code,
     });
     return;
   }

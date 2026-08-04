@@ -243,6 +243,30 @@ router.get(
   casesController.signedFileUrl,
 );
 
+router.post(
+  '/:caseId/files/:fileId/restore',
+  requireAnyPermission(
+    PERMISSIONS.CASE_VIEW_OWN,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_CONSULT,
+  ),
+  casesController.restoreFile,
+);
+
+router.get(
+  '/:caseId/files/:fileId/restore-status',
+  requireAnyPermission(
+    PERMISSIONS.CASE_VIEW_OWN,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_CONSULT,
+  ),
+  casesController.fileRestoreStatus,
+);
+
 router.get(
   '/:caseId/files/:fileId',
   requireAnyPermission(
@@ -265,6 +289,30 @@ router.get(
     PERMISSIONS.CASE_CONSULT,
   ),
   casesController.signedDeliveryVideoUrl,
+);
+
+router.post(
+  '/:caseId/delivery/video/restore',
+  requireAnyPermission(
+    PERMISSIONS.CASE_VIEW_OWN,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_CONSULT,
+  ),
+  casesController.restoreDeliveryVideoHandler,
+);
+
+router.get(
+  '/:caseId/delivery/video/restore-status',
+  requireAnyPermission(
+    PERMISSIONS.CASE_VIEW_OWN,
+    PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_CONSULT,
+  ),
+  casesController.deliveryVideoRestoreStatus,
 );
 
 router.get(

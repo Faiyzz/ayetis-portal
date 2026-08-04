@@ -1,21 +1,26 @@
 import { createReadStream, createWriteStream } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHmac, timingSafeEqual } from 'crypto';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
+  RestoreObjectCommand,
   S3Client,
+  type StorageClass,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Upload } from '@aws-sdk/lib-storage';
-import { createHmac, timingSafeEqual } from 'crypto';
 import { env } from '../config/env';
 
 export type StorageProvider = 'local' | 's3';
+
+export type ObjectRestoreState = 'not_restoring' | 'pending' | 'available' | 'unknown';
 
 const uploadsRoot = path.resolve(
   process.env.UPLOADS_DIR ?? path.join(process.cwd(), 'uploads'),
@@ -51,9 +56,15 @@ export function getUploadsRoot(): string {
   return uploadsRoot;
 }
 
+export function coldStorageEnabled(): boolean {
+  return env.fileColdStorageEnabled;
+}
+
 export async function ensureUploadsRoot(): Promise<void> {
   if (getProvider() === 'local') {
     await fs.mkdir(uploadsRoot, { recursive: true });
+    await fs.mkdir(path.join(uploadsRoot, 'hot'), { recursive: true });
+    await fs.mkdir(path.join(uploadsRoot, 'cold'), { recursive: true });
   }
 }
 
@@ -63,6 +74,66 @@ function sanitizeName(originalName: string) {
 
 function buildStorageKey(caseId: string, originalName: string) {
   return path.posix.join('cases', caseId, `${randomUUID()}-${sanitizeName(originalName)}`);
+}
+
+function assertSafeKey(storageKey: string) {
+  if (
+    !storageKey ||
+    storageKey.includes('..') ||
+    path.isAbsolute(storageKey) ||
+    storageKey.startsWith('/') ||
+    storageKey.startsWith('\\')
+  ) {
+    throw new Error('Invalid storage key');
+  }
+}
+
+/** Logical key stays `cases/...`; local disk uses uploads/hot|cold|legacy. */
+function localHotPath(storageKey: string) {
+  return path.join(uploadsRoot, 'hot', storageKey);
+}
+
+function localColdPath(storageKey: string) {
+  return path.join(uploadsRoot, 'cold', storageKey);
+}
+
+function localLegacyPath(storageKey: string) {
+  return path.join(uploadsRoot, storageKey);
+}
+
+async function pathExists(absolutePath: string): Promise<boolean> {
+  try {
+    await fs.access(absolutePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Prefer hot, then legacy (pre-migration), then cold. */
+export async function resolveLocalAbsolutePath(
+  storageKey: string,
+  prefer: 'hot' | 'cold' | 'any' = 'any',
+): Promise<string> {
+  assertSafeKey(storageKey);
+  const hot = localHotPath(storageKey);
+  const cold = localColdPath(storageKey);
+  const legacy = localLegacyPath(storageKey);
+
+  if (prefer === 'hot') {
+    if (await pathExists(hot)) return hot;
+    if (await pathExists(legacy)) return legacy;
+    throw new Error('Local hot object not found');
+  }
+  if (prefer === 'cold') {
+    if (await pathExists(cold)) return cold;
+    throw new Error('Local cold object not found');
+  }
+
+  if (await pathExists(hot)) return hot;
+  if (await pathExists(legacy)) return legacy;
+  if (await pathExists(cold)) return cold;
+  throw new Error('Local object not found');
 }
 
 export async function saveCaseFile(input: {
@@ -89,7 +160,7 @@ export async function saveCaseFile(input: {
           Key: storageKey,
           Body: createReadStream(input.filePath),
           ContentType: contentType,
-          // Private by default — downloads only via authenticated API.
+          StorageClass: 'STANDARD',
           ACL: undefined,
         },
       });
@@ -101,6 +172,7 @@ export async function saveCaseFile(input: {
           Key: storageKey,
           Body: input.buffer,
           ContentType: contentType,
+          StorageClass: 'STANDARD',
         }),
       );
     }
@@ -108,7 +180,7 @@ export async function saveCaseFile(input: {
   }
 
   await ensureUploadsRoot();
-  const absolutePath = path.join(uploadsRoot, storageKey);
+  const absolutePath = localHotPath(storageKey);
   await fs.mkdir(path.dirname(absolutePath), { recursive: true });
   if (input.filePath) {
     await fs.copyFile(input.filePath, absolutePath);
@@ -122,15 +194,8 @@ export function resolveStoragePath(storageKey: string): string {
   if (getProvider() === 's3') {
     throw new Error('resolveStoragePath is only available for local storage');
   }
-  const absolutePath = path.join(uploadsRoot, storageKey);
-  const normalizedRoot = path.normalize(uploadsRoot + path.sep);
-  const normalizedPath = path.normalize(absolutePath);
-
-  if (!normalizedPath.startsWith(normalizedRoot) && normalizedPath !== path.normalize(uploadsRoot)) {
-    throw new Error('Invalid storage key');
-  }
-
-  return absolutePath;
+  assertSafeKey(storageKey);
+  return localHotPath(storageKey);
 }
 
 export async function openStoredReadStream(storageKey: string): Promise<{
@@ -153,7 +218,8 @@ export async function openStoredReadStream(storageKey: string): Promise<{
     };
   }
 
-  const absolutePath = resolveStoragePath(storageKey);
+  const absolutePath = await resolveLocalAbsolutePath(storageKey, 'any');
+  // Serving from cold path is allowed only when caller already rehydrated (local restore = move).
   const stat = await fs.stat(absolutePath);
   return {
     stream: createReadStream(absolutePath),
@@ -161,19 +227,19 @@ export async function openStoredReadStream(storageKey: string): Promise<{
   };
 }
 
+/** HeadObject / fs.access — avoid Range GET (which can bill Glacier retrieval). */
 export async function storedFileExists(storageKey: string): Promise<boolean> {
   try {
     if (getProvider() === 's3') {
       await getS3().send(
-        new GetObjectCommand({
+        new HeadObjectCommand({
           Bucket: env.s3Bucket,
           Key: storageKey,
-          Range: 'bytes=0-0',
         }),
       );
       return true;
     }
-    await fs.access(resolveStoragePath(storageKey));
+    await resolveLocalAbsolutePath(storageKey, 'any');
     return true;
   } catch {
     return false;
@@ -191,9 +257,145 @@ export async function deleteStoredFile(storageKey: string): Promise<void> {
       );
       return;
     }
-    await fs.unlink(resolveStoragePath(storageKey));
+    for (const candidate of [
+      localHotPath(storageKey),
+      localColdPath(storageKey),
+      localLegacyPath(storageKey),
+    ]) {
+      await fs.unlink(candidate).catch(() => undefined);
+    }
   } catch {
     // Best-effort cleanup
+  }
+}
+
+/**
+ * Archive to cheap cold storage.
+ * S3: change storage class to GLACIER/DEEP_ARCHIVE (one-time). No Instant Retrieval.
+ * Local: rename hot/legacy → cold (free).
+ */
+export async function transitionToCold(storageKey: string): Promise<void> {
+  assertSafeKey(storageKey);
+  if (!coldStorageEnabled()) return;
+
+  if (getProvider() === 's3') {
+    const storageClass = env.fileColdStorageClass as StorageClass;
+    await getS3().send(
+      new CopyObjectCommand({
+        Bucket: env.s3Bucket,
+        CopySource: `${env.s3Bucket}/${storageKey}`,
+        Key: storageKey,
+        StorageClass: storageClass,
+        MetadataDirective: 'COPY',
+      }),
+    );
+    return;
+  }
+
+  await ensureUploadsRoot();
+  let source: string | null = null;
+  if (await pathExists(localHotPath(storageKey))) source = localHotPath(storageKey);
+  else if (await pathExists(localLegacyPath(storageKey))) source = localLegacyPath(storageKey);
+  else if (await pathExists(localColdPath(storageKey))) return;
+  else throw new Error('Local object not found for cold transition');
+
+  const dest = localColdPath(storageKey);
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  await fs.rename(source, dest);
+}
+
+/**
+ * Local-only: move cold → hot immediately (free).
+ * S3 does NOT promote with CopyObject to STANDARD — that would add rewrite cost.
+ * S3 uses temporary RestoreObject instead (see requestObjectRestore).
+ */
+export async function transitionLocalToHot(storageKey: string): Promise<void> {
+  assertSafeKey(storageKey);
+  if (getProvider() !== 'local') {
+    throw new Error('transitionLocalToHot is only for local storage');
+  }
+  await ensureUploadsRoot();
+  if (await pathExists(localHotPath(storageKey))) return;
+  if (await pathExists(localLegacyPath(storageKey))) {
+    const dest = localHotPath(storageKey);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.rename(localLegacyPath(storageKey), dest);
+    return;
+  }
+  if (!(await pathExists(localColdPath(storageKey)))) {
+    throw new Error('Local cold object not found');
+  }
+  const dest = localHotPath(storageKey);
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  await fs.rename(localColdPath(storageKey), dest);
+}
+
+/**
+ * Start a temporary Glacier restore. Object stays in Glacier class —
+ * temporary copy is readable for FILE_RESTORE_DAYS without Standard promotion.
+ */
+export async function requestObjectRestore(storageKey: string): Promise<void> {
+  assertSafeKey(storageKey);
+  if (getProvider() !== 's3') {
+    await transitionLocalToHot(storageKey);
+    return;
+  }
+
+  const tier = env.fileRestoreTier;
+  await getS3().send(
+    new RestoreObjectCommand({
+      Bucket: env.s3Bucket,
+      Key: storageKey,
+      RestoreRequest: {
+        Days: env.fileRestoreDays,
+        GlacierJobParameters: {
+          Tier: tier,
+        },
+      },
+    }),
+  );
+}
+
+export async function getObjectStorageClass(storageKey: string): Promise<string | null> {
+  if (getProvider() !== 's3') return null;
+  const head = await getS3().send(
+    new HeadObjectCommand({
+      Bucket: env.s3Bucket,
+      Key: storageKey,
+    }),
+  );
+  return head.StorageClass ?? 'STANDARD';
+}
+
+export async function getObjectRestoreState(storageKey: string): Promise<ObjectRestoreState> {
+  if (getProvider() !== 's3') {
+    if (await pathExists(localHotPath(storageKey)) || await pathExists(localLegacyPath(storageKey))) {
+      return 'available';
+    }
+    if (await pathExists(localColdPath(storageKey))) return 'not_restoring';
+    return 'unknown';
+  }
+
+  try {
+    const head = await getS3().send(
+      new HeadObjectCommand({
+        Bucket: env.s3Bucket,
+        Key: storageKey,
+      }),
+    );
+    const restore = head.Restore;
+    if (!restore) {
+      const cls = head.StorageClass ?? 'STANDARD';
+      if (cls === 'STANDARD' || cls === 'STANDARD_IA' || cls === 'ONEZONE_IA' || cls === 'INTELLIGENT_TIERING') {
+        return 'available';
+      }
+      return 'not_restoring';
+    }
+    if (/ongoing-request\s*=\s*"true"/i.test(restore)) return 'pending';
+    if (/ongoing-request\s*=\s*"false"/i.test(restore)) return 'available';
+    return 'unknown';
+  } catch {
+    return 'unknown';
   }
 }
 
@@ -241,7 +443,7 @@ function signPayload(payload: string): string {
 
 /**
  * Issue a time-limited download URL after permission checks.
- * S3 → native presigned GET. Local → HMAC token on /api/files/signed.
+ * Caller must ensure the object is readable (hot or temporarily restored).
  */
 export async function createSignedFileAccess(input: {
   storageKey: string;

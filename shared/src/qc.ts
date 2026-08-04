@@ -55,6 +55,12 @@ export interface CaseDeliveryDto {
   videoStorageKey: string | null;
   uploadedAt: string | null;
   uploadedByName: string | null;
+  storageTier: import('./storage').FileStorageTier;
+  restoreStatus: import('./storage').FileRestoreStatus;
+  hotUntil: string | null;
+  coldSince: string | null;
+  restoreRequestedAt: string | null;
+  restoreError: string | null;
 }
 
 export interface QcQueueCaseDto {

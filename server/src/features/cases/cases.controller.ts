@@ -346,6 +346,73 @@ export async function signedFileUrl(req: AuthenticatedRequest, res: Response, ne
   }
 }
 
+export async function restoreFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.restoreCaseFile(
+      await actor(req),
+      req.params.caseId,
+      req.params.fileId,
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'File restore requested',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function fileRestoreStatus(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.getCaseFileRestoreStatus(
+      await actor(req),
+      req.params.caseId,
+      req.params.fileId,
+    );
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function restoreDeliveryVideoHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.restoreDeliveryVideo(await actor(req), req.params.caseId);
+    res.json({
+      success: true,
+      data,
+      message: 'Delivery video restore requested',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deliveryVideoRestoreStatus(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.getDeliveryVideoRestoreStatus(
+      await actor(req),
+      req.params.caseId,
+    );
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function signedDeliveryVideoUrl(
   req: AuthenticatedRequest,
   res: Response,

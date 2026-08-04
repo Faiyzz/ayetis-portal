@@ -145,6 +145,26 @@ export async function downloadCaseFile(caseId: string, fileId: string, filename:
   URL.revokeObjectURL(objectUrl);
 }
 
+export async function restoreCaseFile(caseId: string, fileId: string) {
+  const { data } = await api.post(`/cases/${caseId}/files/${fileId}/restore`);
+  return data.data as import('@ayetis/shared').CaseDetailDto;
+}
+
+export async function getCaseFileRestoreStatus(caseId: string, fileId: string) {
+  const { data } = await api.get(`/cases/${caseId}/files/${fileId}/restore-status`);
+  return data.data as import('@ayetis/shared').FileStorageStateDto & { fileId: string };
+}
+
+export async function restoreDeliveryVideo(caseId: string) {
+  const { data } = await api.post(`/cases/${caseId}/delivery/video/restore`);
+  return data.data as import('@ayetis/shared').CaseDetailDto;
+}
+
+export async function getDeliveryVideoRestoreStatus(caseId: string) {
+  const { data } = await api.get(`/cases/${caseId}/delivery/video/restore-status`);
+  return data.data as import('@ayetis/shared').FileStorageStateDto;
+}
+
 export async function downloadAllCaseFiles(caseId: string) {
   const token = localStorage.getItem('ayetis_token');
   const response = await fetch(`/api/cases/${caseId}/files/download-all`, {
@@ -152,7 +172,18 @@ export async function downloadAllCaseFiles(caseId: string) {
   });
 
   if (!response.ok) {
-    throw new Error('Unable to download case files');
+    let message = 'Unable to download case files';
+    let code: string | undefined;
+    try {
+      const body = (await response.json()) as { message?: string; code?: string };
+      if (body.message) message = body.message;
+      code = body.code;
+    } catch {
+      // ignore
+    }
+    const err = new Error(message) as Error & { code?: string };
+    err.code = code;
+    throw err;
   }
 
   const disposition = response.headers.get('Content-Disposition') || '';

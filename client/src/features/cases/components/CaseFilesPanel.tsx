@@ -2,15 +2,27 @@ import {
   ALL_FILE_CATEGORIES,
   FILE_CATEGORIES,
   FILE_CATEGORY_LABELS,
+  FILE_RESTORE_PENDING_CODE,
+  FILE_STORAGE_TIER_LABELS,
+  FILE_STORAGE_TIERS,
+  type CaseDetailDto,
   type CaseFileDto,
   type FileCategory,
+  type FileStorageTier,
 } from '@ayetis/shared';
-import { Fragment, useMemo, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { AuthButton } from '@/features/auth/components/AuthUI';
-import { downloadAllCaseFiles, downloadCaseFile, uploadCaseFiles } from '@/features/cases/api';
+import {
+  downloadAllCaseFiles,
+  downloadCaseFile,
+  fetchCase,
+  getCaseFileRestoreStatus,
+  restoreCaseFile,
+  uploadCaseFiles,
+} from '@/features/cases/api';
 import { EmptyState } from '@/features/cases/components/detail/EmptyState';
 import { toast } from '@/features/notifications/toastStore';
-import { getErrorMessage } from '@/lib/api';
+import { getErrorCode, getErrorMessage } from '@/lib/api';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -33,8 +45,68 @@ function groupByOriginalName(files: CaseFileDto[]) {
 }
 
 function categoryIcon(category: FileCategory) {
-  const label = (FILE_CATEGORY_LABELS[category] ?? category).slice(0, 3).toUpperCase();
-  return label;
+  return (FILE_CATEGORY_LABELS[category] ?? category).slice(0, 3).toUpperCase();
+}
+
+function StorageBadge({ tier }: { tier: FileStorageTier }) {
+  if (tier === FILE_STORAGE_TIERS.HOT) return null;
+  const styles =
+    tier === FILE_STORAGE_TIERS.RESTORING
+      ? 'bg-amber-50 text-amber-900'
+      : tier === FILE_STORAGE_TIERS.PURGED
+        ? 'bg-red-50 text-red-800'
+        : 'bg-slate-100 text-slate-700';
+  return (
+    <span
+      className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${styles}`}
+    >
+      {FILE_STORAGE_TIER_LABELS[tier]}
+    </span>
+  );
+}
+
+function FileActions({
+  file,
+  downloadingId,
+  restoringId,
+  onDownload,
+  onRestore,
+}: {
+  file: CaseFileDto;
+  downloadingId: string | null;
+  restoringId: string | null;
+  onDownload: (file: CaseFileDto) => void;
+  onRestore: (file: CaseFileDto) => void;
+}) {
+  const tier = file.storageTier ?? FILE_STORAGE_TIERS.HOT;
+  if (tier === FILE_STORAGE_TIERS.PURGED) {
+    return <span className="text-xs text-muted">Removed</span>;
+  }
+  if (tier === FILE_STORAGE_TIERS.COLD) {
+    return (
+      <button
+        type="button"
+        onClick={() => onRestore(file)}
+        disabled={restoringId === file.id}
+        className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-ink hover:border-brand-300 disabled:opacity-60"
+      >
+        {restoringId === file.id ? 'Starting…' : 'Restore'}
+      </button>
+    );
+  }
+  if (tier === FILE_STORAGE_TIERS.RESTORING) {
+    return <span className="text-xs font-medium text-amber-800">Restoring…</span>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onDownload(file)}
+      disabled={downloadingId === file.id}
+      className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-brand-700 disabled:opacity-60"
+    >
+      {downloadingId === file.id ? '…' : 'Download'}
+    </button>
+  );
 }
 
 export function CaseFilesPanel({
@@ -46,7 +118,7 @@ export function CaseFilesPanel({
   caseId: string;
   files: CaseFileDto[];
   canUpload: boolean;
-  onUpdated: (filesCase: Awaited<ReturnType<typeof uploadCaseFiles>>) => void;
+  onUpdated: (filesCase: CaseDetailDto) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState<FileCategory | ''>('');
@@ -54,12 +126,46 @@ export function CaseFilesPanel({
   const [selected, setSelected] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState<FileCategory | ''>('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [showUpload, setShowUpload] = useState(false);
+
+  const restoringIds = useMemo(
+    () => files.filter((f) => f.storageTier === FILE_STORAGE_TIERS.RESTORING).map((f) => f.id),
+    [files],
+  );
+
+  useEffect(() => {
+    if (restoringIds.length === 0) return;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        let needsRefresh = false;
+        for (const fileId of restoringIds) {
+          try {
+            const status = await getCaseFileRestoreStatus(caseId, fileId);
+            if (status.storageTier === FILE_STORAGE_TIERS.HOT) {
+              needsRefresh = true;
+              toast().success('File restore complete — ready to download');
+            }
+          } catch {
+            // ignore poll errors
+          }
+        }
+        if (needsRefresh) {
+          try {
+            onUpdated(await fetchCase(caseId));
+          } catch {
+            // ignore
+          }
+        }
+      })();
+    }, 15_000);
+    return () => window.clearInterval(timer);
+  }, [caseId, restoringIds, onUpdated]);
 
   const groups = useMemo(() => {
     const all = groupByOriginalName(files);
@@ -113,9 +219,26 @@ export function CaseFilesPanel({
     try {
       await downloadCaseFile(caseId, file.id, file.originalName || file.filename);
     } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to download file'));
+      if (getErrorCode(err) === FILE_RESTORE_PENDING_CODE) {
+        toast().warning('File is in cold storage. Start a restore first.');
+      } else {
+        toast().error(getErrorMessage(err, 'Unable to download file'));
+      }
     } finally {
       setDownloadingId(null);
+    }
+  }
+
+  async function handleRestore(file: CaseFileDto) {
+    setRestoringId(file.id);
+    try {
+      const updated = await restoreCaseFile(caseId, file.id);
+      onUpdated(updated);
+      toast().success('Restore started. You’ll be able to download when it finishes.');
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to start restore'));
+    } finally {
+      setRestoringId(null);
     }
   }
 
@@ -125,7 +248,11 @@ export function CaseFilesPanel({
       await downloadAllCaseFiles(caseId);
       toast().success('Download started');
     } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to download all files'));
+      if (getErrorCode(err) === FILE_RESTORE_PENDING_CODE) {
+        toast().warning('Some files are still in cold storage. Restore them first.');
+      } else {
+        toast().error(getErrorMessage(err, 'Unable to download all files'));
+      }
     } finally {
       setDownloadingAll(false);
     }
@@ -137,7 +264,7 @@ export function CaseFilesPanel({
         <div>
           <h2 className="text-sm font-semibold text-ink">Patient files</h2>
           <p className="mt-0.5 text-sm text-muted">
-            STL, scans, images, PDF, and delivery assets. Same name creates a new version.
+            Unused files move to cold storage after the hot window. Restore before downloading again.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -169,7 +296,7 @@ export function CaseFilesPanel({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search files…"
-          className="min-w-[10rem] flex-1 rounded-lg border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+          className="min-w-40 flex-1 rounded-lg border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
         />
         <select
           value={filterCategory}
@@ -274,8 +401,19 @@ export function CaseFilesPanel({
                 : 'Try a different search or category filter.'
             }
             icon={
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-6 4h4M7 3h8l4 4v12a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
+              <svg
+                viewBox="0 0 24 24"
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                aria-hidden
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 13h6m-6 4h4M7 3h8l4 4v12a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"
+                />
               </svg>
             }
           />
@@ -288,33 +426,34 @@ export function CaseFilesPanel({
                   <div className="flex h-20 items-center justify-center rounded-lg bg-surface text-xs font-bold tracking-wide text-brand-700">
                     {categoryIcon(latest.category)}
                   </div>
-                  <p className="mt-2 truncate text-sm font-semibold text-ink" title={group.name}>
-                    {group.name}
-                  </p>
+                  <div className="mt-2 flex items-start justify-between gap-2">
+                    <p className="truncate text-sm font-semibold text-ink" title={group.name}>
+                      {group.name}
+                    </p>
+                    <StorageBadge tier={latest.storageTier ?? FILE_STORAGE_TIERS.HOT} />
+                  </div>
                   <p className="mt-0.5 text-xs text-muted">
                     {FILE_CATEGORY_LABELS[latest.category]} · {formatBytes(latest.sizeBytes)} · v
                     {latest.version}
                   </p>
-                  <p className="mt-0.5 truncate text-xs text-muted">
-                    {latest.uploadedByName} · {new Date(latest.createdAt).toLocaleDateString()}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void handleDownload(latest)}
-                    disabled={downloadingId === latest.id}
-                    className="mt-3 w-full rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300 disabled:opacity-60"
-                  >
-                    {downloadingId === latest.id ? 'Downloading…' : 'Download'}
-                  </button>
+                  <div className="mt-3">
+                    <FileActions
+                      file={latest}
+                      downloadingId={downloadingId}
+                      restoringId={restoringId}
+                      onDownload={(f) => void handleDownload(f)}
+                      onRestore={(f) => void handleRestore(f)}
+                    />
+                  </div>
                 </li>
               );
             })}
           </ul>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-left text-sm">
+            <table className="w-full min-w-160 text-left text-sm">
               <thead>
-                <tr className="border-b border-line text-xs uppercase tracking-[0.05em] text-muted">
+                <tr className="border-b border-line text-xs uppercase tracking-wider text-muted">
                   <th className="px-2 py-2 font-semibold">File</th>
                   <th className="px-2 py-2 font-semibold">Category</th>
                   <th className="px-2 py-2 font-semibold">Size</th>
@@ -332,10 +471,11 @@ export function CaseFilesPanel({
                     <Fragment key={group.name}>
                       <tr className="border-b border-line">
                         <td className="px-2 py-2.5">
-                          <p className="font-medium text-ink">{group.name}</p>
-                          {latest.note ? (
-                            <p className="text-xs text-muted">{latest.note}</p>
-                          ) : null}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="font-medium text-ink">{group.name}</p>
+                            <StorageBadge tier={latest.storageTier ?? FILE_STORAGE_TIERS.HOT} />
+                          </div>
+                          {latest.note ? <p className="text-xs text-muted">{latest.note}</p> : null}
                           <p className="text-xs text-muted">v{latest.version} (latest)</p>
                         </td>
                         <td className="px-2 py-2.5 text-muted">
@@ -361,14 +501,13 @@ export function CaseFilesPanel({
                                 {open ? 'Hide' : `v${group.versions.length}`}
                               </button>
                             ) : null}
-                            <button
-                              type="button"
-                              onClick={() => void handleDownload(latest)}
-                              disabled={downloadingId === latest.id}
-                              className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-brand-700 disabled:opacity-60"
-                            >
-                              {downloadingId === latest.id ? '…' : 'Download'}
-                            </button>
+                            <FileActions
+                              file={latest}
+                              downloadingId={downloadingId}
+                              restoringId={restoringId}
+                              onDownload={(f) => void handleDownload(f)}
+                              onRestore={(f) => void handleRestore(f)}
+                            />
                           </div>
                         </td>
                       </tr>
@@ -376,22 +515,24 @@ export function CaseFilesPanel({
                         ? group.versions.map((file) => (
                             <tr key={file.id} className="border-b border-line bg-surface/40">
                               <td className="px-2 py-2 pl-6 text-xs text-muted" colSpan={4}>
-                                v{file.version} · {formatBytes(file.sizeBytes)} ·{' '}
-                                {file.uploadedByName}
+                                <span className="inline-flex items-center gap-1.5">
+                                  v{file.version} · {formatBytes(file.sizeBytes)} ·{' '}
+                                  {file.uploadedByName}
+                                  <StorageBadge tier={file.storageTier ?? FILE_STORAGE_TIERS.HOT} />
+                                </span>
                                 {file.note ? ` · ${file.note}` : ''}
                               </td>
                               <td className="px-2 py-2 text-xs text-muted">
                                 {new Date(file.createdAt).toLocaleString()}
                               </td>
                               <td className="px-2 py-2 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => void handleDownload(file)}
-                                  disabled={downloadingId === file.id}
-                                  className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-brand-700 disabled:opacity-60"
-                                >
-                                  Download
-                                </button>
+                                <FileActions
+                                  file={file}
+                                  downloadingId={downloadingId}
+                                  restoringId={restoringId}
+                                  onDownload={(f) => void handleDownload(f)}
+                                  onRestore={(f) => void handleRestore(f)}
+                                />
                               </td>
                             </tr>
                           ))

@@ -103,9 +103,20 @@ import {
 import { resolvePermissionsForUserId } from '../users/users.service';
 import {
   persistUploadedFile,
-  openStoredReadStream,
   storedFileExists,
 } from '../../services/storage.service';
+import {
+  copyLifecycleToDelivery,
+  copyLifecycleToFile,
+  ensureReadableForDownload,
+  initialHotFields,
+  lifecycleFromDelivery,
+  lifecycleFromFile,
+  markCaseModified,
+  startRestore,
+  syncRestoreStatus,
+  toLifecycleDto,
+} from '../../services/fileLifecycle.service';
 
 export interface CaseActor {
   id: string;
@@ -418,6 +429,7 @@ async function toDetail(caseDoc: ICase): Promise<CaseDetailDto> {
             ? caseDoc.delivery.uploadedAt.toISOString()
             : null,
           uploadedByName: caseDoc.delivery.uploadedByName ?? null,
+          ...toLifecycleDto(caseDoc.delivery, caseDoc.delivery.uploadedAt),
         }
       : null,
     qcReviews: mapQcReviews(caseDoc),
@@ -455,6 +467,7 @@ async function toDetail(caseDoc: ICase): Promise<CaseDetailDto> {
       version: file.version || 1,
       createdAt: file.createdAt.toISOString(),
       note: file.note,
+      ...toLifecycleDto(file, file.createdAt),
     })),
     history: mapHistory(caseDoc),
     timeline: buildCaseTimeline(caseDoc.status),
@@ -1277,6 +1290,8 @@ export async function uploadCaseFiles(
       (existing) => existing.originalName === file.originalname,
     ).length;
 
+    const createdAt = new Date();
+    const hot = initialHotFields(createdAt);
     caseDoc.files.unshift({
       _id: new Types.ObjectId(),
       filename: file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'),
@@ -1289,7 +1304,10 @@ export async function uploadCaseFiles(
       uploadedByName: actorName(actor),
       version: sameNameCount + 1,
       note: options.note?.trim() || undefined,
-      createdAt: new Date(),
+      createdAt,
+      storageTier: hot.storageTier,
+      restoreStatus: hot.restoreStatus,
+      hotUntil: hot.hotUntil,
     } as ICase['files'][number]);
 
     uploadedNames.push(file.originalname);
@@ -1345,6 +1363,23 @@ export async function getCaseFileForDownload(
   const file = caseDoc.files.find((item) => String(item._id) === fileId);
   if (!file || !file.storageKey) {
     throw new AppError('File not found', 404);
+  }
+
+  const fields = lifecycleFromFile(file);
+  try {
+    await ensureReadableForDownload(fields, file.storageKey);
+  } catch (err) {
+    copyLifecycleToFile(file, fields);
+    markCaseModified(caseDoc);
+    await caseDoc.save();
+    throw err;
+  }
+  copyLifecycleToFile(file, fields);
+  markCaseModified(caseDoc);
+  await caseDoc.save();
+
+  if (fields.storageTier === 'purged') {
+    throw new AppError('File has been removed from cold storage', 410);
   }
 
   if (!(await storedFileExists(file.storageKey))) {
@@ -1406,7 +1441,19 @@ export async function getDeliveryVideoForDownload(
   assertCanViewCase(actor, caseDoc);
 
   const key = caseDoc.delivery?.videoStorageKey;
-  if (!key) throw new AppError('Delivery video not found', 404);
+  if (!key || !caseDoc.delivery) throw new AppError('Delivery video not found', 404);
+
+  const fields = lifecycleFromDelivery(caseDoc.delivery);
+  try {
+    await ensureReadableForDownload(fields, key);
+  } catch (err) {
+    copyLifecycleToDelivery(caseDoc.delivery, fields);
+    markCaseModified(caseDoc);
+    await caseDoc.save();
+    throw err;
+  }
+  copyLifecycleToDelivery(caseDoc.delivery, fields);
+  markCaseModified(caseDoc);
 
   if (
     permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_OWN) &&
@@ -1418,8 +1465,9 @@ export async function getDeliveryVideoForDownload(
       caseDoc.doctorEngagement.videoViewedAt = now;
     }
     caseDoc.doctorEngagement.lastViewedAt = now;
-    await caseDoc.save();
   }
+
+  await caseDoc.save();
 
   return {
     storageKey: key,
@@ -1449,9 +1497,29 @@ export async function getCaseFilesForZipDownload(
 
   const entries: Array<{ storageKey: string; name: string }> = [];
   const usedNames = new Set<string>();
+  const pending: Array<{ fileId: string; name: string }> = [];
+  let dirty = false;
 
   for (const file of caseDoc.files) {
     if (!file.storageKey) continue;
+    if (file.storageTier === 'purged') continue;
+    const fields = lifecycleFromFile(file);
+    try {
+      await ensureReadableForDownload(fields, file.storageKey);
+      copyLifecycleToFile(file, fields);
+      dirty = true;
+    } catch (err) {
+      copyLifecycleToFile(file, fields);
+      dirty = true;
+      if (err instanceof AppError && err.code === 'FILE_RESTORE_PENDING') {
+        pending.push({
+          fileId: String(file._id),
+          name: file.originalName || file.filename,
+        });
+        continue;
+      }
+      throw err;
+    }
     if (!(await storedFileExists(file.storageKey))) continue;
     let name = file.originalName || file.filename || 'file';
     if (usedNames.has(name)) {
@@ -1462,6 +1530,20 @@ export async function getCaseFilesForZipDownload(
     }
     usedNames.add(name);
     entries.push({ storageKey: file.storageKey, name });
+  }
+
+  if (dirty) {
+    markCaseModified(caseDoc);
+    await caseDoc.save();
+  }
+
+  if (pending.length > 0) {
+    throw new AppError(
+      `${pending.length} file(s) are in cold storage and must be restored before downloading all.`,
+      409,
+      { pending },
+      'FILE_RESTORE_PENDING',
+    );
   }
 
   if (entries.length === 0) {
@@ -1482,23 +1564,100 @@ export async function getCaseFilesForZipDownload(
 
   await recordActivity({
     action: AUDIT_ACTIONS.CASE_FILES_DOWNLOAD,
-    summary: `${actor.email} downloaded ${entries.length} file(s) for case ${caseDoc.caseId}`,
+    summary: `${actor.email} downloaded all files from case ${caseDoc.caseId}`,
     actorId: actor.id,
     actorEmail: actor.email,
     actorName: actorName(actor),
     actorRole: actor.role,
     targetType: 'case',
     targetId: caseDoc.caseId,
-    metadata: { fileCount: entries.length },
+    metadata: { count: entries.length },
     ipAddress: audit?.ipAddress,
     userAgent: audit?.userAgent,
-  });
+  }).catch(() => undefined);
 
+  return { caseId: caseDoc.caseId, zipName: `${caseDoc.caseId}-files.zip`, entries };
+}
+
+export async function restoreCaseFile(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  fileId: string,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+  const file = caseDoc.files.find((item) => String(item._id) === fileId);
+  if (!file?.storageKey) throw new AppError('File not found', 404);
+
+  const fields = lifecycleFromFile(file);
+  await startRestore(fields, file.storageKey);
+  copyLifecycleToFile(file, fields);
+  markCaseModified(caseDoc);
+  await caseDoc.save();
+  return await toDetail(caseDoc);
+}
+
+export async function getCaseFileRestoreStatus(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  fileId: string,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+  const file = caseDoc.files.find((item) => String(item._id) === fileId);
+  if (!file?.storageKey) throw new AppError('File not found', 404);
+
+  const fields = lifecycleFromFile(file);
+  await syncRestoreStatus(fields, file.storageKey);
+  if (
+    fields.storageTier !== file.storageTier ||
+    fields.restoreStatus !== file.restoreStatus ||
+    fields.hotUntil?.getTime() !== file.hotUntil?.getTime()
+  ) {
+    copyLifecycleToFile(file, fields);
+    markCaseModified(caseDoc);
+    await caseDoc.save();
+  }
   return {
-    caseId: caseDoc.caseId,
-    zipName: `${caseDoc.caseId}-files.zip`,
-    entries,
+    fileId,
+    ...toLifecycleDto(fields, file.createdAt),
   };
+}
+
+export async function restoreDeliveryVideo(actor: CaseActor, caseIdOrMongoId: string) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+  if (!caseDoc.delivery?.videoStorageKey) {
+    throw new AppError('Delivery video not found', 404);
+  }
+  const fields = lifecycleFromDelivery(caseDoc.delivery);
+  await startRestore(fields, caseDoc.delivery.videoStorageKey);
+  copyLifecycleToDelivery(caseDoc.delivery, fields);
+  markCaseModified(caseDoc);
+  await caseDoc.save();
+  return await toDetail(caseDoc);
+}
+
+export async function getDeliveryVideoRestoreStatus(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+  if (!caseDoc.delivery?.videoStorageKey) {
+    throw new AppError('Delivery video not found', 404);
+  }
+  const fields = lifecycleFromDelivery(caseDoc.delivery);
+  await syncRestoreStatus(fields, caseDoc.delivery.videoStorageKey);
+  if (
+    fields.storageTier !== caseDoc.delivery.storageTier ||
+    fields.restoreStatus !== caseDoc.delivery.restoreStatus
+  ) {
+    copyLifecycleToDelivery(caseDoc.delivery, fields);
+    markCaseModified(caseDoc);
+    await caseDoc.save();
+  }
+  return toLifecycleDto(fields, caseDoc.delivery.uploadedAt);
 }
 
 function assertCanDesignCase(actor: CaseActor, caseDoc: ICase) {
@@ -1964,6 +2123,8 @@ export async function approveQcCase(
   }
 
   const comments = input.comments?.trim() || 'Approved';
+  const uploadedAt = new Date();
+  const hot = initialHotFields(uploadedAt);
 
   caseDoc.status = CASE_STATUSES.DELIVERED;
   caseDoc.doctorDecision = undefined;
@@ -1973,9 +2134,12 @@ export async function approveQcCase(
     viewLink: deliveryViewLink,
     videoFilename: deliveryVideoFilename,
     videoStorageKey: deliveryVideoStorageKey,
-    uploadedAt: new Date(),
+    uploadedAt,
     uploadedById: new Types.ObjectId(actor.id),
     uploadedByName: actorName(actor),
+    storageTier: hot.storageTier,
+    restoreStatus: hot.restoreStatus,
+    hotUntil: hot.hotUntil,
   };
 
   pushQcReview(caseDoc, {

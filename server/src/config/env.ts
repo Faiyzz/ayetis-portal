@@ -39,4 +39,28 @@ export const env = {
   passwordExpiryDays: Number(process.env.PASSWORD_EXPIRY_DAYS ?? 90),
   /** Seconds a signed file download URL remains valid. */
   signedUrlTtlSeconds: Number(process.env.SIGNED_URL_TTL_SECONDS ?? 300),
+  /**
+   * Cost-minimal cold storage:
+   * - Archive unused objects to Glacier Flexible Retrieval (cheap storage).
+   * - On access, temporary RestoreObject only — never CopyObject back to STANDARD
+   *   (avoids promotion rewrite costs). Hot window = temporary restore days.
+   * - Local provider: free rename between uploads/hot and uploads/cold.
+   */
+  fileHotDays: Math.max(0, Number(process.env.FILE_HOT_DAYS ?? 30)),
+  fileColdStorageEnabled: (() => {
+    const raw = process.env.FILE_COLD_STORAGE_ENABLED;
+    if (raw != null && raw !== '') {
+      return raw.toLowerCase() !== 'false' && raw !== '0';
+    }
+    return true;
+  })(),
+  /** GLACIER (Flexible) default — cheaper than Instant Retrieval; no per-read fees until restore. */
+  fileColdStorageClass: (process.env.FILE_COLD_STORAGE_CLASS ?? 'GLACIER').toUpperCase(),
+  /** Bulk = lowest restore cost (slower). Standard/Expedited cost more. */
+  fileRestoreTier: (process.env.FILE_RESTORE_TIER ?? 'Bulk') as 'Bulk' | 'Standard' | 'Expedited',
+  /** Temporary Glacier restore window; also used as re-hot period after restore completes. */
+  fileRestoreDays: Math.max(1, Number(process.env.FILE_RESTORE_DAYS ?? process.env.FILE_HOT_DAYS ?? 30)),
+  /** Auto-delete cold objects after this many days (0 = never). Reduces long-term storage cost. */
+  fileColdDeleteAfterDays: Math.max(0, Number(process.env.FILE_COLD_DELETE_AFTER_DAYS ?? 365)),
+  fileColdStorageCron: process.env.FILE_COLD_STORAGE_CRON ?? '0 * * * *',
 };

@@ -205,6 +205,12 @@ export interface CaseFileDto {
   version: number;
   createdAt: string;
   note?: string;
+  storageTier: import('./storage').FileStorageTier;
+  restoreStatus: import('./storage').FileRestoreStatus;
+  hotUntil: string | null;
+  coldSince: string | null;
+  restoreRequestedAt: string | null;
+  restoreError: string | null;
 }
 
 export interface CaseNoteDto {

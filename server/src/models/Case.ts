@@ -8,11 +8,15 @@ import {
   ALL_FILE_CATEGORIES,
   ALL_PAYMENT_STATUSES,
   ALL_QC_ERROR_CODES,
+  ALL_FILE_RESTORE_STATUSES,
+  ALL_FILE_STORAGE_TIERS,
   ASSIGNMENT_MODES,
   CASE_PRIORITIES,
   CASE_STATUSES,
   EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORIES,
+  FILE_RESTORE_STATUSES,
+  FILE_STORAGE_TIERS,
   PAYMENT_STATUSES,
   QC_REVIEW_OUTCOMES,
   type ArchOption,
@@ -22,6 +26,8 @@ import {
   type ConsultantIndicator,
   type DoctorDecision,
   type FileCategory,
+  type FileRestoreStatus,
+  type FileStorageTier,
   type PaymentStatus,
   type QcErrorCode,
   type QcReviewOutcome,
@@ -52,6 +58,13 @@ export interface ICaseFile {
   version: number;
   note?: string;
   createdAt: Date;
+  storageTier: FileStorageTier;
+  restoreStatus: FileRestoreStatus;
+  hotUntil?: Date;
+  coldSince?: Date;
+  lastAccessedAt?: Date;
+  restoreRequestedAt?: Date;
+  restoreError?: string;
 }
 
 export interface ICaseHistory {
@@ -95,6 +108,13 @@ export interface ICaseDelivery {
   uploadedAt?: Date;
   uploadedById?: Types.ObjectId;
   uploadedByName?: string;
+  storageTier?: FileStorageTier;
+  restoreStatus?: FileRestoreStatus;
+  hotUntil?: Date;
+  coldSince?: Date;
+  lastAccessedAt?: Date;
+  restoreRequestedAt?: Date;
+  restoreError?: string;
 }
 
 export interface IClinicalRemark {
@@ -201,6 +221,21 @@ const caseFileSchema = new Schema<ICaseFile>(
     version: { type: Number, default: 1, min: 1 },
     note: { type: String, trim: true },
     createdAt: { type: Date, default: Date.now },
+    storageTier: {
+      type: String,
+      enum: ALL_FILE_STORAGE_TIERS,
+      default: FILE_STORAGE_TIERS.HOT,
+    },
+    restoreStatus: {
+      type: String,
+      enum: ALL_FILE_RESTORE_STATUSES,
+      default: FILE_RESTORE_STATUSES.NONE,
+    },
+    hotUntil: { type: Date },
+    coldSince: { type: Date },
+    lastAccessedAt: { type: Date },
+    restoreRequestedAt: { type: Date },
+    restoreError: { type: String, trim: true },
   },
   { _id: true },
 );
@@ -248,6 +283,21 @@ const caseDeliverySchema = new Schema<ICaseDelivery>(
     uploadedAt: { type: Date },
     uploadedById: { type: Schema.Types.ObjectId, ref: 'User' },
     uploadedByName: { type: String },
+    storageTier: {
+      type: String,
+      enum: ALL_FILE_STORAGE_TIERS,
+      default: FILE_STORAGE_TIERS.HOT,
+    },
+    restoreStatus: {
+      type: String,
+      enum: ALL_FILE_RESTORE_STATUSES,
+      default: FILE_RESTORE_STATUSES.NONE,
+    },
+    hotUntil: { type: Date },
+    coldSince: { type: Date },
+    lastAccessedAt: { type: Date },
+    restoreRequestedAt: { type: Date },
+    restoreError: { type: String, trim: true },
   },
   { _id: false },
 );
