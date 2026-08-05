@@ -65,3 +65,11 @@ export async function updateUserPermissions(
 export async function deleteUser(userId: string, reason: string): Promise<void> {
   await api.delete(`/users/${userId}`, { data: { reason } });
 }
+
+export async function resetUserPassword(userId: string): Promise<{
+  message: string;
+  temporaryPassword?: string;
+}> {
+  const { data } = await api.post(`/users/${userId}/reset-password`);
+  return data.data;
+}

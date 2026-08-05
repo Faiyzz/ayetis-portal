@@ -43,6 +43,11 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
         to: '/app/users',
       },
       {
+        label: 'Registrations',
+        description: 'Approve verified signup requests',
+        to: '/app/registrations',
+      },
+      {
         label: 'Create user',
         description: 'Register a user for a system role',
         to: '/app/users/create',

@@ -6,6 +6,7 @@ import {
   QC_REVIEW_OUTCOMES,
   ROLES,
   computeDelayLevel,
+  formatDoctorDisplay,
   labelForMonthKey,
   monthRangeUtc,
   permissionsInclude,
@@ -13,6 +14,7 @@ import {
   recentMonthOptions,
   PERMISSIONS,
   type DelayLevel,
+  type Role,
   type SupervisorDashboardDto,
   type SupervisorMemberPerformanceDto,
   type SupervisorPerformanceDto,
@@ -48,13 +50,24 @@ function emptyCounts(): SupervisorQueueCounts {
   return { pending: 0, active: 0, completed: 0, returned: 0 };
 }
 
-function toQueueItem(caseDoc: ICase, assigneeName: string | null): SupervisorQueueCaseDto {
+function toQueueItem(
+  caseDoc: ICase,
+  assigneeName: string | null,
+  viewer?: { id: string; role: Role },
+): SupervisorQueueCaseDto {
   const ref = caseDoc.submittedToQcAt ?? caseDoc.validatedAt ?? caseDoc.updatedAt ?? caseDoc.createdAt;
+  const doctorName = viewer
+    ? formatDoctorDisplay(viewer.role, viewer.id, {
+        doctorUserId: String(caseDoc.doctorId),
+        doctorName: caseDoc.doctorName,
+        doctorId: caseDoc.doctorDisplayId,
+      })
+    : (caseDoc.doctorDisplayId || caseDoc.doctorName);
   return {
     id: caseDoc.id,
     caseId: caseDoc.caseId,
     patientName: caseDoc.patientName,
-    doctorName: caseDoc.doctorName,
+    doctorName,
     status: caseDoc.status,
     priority: caseDoc.priority,
     treatmentSummary: caseDoc.treatmentSummary,

@@ -8,23 +8,23 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [devResetUrl, setDevResetUrl] = useState('');
+  const [devConfirmUrl, setDevConfirmUrl] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError('');
     setSuccess('');
-    setDevResetUrl('');
+    setDevConfirmUrl('');
     setLoading(true);
     try {
       const result = await forgotPassword(email);
       setSuccess(result.message);
-      if (result.resetUrl) {
-        setDevResetUrl(result.resetUrl);
+      if (result.confirmUrl) {
+        setDevConfirmUrl(result.confirmUrl);
       }
     } catch (err) {
-      setError(getErrorMessage(err, 'Unable to send reset link'));
+      setError(getErrorMessage(err, 'Unable to start password reset'));
     } finally {
       setLoading(false);
     }
@@ -33,7 +33,7 @@ export function ForgotPasswordPage() {
   return (
     <AuthCard
       title="Reset password"
-      subtitle="Enter your email and we’ll send a secure reset link."
+      subtitle="We will email a confirmation link. After you confirm, a temporary password is sent and you must change it on first login."
       onSubmit={handleSubmit}
       footer={
         <Link to="/login" className="font-semibold text-brand-600 hover:text-brand-700">
@@ -43,11 +43,11 @@ export function ForgotPasswordPage() {
     >
       {error ? <Alert>{error}</Alert> : null}
       {success ? <Alert tone="success">{success}</Alert> : null}
-      {devResetUrl ? (
+      {devConfirmUrl ? (
         <Alert tone="info">
           Dev mode link:{' '}
-          <a href={devResetUrl} className="font-semibold underline">
-            Open reset page
+          <a href={devConfirmUrl} className="font-semibold underline">
+            Confirm reset
           </a>
         </Alert>
       ) : null}
@@ -63,7 +63,7 @@ export function ForgotPasswordPage() {
         placeholder="you@clinic.com"
       />
 
-      <AuthButton loading={loading}>Send reset link</AuthButton>
+      <AuthButton loading={loading}>Send confirmation email</AuthButton>
     </AuthCard>
   );
 }

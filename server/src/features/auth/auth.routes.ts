@@ -5,10 +5,11 @@ import { validate } from '../../middleware/validate';
 import * as authController from './auth.controller';
 import {
   changePasswordSchema,
+  confirmPasswordResetSchema,
   forgotPasswordSchema,
   loginSchema,
   registerSchema,
-  resetPasswordSchema,
+  verifyEmailSchema,
 } from './auth.schemas';
 
 const authLimiter = rateLimit({
@@ -25,6 +26,8 @@ const authLimiter = rateLimit({
 const router = Router();
 
 router.post('/register', authLimiter, validate(registerSchema), authController.register);
+router.post('/verify-email', authLimiter, validate(verifyEmailSchema), authController.verifyEmail);
+router.get('/verify-email', authLimiter, authController.verifyEmail);
 router.post('/login', authLimiter, validate(loginSchema), authController.login);
 router.post(
   '/forgot-password',
@@ -33,11 +36,12 @@ router.post(
   authController.forgotPassword,
 );
 router.post(
-  '/reset-password',
+  '/confirm-password-reset',
   authLimiter,
-  validate(resetPasswordSchema),
-  authController.resetPassword,
+  validate(confirmPasswordResetSchema),
+  authController.confirmPasswordReset,
 );
+router.get('/confirm-password-reset', authLimiter, authController.confirmPasswordReset);
 router.get('/me', authenticate, authController.me);
 router.post('/logout', authenticate, authController.logout);
 router.post(

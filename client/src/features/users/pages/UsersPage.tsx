@@ -1,4 +1,11 @@
-import { ROLE_LABELS, type PublicUser } from '@ayetis/shared';
+import {
+  ACCOUNT_STATUS_LABELS,
+  ACCOUNT_STATUSES,
+  ACCOUNT_TYPE_LABELS,
+  ROLE_LABELS,
+  type AccountStatus,
+  type PublicUser,
+} from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { dialog } from '@/components/dialog';
@@ -28,13 +35,29 @@ export function UsersPage() {
     void load();
   }, []);
 
-  async function toggleActive(user: PublicUser) {
+  async function setStatus(user: PublicUser, accountStatus: AccountStatus) {
     try {
-      await usersApi.updateUser(user.id, { isActive: !user.isActive });
-      toast().success(`${user.email} ${user.isActive ? 'deactivated' : 'activated'}`);
+      await usersApi.updateUser(user.id, { accountStatus });
+      toast().success(`${user.email} → ${ACCOUNT_STATUS_LABELS[accountStatus]}`);
       await load();
     } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to update user'));
+      toast().error(getErrorMessage(err, 'Unable to update user status'));
+    }
+  }
+
+  async function handleResetPassword(user: PublicUser) {
+    const confirmed = await dialog.confirm({
+      title: 'Reset password',
+      message: `Generate a temporary password for ${user.email} and force a change on next login?`,
+      confirmLabel: 'Reset password',
+    });
+    if (!confirmed) return;
+    try {
+      const result = await usersApi.resetUserPassword(user.id);
+      toast().success(result.message, result.temporaryPassword);
+      await load();
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to reset password'));
     }
   }
 
@@ -80,16 +103,26 @@ export function UsersPage() {
       <PageHeader
         eyebrow="Administration"
         title="Users"
-        subtitle="Manage accounts for fixed system roles, then refine permissions per user."
+        subtitle="Manage accounts, statuses (Active / Suspended / Blocked), and password resets."
       >
-        {can(PERMISSIONS.USER_CREATE) ? (
-          <Link
-            to="/app/users/create"
-            className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-600"
-          >
-            Create user
-          </Link>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {can(PERMISSIONS.REGISTRATION_LIST) ? (
+            <Link
+              to="/app/registrations"
+              className="inline-flex items-center justify-center rounded-lg border border-line px-3.5 py-2 text-sm font-semibold text-ink hover:bg-surface"
+            >
+              Registrations
+            </Link>
+          ) : null}
+          {can(PERMISSIONS.USER_CREATE) ? (
+            <Link
+              to="/app/users/create"
+              className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-600"
+            >
+              Create user
+            </Link>
+          ) : null}
+        </div>
       </PageHeader>
 
       <section className="overflow-hidden rounded-xl border border-line bg-white">
@@ -107,8 +140,8 @@ export function UsersPage() {
               <thead className="bg-surface text-muted">
                 <tr>
                   <th className="px-5 py-3 font-medium">User</th>
-                  <th className="px-5 py-3 font-medium">Role</th>
-                  <th className="px-5 py-3 font-medium">Overrides</th>
+                  <th className="px-5 py-3 font-medium">Role / Type</th>
+                  <th className="px-5 py-3 font-medium">Doctor ID</th>
                   <th className="px-5 py-3 font-medium">Status</th>
                   <th className="px-5 py-3 font-medium">Actions</th>
                 </tr>
@@ -122,19 +155,26 @@ export function UsersPage() {
                       </p>
                       <p className="text-muted">{user.email}</p>
                     </td>
-                    <td className="px-5 py-3 text-ink">{ROLE_LABELS[user.role]}</td>
-                    <td className="px-5 py-3 text-muted">
-                      +{user.permissionGrants.length} / −{user.permissionDenies.length}
+                    <td className="px-5 py-3 text-ink">
+                      <p>{ROLE_LABELS[user.role]}</p>
+                      <p className="text-xs text-muted">
+                        {ACCOUNT_TYPE_LABELS[user.accountType]}
+                      </p>
+                    </td>
+                    <td className="px-5 py-3 font-mono text-xs text-muted">
+                      {user.doctorId || '—'}
                     </td>
                     <td className="px-5 py-3">
                       <span
                         className={
-                          user.isActive
+                          user.accountStatus === ACCOUNT_STATUSES.ACTIVE
                             ? 'rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700'
-                            : 'rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600'
+                            : user.accountStatus === ACCOUNT_STATUSES.SUSPENDED
+                              ? 'rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800'
+                              : 'rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700'
                         }
                       >
-                        {user.isActive ? 'Active' : 'Inactive'}
+                        {ACCOUNT_STATUS_LABELS[user.accountStatus]}
                       </span>
                     </td>
                     <td className="px-5 py-3">
@@ -148,12 +188,43 @@ export function UsersPage() {
                           </Link>
                         ) : null}
                         {can(PERMISSIONS.USER_UPDATE) ? (
+                          <>
+                            {user.accountStatus !== ACCOUNT_STATUSES.ACTIVE ? (
+                              <button
+                                type="button"
+                                onClick={() => void setStatus(user, ACCOUNT_STATUSES.ACTIVE)}
+                                className="font-medium text-muted hover:text-ink"
+                              >
+                                Activate
+                              </button>
+                            ) : null}
+                            {user.accountStatus !== ACCOUNT_STATUSES.SUSPENDED ? (
+                              <button
+                                type="button"
+                                onClick={() => void setStatus(user, ACCOUNT_STATUSES.SUSPENDED)}
+                                className="font-medium text-muted hover:text-ink"
+                              >
+                                Suspend
+                              </button>
+                            ) : null}
+                            {user.accountStatus !== ACCOUNT_STATUSES.BLOCKED ? (
+                              <button
+                                type="button"
+                                onClick={() => void setStatus(user, ACCOUNT_STATUSES.BLOCKED)}
+                                className="font-medium text-muted hover:text-ink"
+                              >
+                                Block
+                              </button>
+                            ) : null}
+                          </>
+                        ) : null}
+                        {can(PERMISSIONS.USER_RESET_PASSWORD) ? (
                           <button
                             type="button"
-                            onClick={() => void toggleActive(user)}
+                            onClick={() => void handleResetPassword(user)}
                             className="font-medium text-muted hover:text-ink"
                           >
-                            {user.isActive ? 'Deactivate' : 'Activate'}
+                            Reset password
                           </button>
                         ) : null}
                         {can(PERMISSIONS.USER_DELETE) ? (

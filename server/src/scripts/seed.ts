@@ -1,4 +1,4 @@
-import { ROLES } from '@ayetis/shared';
+import { ACCOUNT_STATUSES, ACCOUNT_TYPES, ROLES } from '@ayetis/shared';
 import { connectDatabase } from '../config/database';
 import { env } from '../config/env';
 import { User } from '../models/User';
@@ -18,6 +18,8 @@ async function seed() {
     firstName: 'System',
     lastName: 'Admin',
     role: ROLES.ADMIN,
+    accountType: ACCOUNT_TYPES.INDIVIDUAL,
+    accountStatus: ACCOUNT_STATUSES.ACTIVE,
   });
 
   console.log(`Seeded admin → ${env.seedAdminEmail} / ${env.seedAdminPassword}`);

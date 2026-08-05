@@ -71,7 +71,7 @@ interface AuthCardProps {
   subtitle: string;
   children: ReactNode;
   footer?: ReactNode;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   brandTone?: 'brand' | 'dark';
 }
 
@@ -91,9 +91,13 @@ export function AuthCard({
         <p className="mt-2 text-[15px] leading-relaxed text-muted">{subtitle}</p>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-4">
-        {children}
-      </form>
+      {onSubmit ? (
+        <form onSubmit={onSubmit} className="space-y-4">
+          {children}
+        </form>
+      ) : (
+        <div className="space-y-4">{children}</div>
+      )}
 
       {footer ? <div className="mt-6 text-center text-sm text-muted">{footer}</div> : null}
     </div>

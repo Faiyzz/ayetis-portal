@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import type { Permission, Role } from '@ayetis/shared';
-import { permissionsInclude } from '@ayetis/shared';
+import { ACCOUNT_STATUSES, canLogin, permissionsInclude } from '@ayetis/shared';
 import { env } from '../config/env';
 import { User, type IUser } from '../models/User';
 import { AppError } from '../utils/AppError';
@@ -129,7 +129,7 @@ export async function loadUser(
     }
 
     const user = await User.findById(req.user.id);
-    if (!user || !user.isActive) {
+    if (!user || !canLogin(user.accountStatus ?? ACCOUNT_STATUSES.ACTIVE)) {
       next(new AppError('User not found or inactive', 401));
       return;
     }

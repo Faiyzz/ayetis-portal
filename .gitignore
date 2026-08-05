@@ -12,3 +12,9 @@ build/
 coverage/
 .vite/
 *.tsbuildinfo
+.cursor/
+plans/
+SoftwareRequirements.txt
+Ayetis - URD.docx
+jira_import.csv
+

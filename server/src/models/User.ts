@@ -1,6 +1,12 @@
 import {
+  ACCOUNT_STATUSES,
+  ACCOUNT_TYPES,
+  ALL_ACCOUNT_STATUSES,
+  ALL_ACCOUNT_TYPES,
   ALL_PERMISSIONS,
   ALL_ROLES,
+  type AccountStatus,
+  type AccountType,
   type Permission,
   type Role,
   resolveEffectivePermissions,
@@ -14,6 +20,12 @@ export interface IUser extends Document {
   firstName: string;
   lastName: string;
   role: Role;
+  accountType: AccountType;
+  accountStatus: AccountStatus;
+  doctorId?: string;
+  clinicName?: string;
+  companyName?: string;
+  /** @deprecated Prefer accountStatus — kept in sync for compatibility */
   isActive: boolean;
   departmentId?: Types.ObjectId;
   departmentName?: string;
@@ -21,6 +33,7 @@ export interface IUser extends Document {
   permissionDenies: Permission[];
   passwordResetToken?: string;
   passwordResetExpires?: Date;
+  passwordHistory: string[];
   passwordChangedAt?: Date;
   mustChangePassword: boolean;
   createdAt: Date;
@@ -60,6 +73,33 @@ const userSchema = new Schema<IUser>(
       required: true,
       index: true,
     },
+    accountType: {
+      type: String,
+      enum: ALL_ACCOUNT_TYPES,
+      default: ACCOUNT_TYPES.INDIVIDUAL,
+      index: true,
+    },
+    accountStatus: {
+      type: String,
+      enum: ALL_ACCOUNT_STATUSES,
+      default: ACCOUNT_STATUSES.ACTIVE,
+      index: true,
+    },
+    doctorId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      index: true,
+    },
+    clinicName: {
+      type: String,
+      trim: true,
+    },
+    companyName: {
+      type: String,
+      trim: true,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -92,6 +132,11 @@ const userSchema = new Schema<IUser>(
       type: Date,
       select: false,
     },
+    passwordHistory: {
+      type: [String],
+      default: [],
+      select: false,
+    },
     passwordChangedAt: {
       type: Date,
       default: Date.now,
@@ -106,8 +151,23 @@ const userSchema = new Schema<IUser>(
   },
 );
 
-userSchema.pre('save', async function hashPassword(next) {
+userSchema.pre('save', async function syncStatusAndHash(next) {
+  if (this.isModified('accountStatus')) {
+    this.isActive = this.accountStatus === ACCOUNT_STATUSES.ACTIVE;
+  } else if (this.isModified('isActive') && !this.isModified('accountStatus')) {
+    this.accountStatus = this.isActive
+      ? ACCOUNT_STATUSES.ACTIVE
+      : ACCOUNT_STATUSES.BLOCKED;
+  }
+
   if (!this.isModified('password')) {
+    next();
+    return;
+  }
+
+  // Skip re-hash when password is already a bcrypt hash (e.g. copied from RegistrationRequest).
+  if (typeof this.password === 'string' && /^\$2[aby]\$/.test(this.password)) {
+    this.passwordChangedAt = new Date();
     next();
     return;
   }

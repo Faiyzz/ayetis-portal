@@ -139,6 +139,8 @@ export interface ICase extends Document {
   caseId: string;
   doctorId: Types.ObjectId;
   doctorName: string;
+  /** Business Doctor ID (DR-########) for privacy-scoped display */
+  doctorDisplayId?: string;
   doctorEmail: string;
   patientName: string;
   patientAge?: number;
@@ -378,6 +380,7 @@ const caseSchema = new Schema<ICase>(
       index: true,
     },
     doctorName: { type: String, required: true },
+    doctorDisplayId: { type: String, trim: true, index: true },
     doctorEmail: { type: String, required: true, lowercase: true, index: true },
     patientName: { type: String, required: true, trim: true, index: true },
     patientAge: { type: Number, min: 0, max: 120 },

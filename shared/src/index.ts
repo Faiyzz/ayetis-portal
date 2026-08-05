@@ -1,6 +1,7 @@
 export * from './roles';
 export * from './permissions';
 export * from './types';
+export * from './account';
 export * from './portals';
 export * from './audit';
 export * from './cases';

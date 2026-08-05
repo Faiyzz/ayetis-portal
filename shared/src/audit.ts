@@ -6,11 +6,18 @@ export const AUDIT_ACTIONS = {
   AUTH_PASSWORD_CHANGE: 'auth.password.change',
   AUTH_PASSWORD_RESET: 'auth.password.reset',
   AUTH_PASSWORD_FORGOT: 'auth.password.forgot',
+  AUTH_EMAIL_VERIFY: 'auth.email.verify',
+  AUTH_PASSWORD_CONFIRM_RESET: 'auth.password.confirm_reset',
   USER_CREATE: 'user.create',
   USER_UPDATE: 'user.update',
   USER_DELETE: 'user.delete',
   USER_PERMISSIONS_UPDATE: 'user.permissions.update',
+  USER_PASSWORD_RESET_ADMIN: 'user.password.reset_admin',
+  USER_STATUS_CHANGE: 'user.status.change',
   ROLE_PERMISSIONS_UPDATE: 'role.permissions.update',
+  REGISTRATION_APPROVE: 'registration.approve',
+  REGISTRATION_REJECT: 'registration.reject',
+  REGISTRATION_HOLD: 'registration.hold',
   CASE_CREATE: 'case.create',
   CASE_UPDATE: 'case.update',
   CASE_CANCEL: 'case.cancel',
@@ -58,11 +65,18 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   [AUDIT_ACTIONS.AUTH_PASSWORD_CHANGE]: 'Password changed',
   [AUDIT_ACTIONS.AUTH_PASSWORD_RESET]: 'Password reset',
   [AUDIT_ACTIONS.AUTH_PASSWORD_FORGOT]: 'Password reset requested',
+  [AUDIT_ACTIONS.AUTH_EMAIL_VERIFY]: 'Email verified',
+  [AUDIT_ACTIONS.AUTH_PASSWORD_CONFIRM_RESET]: 'Password reset confirmed',
   [AUDIT_ACTIONS.USER_CREATE]: 'User created',
   [AUDIT_ACTIONS.USER_UPDATE]: 'User updated',
   [AUDIT_ACTIONS.USER_DELETE]: 'User deleted',
   [AUDIT_ACTIONS.USER_PERMISSIONS_UPDATE]: 'User permissions updated',
+  [AUDIT_ACTIONS.USER_PASSWORD_RESET_ADMIN]: 'Admin reset user password',
+  [AUDIT_ACTIONS.USER_STATUS_CHANGE]: 'User status changed',
   [AUDIT_ACTIONS.ROLE_PERMISSIONS_UPDATE]: 'Role permissions updated',
+  [AUDIT_ACTIONS.REGISTRATION_APPROVE]: 'Registration approved',
+  [AUDIT_ACTIONS.REGISTRATION_REJECT]: 'Registration rejected',
+  [AUDIT_ACTIONS.REGISTRATION_HOLD]: 'Registration held',
   [AUDIT_ACTIONS.CASE_CREATE]: 'Case created',
   [AUDIT_ACTIONS.CASE_UPDATE]: 'Case updated',
   [AUDIT_ACTIONS.CASE_CANCEL]: 'Case cancelled',
@@ -98,7 +112,14 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   [AUDIT_ACTIONS.CLARIFICATION_RESOLVE]: 'Clarification resolved',
 };
 
-export type AuditTargetType = 'user' | 'role' | 'auth' | 'system' | 'case' | 'clarification';
+export type AuditTargetType =
+  | 'user'
+  | 'role'
+  | 'auth'
+  | 'system'
+  | 'case'
+  | 'clarification'
+  | 'registration';
 
 export interface ActivityLogDto {
   id: string;

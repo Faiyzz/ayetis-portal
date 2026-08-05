@@ -2,10 +2,12 @@ import { ALL_ROLES, PERMISSIONS } from '@ayetis/shared';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthLayout } from '@/features/auth/components/AuthLayout';
 import { ChangePasswordPage } from '@/features/auth/pages/ChangePasswordPage';
+import { ConfirmPasswordResetPage } from '@/features/auth/pages/ConfirmPasswordResetPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { RegisterPage } from '@/features/auth/pages/RegisterPage';
-import { ResetPasswordPage } from '@/features/auth/pages/ResetPasswordPage';
+import { RegistrationsPage } from '@/features/auth/pages/RegistrationsPage';
+import { VerifyEmailPage } from '@/features/auth/pages/VerifyEmailPage';
 import { ActivityLogPage } from '@/features/audit/pages/ActivityLogPage';
 import { CaseDetailPage } from '@/features/cases/pages/CaseDetailPage';
 import { CasesPage } from '@/features/cases/pages/CasesPage';
@@ -35,7 +37,8 @@ export function AppRouter() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/confirm-password-reset" element={<ConfirmPasswordResetPage />} />
         </Route>
       </Route>
 
@@ -76,6 +79,10 @@ export function AppRouter() {
 
           <Route element={<RequirePermission permission={PERMISSIONS.USER_LIST} />}>
             <Route path="users" element={<UsersPage />} />
+          </Route>
+
+          <Route element={<RequirePermission permission={PERMISSIONS.REGISTRATION_LIST} />}>
+            <Route path="registrations" element={<RegistrationsPage />} />
           </Route>
 
           <Route element={<RequirePermission permission={PERMISSIONS.USER_CREATE} />}>

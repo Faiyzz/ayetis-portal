@@ -1,3 +1,4 @@
+import type { AccountStatus, AccountType } from './account';
 import type { Permission } from './permissions';
 import type { Role } from './roles';
 
@@ -21,6 +22,12 @@ export interface PublicUser {
   firstName: string;
   lastName: string;
   role: Role;
+  accountType: AccountType;
+  accountStatus: AccountStatus;
+  doctorId: string | null;
+  clinicName: string | null;
+  companyName: string | null;
+  /** Derived: accountStatus === 'active' */
   isActive: boolean;
   departmentId: string | null;
   departmentName: string | null;
@@ -60,6 +67,12 @@ export interface ManagedUserDto {
   firstName: string;
   lastName: string;
   role: Role;
+  accountType: AccountType;
+  accountStatus: AccountStatus;
+  doctorId: string | null;
+  clinicName: string | null;
+  companyName: string | null;
+  /** Derived: accountStatus === 'active' */
   isActive: boolean;
   departmentId: string | null;
   departmentName: string | null;
@@ -80,6 +93,9 @@ export interface CreateUserInput {
   firstName: string;
   lastName: string;
   role: Role;
+  accountType?: AccountType;
+  clinicName?: string | null;
+  companyName?: string | null;
   departmentId?: string | null;
   permissionGrants?: Permission[];
   permissionDenies?: Permission[];
@@ -89,7 +105,11 @@ export interface UpdateUserInput {
   firstName?: string;
   lastName?: string;
   role?: Role;
+  accountStatus?: AccountStatus;
+  /** @deprecated Prefer accountStatus */
   isActive?: boolean;
+  clinicName?: string | null;
+  companyName?: string | null;
   departmentId?: string | null;
 }
 

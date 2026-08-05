@@ -112,6 +112,27 @@ export async function updateUser(req: AuthenticatedRequest, res: Response, next:
   }
 }
 
+export async function resetPassword(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await usersService.adminResetPassword(
+      req.params.userId,
+      req.user!.id,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message: data.message,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function updateUserPermissions(
   req: AuthenticatedRequest,
   res: Response,

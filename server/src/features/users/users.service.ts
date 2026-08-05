@@ -1,15 +1,21 @@
 import {
+  ACCOUNT_STATUSES,
+  ACCOUNT_TYPES,
   ALL_PERMISSIONS,
   AUDIT_ACTIONS,
   ROLES,
   ROLE_LABELS,
+  canLogin,
   getPermissionCatalog,
   getPermissionsForRole,
+  isAccountStatus,
   isPasswordExpired,
   isPermission,
   passwordExpiresAt,
   permissionsInclude,
   resolveEffectivePermissions,
+  type AccountStatus,
+  type AccountType,
   type Permission,
   type PublicUser,
   type Role,
@@ -21,9 +27,16 @@ import {
   isRoleLocked,
   toRoleOverride,
 } from '../../models/RolePermissionConfig';
+import { generateDoctorId } from '../../models/DoctorCounter';
+import { getSystemMessages } from '../../models/SystemConfig';
 import { User, type IUser, resolveUserPermissions } from '../../models/User';
 import { AppError } from '../../utils/AppError';
 import { Types } from 'mongoose';
+import {
+  generateTemporaryPassword,
+  pushPasswordHistory,
+} from '../../utils/password';
+import { temporaryPasswordTemplate, sendTemplatedEmail } from '../../services/email';
 import {
   recordActivity,
   type RequestAuditContext,
@@ -94,6 +107,8 @@ export function toPublicUser(
   const changedAt = user.passwordChangedAt ?? user.createdAt;
   const expiresAt = passwordExpiresAt(changedAt, env.passwordExpiryDays);
   const expired = isPasswordExpired(changedAt, env.passwordExpiryDays);
+  const accountStatus = user.accountStatus ?? ACCOUNT_STATUSES.ACTIVE;
+  const accountType = user.accountType ?? ACCOUNT_TYPES.INDIVIDUAL;
 
   return {
     id: user.id,
@@ -101,7 +116,12 @@ export function toPublicUser(
     firstName: user.firstName,
     lastName: user.lastName,
     role: user.role,
-    isActive: user.isActive,
+    accountType,
+    accountStatus,
+    doctorId: user.doctorId ?? null,
+    clinicName: user.clinicName ?? null,
+    companyName: user.companyName ?? null,
+    isActive: accountStatus === ACCOUNT_STATUSES.ACTIVE,
     departmentId: user.departmentId ? String(user.departmentId) : null,
     departmentName: user.departmentName ?? null,
     permissionGrants: user.role === ROLES.ADMIN ? [] : [...(user.permissionGrants ?? [])],
@@ -198,6 +218,9 @@ export async function createUser(
     firstName: string;
     lastName: string;
     role: Role;
+    accountType?: AccountType;
+    clinicName?: string | null;
+    companyName?: string | null;
     departmentId?: string | null;
     permissionGrants?: string[];
     permissionDenies?: string[];
@@ -227,12 +250,23 @@ export async function createUser(
     departmentName = dept.name;
   }
 
+  const accountType = input.accountType ?? ACCOUNT_TYPES.INDIVIDUAL;
+  let doctorId: string | undefined;
+  if (input.role === ROLES.DOCTOR) {
+    doctorId = await generateDoctorId();
+  }
+
   const user = await User.create({
     email: input.email,
     password: input.password,
     firstName: input.firstName,
     lastName: input.lastName,
     role: input.role,
+    accountType,
+    accountStatus: ACCOUNT_STATUSES.ACTIVE,
+    doctorId,
+    clinicName: input.clinicName ?? undefined,
+    companyName: input.companyName ?? undefined,
     departmentId,
     departmentName,
     permissionGrants: grants,
@@ -249,7 +283,7 @@ export async function createUser(
       ...(actor ?? {}),
       targetType: 'user',
       targetId: user.id,
-      metadata: { role: user.role, email: user.email },
+      metadata: { role: user.role, email: user.email, doctorId },
       ipAddress: audit.ipAddress,
       userAgent: audit.userAgent,
     });
@@ -266,6 +300,9 @@ export async function updateUser(
     lastName?: string;
     role?: Role;
     isActive?: boolean;
+    accountStatus?: AccountStatus;
+    clinicName?: string | null;
+    companyName?: string | null;
     departmentId?: string | null;
   },
   audit?: RequestAuditContext,
@@ -275,8 +312,20 @@ export async function updateUser(
     throw new AppError('User not found', 404);
   }
 
-  if (input.isActive === false && user.id === actorId) {
-    throw new AppError('You cannot deactivate your own account', 400);
+  const nextStatus =
+    input.accountStatus ??
+    (input.isActive === false
+      ? ACCOUNT_STATUSES.BLOCKED
+      : input.isActive === true
+        ? ACCOUNT_STATUSES.ACTIVE
+        : undefined);
+
+  if (
+    nextStatus &&
+    nextStatus !== ACCOUNT_STATUSES.ACTIVE &&
+    user.id === actorId
+  ) {
+    throw new AppError('You cannot suspend or block your own account', 400);
   }
 
   const before = {
@@ -284,6 +333,7 @@ export async function updateUser(
     lastName: user.lastName,
     role: user.role,
     isActive: user.isActive,
+    accountStatus: user.accountStatus,
     departmentId: user.departmentId ? String(user.departmentId) : null,
   };
 
@@ -298,11 +348,25 @@ export async function updateUser(
       user.permissionGrants = [];
       user.permissionDenies = [];
     }
+
+    if (input.role === ROLES.DOCTOR && !user.doctorId) {
+      user.doctorId = await generateDoctorId();
+    }
   }
 
   if (input.firstName !== undefined) user.firstName = input.firstName;
   if (input.lastName !== undefined) user.lastName = input.lastName;
-  if (input.isActive !== undefined) user.isActive = input.isActive;
+  if (input.clinicName !== undefined) user.clinicName = input.clinicName ?? undefined;
+  if (input.companyName !== undefined) user.companyName = input.companyName ?? undefined;
+
+  if (nextStatus) {
+    if (!isAccountStatus(nextStatus)) {
+      throw new AppError('Invalid account status', 400);
+    }
+    user.accountStatus = nextStatus;
+  } else if (input.isActive !== undefined) {
+    user.isActive = input.isActive;
+  }
 
   if (input.departmentId !== undefined) {
     if (!input.departmentId) {
@@ -320,8 +384,9 @@ export async function updateUser(
   await user.save();
 
   const actor = await resolveActor(actorId);
+  const statusChanged = nextStatus && nextStatus !== before.accountStatus;
   await recordActivity({
-    action: AUDIT_ACTIONS.USER_UPDATE,
+    action: statusChanged ? AUDIT_ACTIONS.USER_STATUS_CHANGE : AUDIT_ACTIONS.USER_UPDATE,
     summary: `${actor?.actorEmail ?? 'Admin'} updated user ${user.email}`,
     ...(actor ?? {}),
     targetType: 'user',
@@ -332,6 +397,57 @@ export async function updateUser(
   });
 
   return toPublicUserAsync(user);
+}
+
+export async function adminResetPassword(
+  userId: string,
+  actorId: string,
+  audit?: RequestAuditContext,
+) {
+  const user = await User.findById(userId).select('+password +passwordHistory');
+  if (!user) throw new AppError('User not found', 404);
+
+  const temporaryPassword = generateTemporaryPassword();
+  pushPasswordHistory(user, user.password);
+  user.password = temporaryPassword;
+  user.mustChangePassword = true;
+  user.passwordResetToken = undefined;
+  user.passwordResetExpires = undefined;
+  await user.save();
+
+  const loginUrl = `${env.clientUrl}/login`;
+  try {
+    await sendTemplatedEmail(
+      user.email,
+      temporaryPasswordTemplate({
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        temporaryPassword,
+        loginUrl,
+      }),
+    );
+  } catch (error) {
+    console.error('[email] admin-temp-password failed', error);
+    if (env.isDev) {
+      console.log(`[admin-temp-password] ${user.email} → ${temporaryPassword}`);
+    }
+  }
+
+  const actor = await resolveActor(actorId);
+  await recordActivity({
+    action: AUDIT_ACTIONS.USER_PASSWORD_RESET_ADMIN,
+    summary: `${actor?.actorEmail ?? 'Admin'} reset password for ${user.email}`,
+    ...(actor ?? {}),
+    targetType: 'user',
+    targetId: user.id,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return {
+    message: 'Temporary password generated and emailed. User must change password on next login.',
+    user: await toPublicUserAsync(user),
+    ...(env.isDev ? { temporaryPassword } : {}),
+  };
 }
 
 export async function updateUserPermissions(
@@ -407,7 +523,7 @@ export function userHasEffectivePermission(
 
 export async function resolvePermissionsForUserId(userId: string): Promise<Permission[]> {
   const user = await User.findById(userId);
-  if (!user || !user.isActive) {
+  if (!user || !canLogin(user.accountStatus ?? ACCOUNT_STATUSES.ACTIVE)) {
     throw new AppError('User not found or inactive', 401);
   }
 
@@ -422,4 +538,18 @@ export function describeRolePermissions(role: Role) {
     defaults: [...getPermissionsForRole(role)],
     effective: resolveEffectivePermissions({ role }),
   };
+}
+
+export async function assertCanSubmitWork(userId: string): Promise<IUser> {
+  const user = await User.findById(userId);
+  if (!user) throw new AppError('User not found', 404);
+
+  if (user.accountStatus === ACCOUNT_STATUSES.SUSPENDED) {
+    const messages = await getSystemMessages();
+    throw new AppError(messages.accountSuspended, 403);
+  }
+  if (user.accountStatus !== ACCOUNT_STATUSES.ACTIVE) {
+    throw new AppError('This account cannot submit new work', 403);
+  }
+  return user;
 }

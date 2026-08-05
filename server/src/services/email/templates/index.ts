@@ -130,11 +130,12 @@ export function passwordResetTemplate(input: {
   name: string;
   resetUrl: string;
 }): RenderedEmail {
-  const subject = 'Reset your Ayetis portal password';
+  const subject = 'Confirm your Ayetis password reset request';
   const bodyHtml = `
     <p style="margin:0 0 12px;">Hello ${escapeHtml(input.name)},</p>
     <p style="margin:0 0 12px;">
-      We received a request to reset your password. Use the button below to choose a new password.
+      We received a request to reset your password. Confirm the request using the button below.
+      After confirmation, a temporary password will be sent to this email address.
       This link expires shortly for security.
     </p>
     <p style="margin:16px 0 0;color:#6B7280;font-size:13px;">
@@ -145,9 +146,10 @@ export function passwordResetTemplate(input: {
   const text = [
     `Hello ${input.name},`,
     '',
-    'Reset your Ayetis portal password using this link:',
+    'Confirm your Ayetis password reset using this link:',
     input.resetUrl,
     '',
+    'After confirmation, a temporary password will be emailed to you.',
     'If you did not request this, ignore this email.',
   ].join('\n');
 
@@ -158,7 +160,186 @@ export function passwordResetTemplate(input: {
       preheader: subject,
       title: subject,
       bodyHtml,
-      cta: { label: 'Reset password', url: input.resetUrl },
+      cta: { label: 'Confirm password reset', url: input.resetUrl },
+    }),
+  };
+}
+
+export function emailVerificationTemplate(input: {
+  name: string;
+  verifyUrl: string;
+}): RenderedEmail {
+  const subject = 'Verify your Ayetis registration email';
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">Hello ${escapeHtml(input.name)},</p>
+    <p style="margin:0 0 12px;">
+      Thank you for registering with Ayetis. Please verify your email address to continue
+      the account creation process. Your request will be reviewed by an administrator after verification.
+    </p>
+  `;
+
+  const text = [
+    `Hello ${input.name},`,
+    '',
+    'Verify your Ayetis registration email:',
+    input.verifyUrl,
+    '',
+    'After verification, an administrator will review your registration request.',
+  ].join('\n');
+
+  return {
+    subject,
+    text,
+    html: renderEmailLayout({
+      preheader: subject,
+      title: subject,
+      bodyHtml,
+      cta: { label: 'Verify Email', url: input.verifyUrl },
+    }),
+  };
+}
+
+export function registrationPendingTemplate(input: {
+  name: string;
+  message: string;
+}): RenderedEmail {
+  const subject = 'Your Ayetis registration is under review';
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">Hello ${escapeHtml(input.name)},</p>
+    <p style="margin:0 0 12px;">${escapeHtml(input.message)}</p>
+  `;
+
+  const text = [`Hello ${input.name},`, '', input.message].join('\n');
+
+  return {
+    subject,
+    text,
+    html: renderEmailLayout({
+      preheader: subject,
+      title: subject,
+      bodyHtml,
+    }),
+  };
+}
+
+export function accountCreationTemplate(input: {
+  name: string;
+  email: string;
+  doctorId: string;
+  loginUrl: string;
+  accountType: string;
+}): RenderedEmail {
+  const subject = 'Your Ayetis account has been created';
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">Hello ${escapeHtml(input.name)},</p>
+    <p style="margin:0 0 12px;">
+      Your registration has been approved and your account is now active.
+    </p>
+    ${detailsTable([
+      ['Login ID (email)', input.email],
+      ['Doctor ID', input.doctorId],
+      ['Account type', input.accountType],
+      ['Password', 'Use the password you created during registration'],
+    ])}
+    <p style="margin:16px 0 0;">
+      Sign in to the Doctor Portal using your registered email and the password you selected at registration.
+    </p>
+  `;
+
+  const text = [
+    `Hello ${input.name},`,
+    '',
+    'Your Ayetis account has been created.',
+    `Login ID: ${input.email}`,
+    `Doctor ID: ${input.doctorId}`,
+    'Password: use the password you created during registration',
+    '',
+    `Login: ${input.loginUrl}`,
+  ].join('\n');
+
+  return {
+    subject,
+    text,
+    html: renderEmailLayout({
+      preheader: subject,
+      title: subject,
+      bodyHtml,
+      cta: { label: 'Open Doctor Portal', url: input.loginUrl },
+    }),
+  };
+}
+
+export function temporaryPasswordTemplate(input: {
+  name: string;
+  temporaryPassword: string;
+  loginUrl: string;
+}): RenderedEmail {
+  const subject = 'Your temporary Ayetis portal password';
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">Hello ${escapeHtml(input.name)},</p>
+    <p style="margin:0 0 12px;">
+      A temporary password has been issued for your account. You will be required to set a new
+      password immediately after signing in.
+    </p>
+    ${detailsTable([
+      ['Temporary password', input.temporaryPassword],
+    ])}
+    <p style="margin:16px 0 0;color:#6B7280;font-size:13px;">
+      This temporary password is single-use for the forced password change flow. Do not share it.
+    </p>
+  `;
+
+  const text = [
+    `Hello ${input.name},`,
+    '',
+    `Temporary password: ${input.temporaryPassword}`,
+    'You must change this password after signing in.',
+    '',
+    `Login: ${input.loginUrl}`,
+  ].join('\n');
+
+  return {
+    subject,
+    text,
+    html: renderEmailLayout({
+      preheader: subject,
+      title: subject,
+      bodyHtml,
+      cta: { label: 'Sign in', url: input.loginUrl },
+    }),
+  };
+}
+
+export function registrationRejectedTemplate(input: {
+  name: string;
+  reason: string;
+}): RenderedEmail {
+  const subject = 'Your Ayetis registration was not approved';
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">Hello ${escapeHtml(input.name)},</p>
+    <p style="margin:0 0 12px;">
+      Unfortunately your registration request was not approved at this time.
+    </p>
+    ${detailsTable([['Reason', input.reason]])}
+    <p style="margin:16px 0 0;">
+      If you believe this was a mistake, please contact your Ayetis point of contact.
+    </p>
+  `;
+
+  const text = [
+    `Hello ${input.name},`,
+    '',
+    'Your registration was not approved.',
+    `Reason: ${input.reason}`,
+  ].join('\n');
+
+  return {
+    subject,
+    text,
+    html: renderEmailLayout({
+      preheader: subject,
+      title: subject,
+      bodyHtml,
     }),
   };
 }

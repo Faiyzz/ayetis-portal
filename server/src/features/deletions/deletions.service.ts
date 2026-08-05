@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_STATUSES,
   AUDIT_ACTIONS,
   DELETE_RECORD_TYPES,
   DELETE_REQUEST_STATUSES,
@@ -7,6 +8,7 @@ import {
   type DeleteRequestDto,
   type ReviewDeleteRequestInput,
 } from '@ayetis/shared';
+
 import { Types } from 'mongoose';
 import { AppError } from '../../utils/AppError';
 import { Case } from '../../models/Case';
@@ -186,6 +188,7 @@ async function executeApprovedDelete(request: InstanceType<typeof DeleteRequest>
   if (request.recordType === DELETE_RECORD_TYPES.USER) {
     const user = await User.findById(request.recordId);
     if (!user) return;
+    user.accountStatus = ACCOUNT_STATUSES.BLOCKED;
     user.isActive = false;
     await user.save();
     return;

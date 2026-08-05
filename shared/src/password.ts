@@ -13,6 +13,8 @@ export const PASSWORD_POLICY = {
   requireSpecial: true,
   /** Default expiry window in days when server env is unset. */
   defaultExpiryDays: 90,
+  /** Number of previous password hashes that cannot be reused. */
+  historyDepth: 5,
 } as const;
 
 export const PASSWORD_POLICY_DESCRIPTION =

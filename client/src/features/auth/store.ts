@@ -1,4 +1,4 @@
-import type { PublicUser } from '@ayetis/shared';
+import type { AccountType, PublicUser } from '@ayetis/shared';
 import { create } from 'zustand';
 import * as authApi from '@/features/auth/api';
 
@@ -11,8 +11,7 @@ interface AuthState {
   setSession: (user: PublicUser, token: string) => void;
   clearSession: () => void;
   bootstrap: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
-  register: (payload: authApi.RegisterPayload) => Promise<void>;
+  login: (email: string, password: string, accountType: AccountType) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -47,13 +46,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  login: async (email, password) => {
-    const payload = await authApi.login({ email, password });
-    get().setSession(payload.user, payload.tokens.accessToken);
-  },
-
-  register: async (form) => {
-    const payload = await authApi.register(form);
+  login: async (email, password, accountType) => {
+    const payload = await authApi.login({ email, password, accountType });
     get().setSession(payload.user, payload.tokens.accessToken);
   },
 

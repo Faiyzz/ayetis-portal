@@ -33,10 +33,12 @@ import {
   isFileCategory,
   labelForMonthKey,
   monthRangeUtc,
+  formatDoctorDisplay,
   permissionsInclude,
   quarterRangeUtc,
   recentMonthOptions,
   resolveCoordinatorQueue,
+  type Role,
   type AssignCaseInput,
   type AssignmentMode,
   type CaseDetailDto,
@@ -270,7 +272,10 @@ function queueReferenceDate(caseDoc: ICase): Date {
   return caseDoc.validatedAt ?? caseDoc.updatedAt ?? caseDoc.createdAt;
 }
 
-async function toListItem(caseDoc: ICase): Promise<CaseListItemDto> {
+async function toListItem(
+  caseDoc: ICase,
+  viewer?: { id: string; role: string },
+): Promise<CaseListItemDto> {
   const openClarificationCount = await countOpenClarifications(caseDoc._id as Types.ObjectId);
   const assignmentMode = (caseDoc.assignmentMode ?? ASSIGNMENT_MODES.NONE) as AssignmentMode;
   const queue = caseDoc.isDeleted
@@ -284,6 +289,14 @@ async function toListItem(caseDoc: ICase): Promise<CaseListItemDto> {
           : null,
       });
   const ref = queueReferenceDate(caseDoc);
+  const doctorDisplayId = caseDoc.doctorDisplayId ?? null;
+  const doctorName = viewer
+    ? formatDoctorDisplay(viewer.role as Role, viewer.id, {
+        doctorUserId: String(caseDoc.doctorId),
+        doctorName: caseDoc.doctorName,
+        doctorId: doctorDisplayId,
+      })
+    : caseDoc.doctorName;
 
   return {
     id: caseDoc.id,
@@ -291,7 +304,8 @@ async function toListItem(caseDoc: ICase): Promise<CaseListItemDto> {
     patientName: caseDoc.patientName,
     patientAge: caseDoc.patientAge ?? null,
     doctorId: String(caseDoc.doctorId),
-    doctorName: caseDoc.doctorName,
+    doctorName,
+    doctorDisplayId,
     doctorEmail: caseDoc.doctorEmail,
     status: caseDoc.status,
     priority: caseDoc.priority,
@@ -383,9 +397,12 @@ function mapHistory(caseDoc: ICase): CaseHistoryDto[] {
   });
 }
 
-async function toDetail(caseDoc: ICase): Promise<CaseDetailDto> {
+async function toDetail(
+  caseDoc: ICase,
+  viewer?: { id: string; role: string },
+): Promise<CaseDetailDto> {
   const [listItem, clarifications, validation] = await Promise.all([
-    toListItem(caseDoc),
+    toListItem(caseDoc, viewer),
     listClarificationDtosForCase(caseDoc._id as Types.ObjectId),
     buildValidationSummary(caseDoc),
   ]);
@@ -683,6 +700,7 @@ export async function listCases(
         { caseId: { $regex: term, $options: 'i' } },
         { patientName: { $regex: term, $options: 'i' } },
         { doctorName: { $regex: term, $options: 'i' } },
+        { doctorDisplayId: { $regex: term, $options: 'i' } },
         { doctorEmail: { $regex: term, $options: 'i' } },
         { treatmentSummary: { $regex: term, $options: 'i' } },
         { clinicName: { $regex: term, $options: 'i' } },
@@ -701,7 +719,7 @@ export async function listCases(
   ]);
 
   return {
-    items: await Promise.all(items.map((item) => toListItem(item))),
+    items: await Promise.all(items.map((item) => toListItem(item, actor))),
     total,
     page,
     pageSize,
@@ -719,7 +737,7 @@ export async function getCaseById(actor: CaseActor, caseIdOrMongoId: string) {
     throw new AppError('Case not found', 404);
   }
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 async function findCase(caseIdOrMongoId: string) {
@@ -743,18 +761,21 @@ export async function createCase(
     throw new AppError('You do not have permission to create cases', 403);
   }
 
+  const { assertCanSubmitWork } = await import('../users/users.service');
+  await assertCanSubmitWork(actor.id);
+
   let doctor;
   if (input.doctorId) {
     if (actor.role === ROLES.DOCTOR && input.doctorId !== actor.id) {
       throw new AppError('Doctors can only create cases for themselves', 403);
     }
     doctor = await User.findById(input.doctorId);
-    if (!doctor || !doctor.isActive || doctor.role !== ROLES.DOCTOR) {
+    if (!doctor || doctor.accountStatus !== 'active' || doctor.role !== ROLES.DOCTOR) {
       throw new AppError('Select a valid active doctor account', 400);
     }
   } else if (actor.role === ROLES.DOCTOR) {
     doctor = await User.findById(actor.id);
-    if (!doctor || !doctor.isActive) {
+    if (!doctor || doctor.accountStatus !== 'active') {
       throw new AppError('Doctor account not found', 404);
     }
   } else {
@@ -774,6 +795,7 @@ export async function createCase(
     caseId,
     doctorId: doctor._id,
     doctorName: `${doctor.firstName} ${doctor.lastName}`.trim(),
+    doctorDisplayId: doctor.doctorId,
     doctorEmail: doctor.email,
     patientName: input.patientName.trim(),
     patientAge: input.patientAge ?? undefined,
@@ -865,7 +887,7 @@ export async function createCase(
     patientName: caseDoc.patientName,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function updateCase(
@@ -995,7 +1017,7 @@ export async function updateCase(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function setCasePriority(
@@ -1016,7 +1038,7 @@ export async function setCasePriority(
   }
 
   if (caseDoc.priority === priority) {
-    return toDetail(caseDoc);
+    return toDetail(caseDoc, actor);
   }
 
   const from = caseDoc.priority;
@@ -1055,7 +1077,7 @@ export async function setCasePriority(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function cancelCase(
@@ -1120,7 +1142,7 @@ export async function cancelCase(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function softDeleteCase(
@@ -1190,7 +1212,7 @@ export async function executeSoftDeleteCase(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function addCaseNote(
@@ -1240,7 +1262,7 @@ export async function addCaseNote(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function uploadCaseFiles(
@@ -1342,7 +1364,7 @@ export async function uploadCaseFiles(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function getCaseFileForDownload(
@@ -1594,7 +1616,7 @@ export async function restoreCaseFile(
   copyLifecycleToFile(file, fields);
   markCaseModified(caseDoc);
   await caseDoc.save();
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function getCaseFileRestoreStatus(
@@ -1635,7 +1657,7 @@ export async function restoreDeliveryVideo(actor: CaseActor, caseIdOrMongoId: st
   copyLifecycleToDelivery(caseDoc.delivery, fields);
   markCaseModified(caseDoc);
   await caseDoc.save();
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function getDeliveryVideoRestoreStatus(
@@ -1747,7 +1769,7 @@ export async function startProduction(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function updateProductionNotes(
@@ -1795,7 +1817,7 @@ export async function updateProductionNotes(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function submitCaseToQc(
@@ -1815,7 +1837,7 @@ export async function submitCaseToQc(
     throw new AppError('Resolve clarifications before submitting to QC', 400);
   }
   if (caseDoc.status === CASE_STATUSES.QC_REVIEW) {
-    return await toDetail(caseDoc);
+    return await toDetail(caseDoc, actor);
   }
   if (
     caseDoc.status === CASE_STATUSES.APPROVED ||
@@ -1873,7 +1895,7 @@ export async function submitCaseToQc(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 function assertCanQcReview(actor: CaseActor) {
@@ -2080,7 +2102,7 @@ export async function addQcComment(
     });
   }
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function approveQcCase(
@@ -2205,7 +2227,7 @@ export async function approveQcCase(
     // Non-blocking email failure
   }
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function rejectQcCase(
@@ -2310,7 +2332,7 @@ export async function rejectQcCase(
     });
   }
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function getDesignerPerformance(
@@ -2513,7 +2535,7 @@ export async function updateCasePayment(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function updateTreatmentInstructions(
@@ -2573,7 +2595,7 @@ export async function updateTreatmentInstructions(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function startCaseValidation(
@@ -2617,7 +2639,7 @@ export async function startCaseValidation(
     });
   }
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function markCaseValidated(
@@ -2698,7 +2720,7 @@ export async function markCaseValidated(
     userAgent: audit?.userAgent,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function assignCase(
@@ -2809,7 +2831,7 @@ export async function assignCase(
     });
   }
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 function toQueueCaseDto(
@@ -2951,21 +2973,28 @@ export async function listDoctorAssignees(
 
   const doctors = await User.find({
     role: ROLES.DOCTOR,
-    isActive: true,
+    accountStatus: 'active',
   }).sort({ firstName: 1, lastName: 1 });
 
-  return doctors.map((doctor) => ({
-    id: doctor.id,
-    firstName: doctor.firstName,
-    lastName: doctor.lastName,
-    email: doctor.email,
-    isActive: doctor.isActive,
-  }));
+  const canSeeName = actor.role === ROLES.ADMIN;
+
+  return doctors.map((doctor) => {
+    const label = canSeeName
+      ? `${doctor.firstName} ${doctor.lastName}`.trim()
+      : doctor.doctorId || doctor.id;
+    return {
+      id: doctor.id,
+      firstName: canSeeName ? doctor.firstName : label,
+      lastName: canSeeName ? doctor.lastName : '',
+      email: canSeeName ? doctor.email : '',
+      isActive: doctor.accountStatus === 'active',
+    };
+  });
 }
 
 export async function resolveCaseActor(userId: string): Promise<CaseActor> {
   const user = await User.findById(userId);
-  if (!user || !user.isActive) {
+  if (!user || (user.accountStatus !== 'active' && user.accountStatus !== 'suspended')) {
     throw new AppError('User not found or inactive', 401);
   }
 
@@ -3119,7 +3148,7 @@ export async function addClinicalRemark(
     caseId: caseDoc.caseId,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function getConsultantPerformance(
@@ -3211,14 +3240,14 @@ export async function recordDoctorCaseView(
   assertCanViewCase(actor, caseDoc);
 
   if (String(caseDoc.doctorId) !== actor.id) {
-    return await toDetail(caseDoc);
+    return await toDetail(caseDoc, actor);
   }
 
   if (
     caseDoc.status !== CASE_STATUSES.DELIVERED &&
     caseDoc.status !== CASE_STATUSES.APPROVED
   ) {
-    return await toDetail(caseDoc);
+    return await toDetail(caseDoc, actor);
   }
 
   if (!caseDoc.doctorEngagement) caseDoc.doctorEngagement = {};
@@ -3284,7 +3313,7 @@ export async function recordDoctorCaseView(
     });
   }
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function submitDoctorDecision(
@@ -3378,7 +3407,7 @@ export async function submitDoctorDecision(
     patientName: caseDoc.patientName,
   });
 
-  return await toDetail(caseDoc);
+  return await toDetail(caseDoc, actor);
 }
 
 export async function getDoctorDeliveryQueue(

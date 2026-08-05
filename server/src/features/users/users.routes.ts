@@ -56,6 +56,12 @@ router.patch(
   usersController.updateUser,
 );
 
+router.post(
+  '/:userId/reset-password',
+  requirePermission(PERMISSIONS.USER_RESET_PASSWORD),
+  usersController.resetPassword,
+);
+
 router.put(
   '/:userId/permissions',
   requirePermission(PERMISSIONS.USER_ASSIGN_PERMISSIONS),

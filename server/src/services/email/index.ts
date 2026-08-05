@@ -14,4 +14,9 @@ export {
   caseDeliveredTemplate,
   caseEventTemplate,
   passwordResetTemplate,
+  emailVerificationTemplate,
+  registrationPendingTemplate,
+  accountCreationTemplate,
+  temporaryPasswordTemplate,
+  registrationRejectedTemplate,
 } from './templates';

@@ -5,11 +5,30 @@ import { getRequestAuditContext } from '../audit/audit.service';
 
 export async function register(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const data = await authService.registerDoctor(req.body, getRequestAuditContext(req));
+    const data = await authService.register(req.body, getRequestAuditContext(req));
     res.status(201).json({
       success: true,
       data,
-      message: 'Account created successfully',
+      message: data.message,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function verifyEmail(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const token =
+      typeof req.body?.token === 'string'
+        ? req.body.token
+        : typeof req.query.token === 'string'
+          ? req.query.token
+          : '';
+    const data = await authService.verifyEmail({ token }, getRequestAuditContext(req));
+    res.json({
+      success: true,
+      data,
+      message: data.message,
     });
   } catch (error) {
     next(error);
@@ -71,17 +90,26 @@ export async function forgotPassword(
   }
 }
 
-export async function resetPassword(
+export async function confirmPasswordReset(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
 ) {
   try {
-    const data = await authService.resetPassword(req.body, getRequestAuditContext(req));
+    const token =
+      typeof req.body?.token === 'string'
+        ? req.body.token
+        : typeof req.query.token === 'string'
+          ? req.query.token
+          : '';
+    const data = await authService.confirmPasswordReset(
+      { token },
+      getRequestAuditContext(req),
+    );
     res.json({
       success: true,
       data,
-      message: 'Password reset successfully',
+      message: data.message,
     });
   } catch (error) {
     next(error);

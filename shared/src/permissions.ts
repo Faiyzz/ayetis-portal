@@ -17,6 +17,12 @@ export const PERMISSIONS = {
   USER_DELETE: 'user:delete',
   USER_ASSIGN_ROLE: 'user:assign_role',
   USER_ASSIGN_PERMISSIONS: 'user:assign_permissions',
+  USER_RESET_PASSWORD: 'user:reset_password',
+
+  // Registration approval (admin)
+  REGISTRATION_LIST: 'registration:list',
+  REGISTRATION_APPROVE: 'registration:approve',
+  REGISTRATION_REJECT: 'registration:reject',
 
   // Role permission configuration
   ROLE_VIEW_PERMISSIONS: 'role:view_permissions',
@@ -78,6 +84,10 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.USER_DELETE]: 'Delete users',
   [PERMISSIONS.USER_ASSIGN_ROLE]: 'Assign user roles',
   [PERMISSIONS.USER_ASSIGN_PERMISSIONS]: 'Assign user permissions',
+  [PERMISSIONS.USER_RESET_PASSWORD]: 'Reset user passwords',
+  [PERMISSIONS.REGISTRATION_LIST]: 'List registration requests',
+  [PERMISSIONS.REGISTRATION_APPROVE]: 'Approve registration requests',
+  [PERMISSIONS.REGISTRATION_REJECT]: 'Reject registration requests',
   [PERMISSIONS.ROLE_VIEW_PERMISSIONS]: 'View role permissions',
   [PERMISSIONS.ROLE_ASSIGN_PERMISSIONS]: 'Assign role permissions',
   [PERMISSIONS.CASE_CREATE]: 'Create cases',
@@ -112,6 +122,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 export type PermissionGroup =
   | 'Account'
   | 'Users'
+  | 'Registrations'
   | 'Roles'
   | 'Cases'
   | 'Clarifications'
@@ -130,6 +141,10 @@ export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
   [PERMISSIONS.USER_DELETE]: 'Users',
   [PERMISSIONS.USER_ASSIGN_ROLE]: 'Users',
   [PERMISSIONS.USER_ASSIGN_PERMISSIONS]: 'Users',
+  [PERMISSIONS.USER_RESET_PASSWORD]: 'Users',
+  [PERMISSIONS.REGISTRATION_LIST]: 'Registrations',
+  [PERMISSIONS.REGISTRATION_APPROVE]: 'Registrations',
+  [PERMISSIONS.REGISTRATION_REJECT]: 'Registrations',
   [PERMISSIONS.ROLE_VIEW_PERMISSIONS]: 'Roles',
   [PERMISSIONS.ROLE_ASSIGN_PERMISSIONS]: 'Roles',
   [PERMISSIONS.CASE_CREATE]: 'Cases',

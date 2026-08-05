@@ -245,7 +245,9 @@ export interface CaseListItemDto {
   patientName: string;
   patientAge: number | null;
   doctorId: string;
+  /** Name for privileged viewers; Doctor ID for everyone else (API-redacted). */
   doctorName: string;
+  doctorDisplayId: string | null;
   doctorEmail: string;
   status: CaseStatus;
   priority: CasePriority;
