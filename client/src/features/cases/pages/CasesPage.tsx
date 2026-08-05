@@ -1,15 +1,20 @@
 import {
+  ALL_CASE_CATEGORIES,
   ALL_CASE_PRIORITIES,
   ALL_CASE_STATUSES,
+  CASE_CATEGORIES,
+  CASE_CATEGORY_LABELS,
   CASE_PRIORITY_LABELS,
   CASE_STATUS_LABELS,
   PAYMENT_STATUS_LABELS,
   PERMISSIONS,
+  type CaseCategory,
   type CaseListItemDto,
   type CasePriority,
   type CaseStatus,
+  type SlaProgressColor,
 } from '@ayetis/shared';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
@@ -17,6 +22,14 @@ import { usePermissions } from '@/features/auth/permissions';
 import { fetchCases } from '@/features/cases/api';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
+
+const SLA_BAR_CLASS: Record<SlaProgressColor, string> = {
+  green: 'bg-emerald-500',
+  yellow: 'bg-amber-400',
+  blue: 'bg-sky-500',
+  orange: 'bg-orange-500',
+  red: 'bg-red-500',
+};
 
 function StatusPill({ status }: { status: CaseStatus }) {
   const cancelled = status === 'cancelled';
@@ -29,6 +42,24 @@ function StatusPill({ status }: { status: CaseStatus }) {
     >
       {CASE_STATUS_LABELS[status]}
     </span>
+  );
+}
+
+function SlaBar({ item }: { item: CaseListItemDto }) {
+  if (item.slaUtilizationPercent == null || !item.slaProgressColor) {
+    return <span className="text-xs text-muted">—</span>;
+  }
+  const pct = Math.min(100, Math.max(0, item.slaUtilizationPercent));
+  return (
+    <div className="min-w-[88px]">
+      <div className="h-2 overflow-hidden rounded-full bg-surface">
+        <div
+          className={`h-full rounded-full ${SLA_BAR_CLASS[item.slaProgressColor]}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="mt-0.5 text-[10px] text-muted">{Math.round(pct)}%</p>
+    </div>
   );
 }
 
@@ -55,8 +86,23 @@ export function CasesPage() {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<CaseStatus | ''>('');
   const [priority, setPriority] = useState<CasePriority | ''>('');
+  const [categoryTab, setCategoryTab] = useState<CaseCategory | 'all'>('all');
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: items.length };
+    for (const cat of ALL_CASE_CATEGORIES) counts[cat] = 0;
+    for (const item of items) {
+      if (item.caseCategory) counts[item.caseCategory] = (counts[item.caseCategory] ?? 0) + 1;
+    }
+    return counts;
+  }, [items]);
+
+  const visibleItems = useMemo(() => {
+    if (categoryTab === 'all') return items;
+    return items.filter((item) => item.caseCategory === categoryTab);
+  }, [items, categoryTab]);
 
   async function load(nextPage = page) {
     setLoading(true);
@@ -176,6 +222,34 @@ export function CasesPage() {
         </div>
       </form>
 
+      {isDoctorView ? (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setCategoryTab('all')}
+            className={[
+              'rounded-lg px-3 py-1.5 text-xs font-semibold',
+              categoryTab === 'all' ? 'bg-brand-500 text-white' : 'border border-line text-ink',
+            ].join(' ')}
+          >
+            All ({categoryCounts.all ?? 0})
+          </button>
+          {ALL_CASE_CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setCategoryTab(cat)}
+              className={[
+                'rounded-lg px-3 py-1.5 text-xs font-semibold',
+                categoryTab === cat ? 'bg-brand-500 text-white' : 'border border-line text-ink',
+              ].join(' ')}
+            >
+              {CASE_CATEGORY_LABELS[cat].split(' ')[0]} ({categoryCounts[cat] ?? 0})
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       <section className="overflow-hidden rounded-xl border border-line bg-white">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
@@ -187,7 +261,9 @@ export function CasesPage() {
                   <th className="px-4 py-3 font-medium">Doctor</th>
                 ) : null}
                 {!isDoctorView ? <th className="px-4 py-3 font-medium">Assignee</th> : null}
+                <th className="px-4 py-3 font-medium">Category</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">SLA</th>
                 <th className="px-4 py-3 font-medium">Priority</th>
                 <th className="px-4 py-3 font-medium">Payment</th>
                 <th className="px-4 py-3 font-medium">Updated</th>
@@ -196,18 +272,18 @@ export function CasesPage() {
             <tbody className="divide-y divide-line">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-muted">
+                  <td colSpan={10} className="px-4 py-8 text-muted">
                     Loading cases…
                   </td>
                 </tr>
-              ) : items.length === 0 ? (
+              ) : visibleItems.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-muted">
+                  <td colSpan={10} className="px-4 py-8 text-muted">
                     No cases found.
                   </td>
                 </tr>
               ) : (
-                items.map((item) => (
+                visibleItems.map((item) => (
                   <tr key={item.id} className={item.isDeleted ? 'opacity-60' : undefined}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
@@ -220,54 +296,44 @@ export function CasesPage() {
                         <button
                           type="button"
                           onClick={() => void copyCaseId(item.caseId)}
-                          aria-label={`Copy case ID ${item.caseId}`}
+                          className="text-xs text-muted hover:text-ink"
                           title="Copy case ID"
-                          className="rounded p-1 text-muted transition hover:bg-surface hover:text-brand-700"
                         >
-                          <svg
-                            aria-hidden="true"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            className="size-4"
-                          >
-                            <rect x="8" y="8" width="11" height="11" rx="2" />
-                            <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-                          </svg>
+                          Copy
                         </button>
                       </div>
-                      {item.openClarificationCount > 0 ? (
-                        <p className="mt-0.5 text-xs text-amber-700">
-                          {item.openClarificationCount} clarification
-                          {item.openClarificationCount === 1 ? '' : 's'}
-                        </p>
-                      ) : null}
                     </td>
                     <td className="px-4 py-3 text-ink">{item.patientName}</td>
                     {!isDoctorView && !isDesignerView ? (
-                      <td className="px-4 py-3">
-                        <p className="text-ink">{item.doctorName}</p>
-                        <p className="text-xs text-muted">{item.doctorEmail}</p>
-                      </td>
+                      <td className="px-4 py-3 text-ink">{item.doctorName}</td>
                     ) : null}
                     {!isDoctorView ? (
-                      <td className="px-4 py-3 text-ink">
-                        {item.assignedDesignerName ||
-                          (item.assignmentMode === 'auto_queue' ? 'Auto queue' : '—')}
+                      <td className="px-4 py-3 text-muted">
+                        {item.assignedDesignerName || '—'}
                       </td>
                     ) : null}
+                    <td className="px-4 py-3 text-xs text-muted">
+                      {item.caseCategory
+                        ? CASE_CATEGORY_LABELS[item.caseCategory] ?? item.caseCategory
+                        : CASE_CATEGORY_LABELS[CASE_CATEGORIES.DIGITAL_ALIGNER]}
+                    </td>
                     <td className="px-4 py-3">
                       <StatusPill status={item.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <SlaBar item={item} />
                     </td>
                     <td className="px-4 py-3 text-ink">
                       {CASE_PRIORITY_LABELS[item.priority]}
                     </td>
-                    <td className="px-4 py-3 text-ink">
+                    <td className="px-4 py-3 text-muted">
                       {PAYMENT_STATUS_LABELS[item.paymentStatus]}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-muted">
-                      {new Date(item.updatedAt).toLocaleString()}
+                    <td className="px-4 py-3 text-muted">
+                      {new Date(item.updatedAt).toLocaleString(undefined, {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })}
                     </td>
                   </tr>
                 ))

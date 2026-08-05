@@ -34,10 +34,10 @@ export function DesignerProductionPanel({
     setNotes(caseData.productionNotes || '');
   }, [caseData.caseId, caseData.productionNotes]);
 
-  const inProduction = caseData.status === 'designer_working';
-  const needsResubmit = caseData.status === 'sent_for_modification';
-  const inQc = caseData.status === 'qc_review';
-  const waiting = caseData.status === 'waiting_clarification';
+  const inProduction = caseData.status === 'in_process';
+  const needsResubmit = caseData.status === 'in_process';
+  const inQc = caseData.status === 'in_process';
+  const waiting = caseData.status === 'in_process';
   const ti = { ...EMPTY_TREATMENT_INSTRUCTIONS, ...caseData.treatmentInstructions };
   const canWork =
     (inProduction || needsResubmit) &&

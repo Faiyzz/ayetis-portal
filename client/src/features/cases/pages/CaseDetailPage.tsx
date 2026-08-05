@@ -146,9 +146,8 @@ export function CaseDetailPage() {
     caseData &&
       user?.id === caseData.doctorId &&
       (caseData.delivery ||
-        caseData.status === 'delivered' ||
-        caseData.status === 'approved' ||
-        caseData.status === 'completed'),
+        caseData.status === 'waiting_for_approval' ||
+        caseData.status === 'approved'),
   );
 
   const showDeliveryPackage = Boolean(
@@ -156,8 +155,7 @@ export function CaseDetailPage() {
       caseData.delivery &&
       user?.id !== caseData.doctorId &&
       (caseData.status === 'approved' ||
-        caseData.status === 'delivered' ||
-        caseData.status === 'completed'),
+        caseData.status === 'waiting_for_approval'),
   );
 
   const showWorkTab = Boolean(
@@ -550,11 +548,17 @@ export function CaseDetailPage() {
                     Assign / validate
                   </CaseDetailActionButton>
                 ) : null}
-                {(can(PERMISSIONS.CASE_UPDATE) || can(PERMISSIONS.CASE_DELETE)) &&
+                {((can(PERMISSIONS.CASE_UPDATE) || can(PERMISSIONS.CASE_DELETE)) ||
+                  (user?.id === caseData.doctorId &&
+                    caseData.status === 'new_case' &&
+                    (caseData.cancelWindowRemainingSeconds ?? 0) > 0)) &&
                 !editsLocked &&
                 !isCancelled ? (
                   <CaseDetailActionButton tone="warning" onClick={() => void handleCancel()}>
                     Cancel case
+                    {(caseData.cancelWindowRemainingSeconds ?? 0) > 0
+                      ? ` (${Math.ceil((caseData.cancelWindowRemainingSeconds ?? 0) / 60)}m left)`
+                      : ''}
                   </CaseDetailActionButton>
                 ) : null}
                 {can(PERMISSIONS.CASE_DELETE) && !caseData.isDeleted ? (

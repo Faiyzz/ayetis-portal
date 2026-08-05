@@ -6,6 +6,18 @@ import {
   CASE_PRIORITY_LABELS,
   CASE_STATUSES,
   CASE_STATUS_LABELS,
+  CASE_CATEGORIES,
+  CASE_TYPES,
+  CASE_CANCEL_WINDOW_MINUTES,
+  DEFAULT_SLA_BUSINESS_HOURS,
+  EMPTY_CASE_COMMERCIAL,
+  EMPTY_CLINICAL_PREFERENCES,
+  EMPTY_OCCLUSION_GOALS,
+  EMPTY_RECORDS_NUMBERING,
+  REFUND_STATUSES,
+  isWithinCancelWindow,
+  remainingCancelWindowSeconds,
+  slaProgressColor,
   CONSULTANT_INDICATORS,
   CONSULTANT_INDICATOR_LABELS,
   COORDINATOR_QUEUE_DESCRIPTIONS,
@@ -82,6 +94,7 @@ import {
 import { Types } from 'mongoose';
 import { env } from '../../config/env';
 import { AppError } from '../../utils/AppError';
+import { computeSlaDeadline, slaUtilizationPercent as computeSlaUtilization } from '../../utils/businessHours';
 import { Case, type ICase, type IClinicalRemark, type IQcReview } from '../../models/Case';
 import { generateCaseId } from '../../models/CaseCounter';
 import { User } from '../../models/User';
@@ -309,8 +322,26 @@ async function toListItem(
     doctorEmail: caseDoc.doctorEmail,
     status: caseDoc.status,
     priority: caseDoc.priority,
+    caseCategory: caseDoc.caseCategory ?? null,
+    caseType: caseDoc.caseType ?? null,
+    chiefComplaint: caseDoc.chiefComplaint || caseDoc.treatmentSummary || '',
     treatmentSummary: caseDoc.treatmentSummary,
     paymentStatus: caseDoc.payment?.status ?? PAYMENT_STATUSES.NOT_BILLED,
+    submittedAt: caseDoc.submittedAt ? caseDoc.submittedAt.toISOString() : null,
+    slaHours: caseDoc.slaHours ?? null,
+    slaDeadlineAt: caseDoc.slaDeadlineAt ? caseDoc.slaDeadlineAt.toISOString() : null,
+    slaUtilizationPercent:
+      caseDoc.submittedAt && caseDoc.slaDeadlineAt
+        ? computeSlaUtilization(caseDoc.submittedAt, caseDoc.slaDeadlineAt)
+        : null,
+    slaProgressColor:
+      caseDoc.submittedAt && caseDoc.slaDeadlineAt
+        ? slaProgressColor(computeSlaUtilization(caseDoc.submittedAt, caseDoc.slaDeadlineAt))
+        : null,
+    cancelWindowRemainingSeconds:
+      caseDoc.status === CASE_STATUSES.NEW_CASE
+        ? remainingCancelWindowSeconds(caseDoc.submittedAt ?? caseDoc.createdAt)
+        : null,
     openClarificationCount,
     assignedDesignerId: caseDoc.assignedDesignerId
       ? String(caseDoc.assignedDesignerId)
@@ -410,12 +441,32 @@ async function toDetail(
   return {
     ...listItem,
     clinicName: caseDoc.clinicName,
+    practiceName: caseDoc.practiceName || caseDoc.clinicName || '',
     patientGender: caseDoc.patientGender,
+    patientDateOfBirth: caseDoc.patientDateOfBirth
+      ? caseDoc.patientDateOfBirth.toISOString().slice(0, 10)
+      : null,
     instructions: caseDoc.instructions,
     country: caseDoc.country,
     treatmentInstructions: {
       ...EMPTY_TREATMENT_INSTRUCTIONS,
       ...(caseDoc.treatmentInstructions ?? {}),
+    },
+    recordsNumbering: {
+      ...EMPTY_RECORDS_NUMBERING,
+      ...(caseDoc.recordsNumbering ?? {}),
+    },
+    clinicalPreferences: {
+      ...EMPTY_CLINICAL_PREFERENCES,
+      ...(caseDoc.clinicalPreferences ?? {}),
+    },
+    occlusionGoals: {
+      ...EMPTY_OCCLUSION_GOALS,
+      ...(caseDoc.occlusionGoals ?? {}),
+    },
+    commercial: {
+      ...EMPTY_CASE_COMMERCIAL,
+      ...(caseDoc.commercial ?? {}),
     },
     payment: toPaymentDto(caseDoc),
     cancelReason: caseDoc.cancelReason ?? null,
@@ -510,9 +561,7 @@ function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
       caseDoc.assignmentMode === ASSIGNMENT_MODES.AUTO_QUEUE &&
       !caseDoc.assignedDesignerId &&
       !caseDoc.isDeleted &&
-      (caseDoc.status === CASE_STATUSES.DESIGNER_WORKING ||
-        caseDoc.status === CASE_STATUSES.UNDER_VALIDATION ||
-        caseDoc.status === CASE_STATUSES.SENT_FOR_MODIFICATION)
+      caseDoc.status === CASE_STATUSES.IN_PROCESS
     ) {
       return;
     }
@@ -521,10 +570,9 @@ function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
   if (
     permissionsInclude(actor.permissions, PERMISSIONS.CASE_QC_REVIEW) &&
     !caseDoc.isDeleted &&
-    (caseDoc.status === CASE_STATUSES.QC_REVIEW ||
-      caseDoc.status === CASE_STATUSES.ORTHODONTIST_REVIEW ||
+    (caseDoc.status === CASE_STATUSES.IN_PROCESS ||
+      caseDoc.status === CASE_STATUSES.WAITING_FOR_APPROVAL ||
       caseDoc.status === CASE_STATUSES.APPROVED ||
-      caseDoc.status === CASE_STATUSES.DELIVERED ||
       Boolean(caseDoc.escalatedForOversight))
   ) {
     return;
@@ -535,7 +583,7 @@ function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
     if (caseDoc.assignedConsultantId && String(caseDoc.assignedConsultantId) === actor.id) {
       return;
     }
-    if (caseDoc.status === CASE_STATUSES.ORTHODONTIST_REVIEW) return;
+    if (caseDoc.status === CASE_STATUSES.IN_PROCESS) return;
     if ((caseDoc.clinicalRemarks?.length ?? 0) > 0) return;
   }
 
@@ -576,9 +624,9 @@ function buildVisibilityFilter(actor: CaseActor): Record<string, unknown> {
       $or: [{ assignedDesignerId: { $exists: false } }, { assignedDesignerId: null }],
       status: {
         $in: [
-          CASE_STATUSES.DESIGNER_WORKING,
-          CASE_STATUSES.UNDER_VALIDATION,
-          CASE_STATUSES.SENT_FOR_MODIFICATION,
+          CASE_STATUSES.IN_PROCESS,
+          CASE_STATUSES.IN_PROCESS,
+          CASE_STATUSES.IN_PROCESS,
         ],
       },
       isDeleted: false,
@@ -589,10 +637,10 @@ function buildVisibilityFilter(actor: CaseActor): Record<string, unknown> {
     clauses.push({
       status: {
         $in: [
-          CASE_STATUSES.QC_REVIEW,
-          CASE_STATUSES.ORTHODONTIST_REVIEW,
+          CASE_STATUSES.IN_PROCESS,
+          CASE_STATUSES.IN_PROCESS,
           CASE_STATUSES.APPROVED,
-          CASE_STATUSES.DELIVERED,
+          CASE_STATUSES.WAITING_FOR_APPROVAL,
         ],
       },
       isDeleted: false,
@@ -604,7 +652,7 @@ function buildVisibilityFilter(actor: CaseActor): Record<string, unknown> {
     clauses.push({ escalatedForOversight: true, isDeleted: false });
     clauses.push({ assignedConsultantId: new Types.ObjectId(actor.id) });
     clauses.push({
-      status: CASE_STATUSES.ORTHODONTIST_REVIEW,
+      status: CASE_STATUSES.IN_PROCESS,
       isDeleted: false,
     });
     clauses.push({
@@ -790,6 +838,12 @@ export async function createCase(
     priority = CASE_PRIORITIES.NORMAL;
   }
 
+  const asDraft = Boolean(input.asDraft);
+  const now = new Date();
+  const slaHours = doctor.slaBusinessHours ?? DEFAULT_SLA_BUSINESS_HOURS;
+  const status = asDraft ? CASE_STATUSES.SAVED_FOR_SUBMISSION : CASE_STATUSES.NEW_CASE;
+  const submittedAt = asDraft ? undefined : now;
+
   const caseId = await generateCaseId();
   const caseDoc = new Case({
     caseId,
@@ -797,6 +851,11 @@ export async function createCase(
     doctorName: `${doctor.firstName} ${doctor.lastName}`.trim(),
     doctorDisplayId: doctor.doctorId,
     doctorEmail: doctor.email,
+    caseCategory: input.caseCategory ?? CASE_CATEGORIES.DIGITAL_ALIGNER,
+    caseType: input.caseType ?? CASE_TYPES.NEW,
+    chiefComplaint: input.chiefComplaint?.trim() || input.treatmentSummary.trim(),
+    practiceName: input.practiceName?.trim() || input.clinicName?.trim() || '',
+    patientDateOfBirth: input.patientDateOfBirth ? new Date(input.patientDateOfBirth) : undefined,
     patientName: input.patientName.trim(),
     patientAge: input.patientAge ?? undefined,
     patientGender: input.patientGender?.trim() ?? '',
@@ -805,15 +864,23 @@ export async function createCase(
     treatmentSummary: input.treatmentSummary.trim(),
     instructions: input.instructions?.trim() ?? '',
     treatmentInstructions: normalizeTreatmentInstructions(input.treatmentInstructions),
+    recordsNumbering: { ...EMPTY_RECORDS_NUMBERING, ...(input.recordsNumbering ?? {}) },
+    clinicalPreferences: { ...EMPTY_CLINICAL_PREFERENCES, ...(input.clinicalPreferences ?? {}) },
+    occlusionGoals: { ...EMPTY_OCCLUSION_GOALS, ...(input.occlusionGoals ?? {}) },
+    commercial: { ...EMPTY_CASE_COMMERCIAL, ...(input.commercial ?? {}) },
     payment: {
       status: PAYMENT_STATUSES.NOT_BILLED,
-      currency: 'USD',
+      currency: input.commercial?.currency || 'USD',
+      amountDue: input.commercial?.finalPayableAmount ?? input.commercial?.unitPrice ?? null,
       invoiceNumber: '',
       notes: '',
     },
     assignmentMode: ASSIGNMENT_MODES.NONE,
-    status: CASE_STATUSES.SUBMITTED,
+    status,
     priority,
+    submittedAt,
+    slaHours: asDraft ? undefined : slaHours,
+    slaDeadlineAt: asDraft || !submittedAt ? undefined : computeSlaDeadline(submittedAt, slaHours),
     notes: [],
     files: [],
     history: [],
@@ -821,7 +888,7 @@ export async function createCase(
 
   pushHistory(caseDoc, {
     action: 'created',
-    summary: `Case ${caseId} submitted`,
+    summary: asDraft ? `Case ${caseId} saved for submission` : `Case ${caseId} submitted`,
     actor,
     metadata: {
       changes: [
@@ -829,7 +896,7 @@ export async function createCase(
           field: 'status',
           label: CASE_FIELD_LABELS.status,
           from: null,
-          to: CASE_STATUSES.SUBMITTED,
+          to: status,
         },
       ] satisfies CaseHistoryChange[],
     },
@@ -1085,17 +1152,21 @@ export async function cancelCase(
   caseIdOrMongoId: string,
   reason: string,
   audit?: RequestAuditContext,
+  remarks?: string,
 ) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  const isDoctorSelf =
+    actor.role === ROLES.DOCTOR && String(caseDoc.doctorId) === actor.id;
   const canCancel =
     permissionsInclude(actor.permissions, PERMISSIONS.CASE_DELETE) ||
-    permissionsInclude(actor.permissions, PERMISSIONS.CASE_UPDATE);
+    permissionsInclude(actor.permissions, PERMISSIONS.CASE_UPDATE) ||
+    isDoctorSelf;
 
   if (!canCancel) {
     throw new AppError('You do not have permission to cancel cases', 403);
   }
-
-  const caseDoc = await findCase(caseIdOrMongoId);
-  assertCanViewCase(actor, caseDoc);
 
   if (caseDoc.isDeleted) {
     throw new AppError('Cannot cancel a deleted case', 400);
@@ -1105,7 +1176,33 @@ export async function cancelCase(
     throw new AppError('Case is already cancelled', 400);
   }
 
+  const isWindowCancel =
+    caseDoc.status === CASE_STATUSES.NEW_CASE &&
+    isWithinCancelWindow(caseDoc.submittedAt ?? caseDoc.createdAt);
+
+  // URD: 15-minute cancellation window for New Case (doctor path highly critical).
+  // Staff with CASE_DELETE may force-cancel outside the window (still audited).
+  if (isDoctorSelf || !permissionsInclude(actor.permissions, PERMISSIONS.CASE_DELETE)) {
+    if (caseDoc.status !== CASE_STATUSES.NEW_CASE || !isWindowCancel) {
+      throw new AppError(
+        `Cases can only be cancelled within ${CASE_CANCEL_WINDOW_MINUTES} minutes of submission while status is New Case.`,
+        403,
+      );
+    }
+  }
+
   const from = caseDoc.status;
+  const remaining = remainingCancelWindowSeconds(caseDoc.submittedAt ?? caseDoc.createdAt);
+  const caseValue =
+    caseDoc.payment?.amountPaid ??
+    caseDoc.payment?.amountDue ??
+    caseDoc.commercial?.finalPayableAmount ??
+    0;
+  const refundAmount = Number(caseValue) > 0 ? Number(caseValue) : 0;
+  const refundStatus =
+    refundAmount > 0 ? REFUND_STATUSES.PENDING : REFUND_STATUSES.NOT_APPLICABLE;
+  const remarksTrimmed = remarks?.trim() || undefined;
+
   caseDoc.status = CASE_STATUSES.CANCELLED;
   caseDoc.cancelReason = reason.trim();
 
@@ -1123,10 +1220,42 @@ export async function cancelCase(
         },
       ] satisfies CaseHistoryChange[],
       reason: reason.trim(),
+      remarks: remarksTrimmed,
+      remainingWindowSeconds: remaining,
     },
   });
 
   await caseDoc.save();
+
+  const { CancellationAudit } = await import('../../models/CancellationAudit');
+  await CancellationAudit.create({
+    caseMongoId: caseDoc._id,
+    caseId: caseDoc.caseId,
+    patientName: caseDoc.patientName,
+    doctorUserId: caseDoc.doctorId,
+    doctorName: caseDoc.doctorName,
+    doctorDisplayId: caseDoc.doctorDisplayId,
+    companyName: caseDoc.practiceName || caseDoc.clinicName,
+    caseCategory: caseDoc.caseCategory,
+    caseType: caseDoc.caseType,
+    treatmentPlanName: caseDoc.commercial?.treatmentPlanName,
+    caseValue: refundAmount,
+    invoiceNumber: caseDoc.payment?.invoiceNumber,
+    paymentStatus: caseDoc.payment?.status,
+    refundAmount,
+    refundStatus,
+    cancellationReason: reason.trim(),
+    cancellationRemarks: remarksTrimmed,
+    statusAtCancellation: from,
+    submittedAt: caseDoc.submittedAt ?? caseDoc.createdAt,
+    cancelledAt: new Date(),
+    remainingWindowSeconds: remaining,
+    cancelledById: actor.id,
+    cancelledByName: actorName(actor),
+    cancelledByEmail: actor.email,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
 
   await recordActivity({
     action: AUDIT_ACTIONS.CASE_CANCEL,
@@ -1137,7 +1266,7 @@ export async function cancelCase(
     actorRole: actor.role,
     targetType: 'case',
     targetId: caseDoc.caseId,
-    metadata: { reason: reason.trim() },
+    metadata: { reason: reason.trim(), remainingWindowSeconds: remaining, refundStatus },
     ipAddress: audit?.ipAddress,
     userAgent: audit?.userAgent,
   });
@@ -1575,9 +1704,8 @@ export async function getCaseFilesForZipDownload(
   if (
     permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_OWN) &&
     String(caseDoc.doctorId) === actor.id &&
-    (caseDoc.status === CASE_STATUSES.DELIVERED ||
-      caseDoc.status === CASE_STATUSES.APPROVED ||
-      caseDoc.status === CASE_STATUSES.COMPLETED)
+    (caseDoc.status === CASE_STATUSES.WAITING_FOR_APPROVAL ||
+      caseDoc.status === CASE_STATUSES.APPROVED)
   ) {
     if (!caseDoc.doctorEngagement) caseDoc.doctorEngagement = {};
     caseDoc.doctorEngagement.filesDownloadedAt = new Date();
@@ -1713,23 +1841,21 @@ export async function startProduction(
   if (caseDoc.status === CASE_STATUSES.CANCELLED) {
     throw new AppError('Cannot start production on a cancelled case', 400);
   }
-  if (caseDoc.status === CASE_STATUSES.WAITING_CLARIFICATION) {
-    throw new AppError('Resolve clarifications before starting production', 400);
+  if (
+    caseDoc.status === CASE_STATUSES.WAITING_FOR_APPROVAL ||
+    caseDoc.status === CASE_STATUSES.APPROVED
+  ) {
+    throw new AppError('Case has already been delivered to the doctor', 400);
   }
-  if (caseDoc.status === CASE_STATUSES.QC_REVIEW) {
+  if (caseDoc.submittedToQcAt && !caseDoc.qcRejectionCount) {
     throw new AppError('Case is already in the QC queue', 400);
   }
-  if (
-    caseDoc.status === CASE_STATUSES.APPROVED ||
-    caseDoc.status === CASE_STATUSES.DELIVERED ||
-    caseDoc.status === CASE_STATUSES.COMPLETED
-  ) {
-    throw new AppError('Case has already passed QC', 400);
+  const openClarifications = await countOpenClarifications(caseDoc._id as Types.ObjectId);
+  if (openClarifications > 0) {
+    throw new AppError('Resolve clarifications before starting production', 400);
   }
 
-  if (caseDoc.status !== CASE_STATUSES.SENT_FOR_MODIFICATION) {
-    caseDoc.status = CASE_STATUSES.DESIGNER_WORKING;
-  }
+  caseDoc.status = CASE_STATUSES.IN_PROCESS
   caseDoc.productionStartedAt = new Date();
   caseDoc.productionStartedById = new Types.ObjectId(actor.id);
   caseDoc.productionStartedByName = actorName(actor);
@@ -1789,11 +1915,8 @@ export async function updateProductionNotes(
     caseDoc.productionStartedById = new Types.ObjectId(actor.id);
     caseDoc.productionStartedByName = actorName(actor);
   }
-  if (
-    caseDoc.status !== CASE_STATUSES.QC_REVIEW &&
-    caseDoc.status !== CASE_STATUSES.SENT_FOR_MODIFICATION
-  ) {
-    caseDoc.status = CASE_STATUSES.DESIGNER_WORKING;
+  if (caseDoc.status === CASE_STATUSES.NEW_CASE || caseDoc.status === CASE_STATUSES.SAVED_FOR_SUBMISSION) {
+    caseDoc.status = CASE_STATUSES.IN_PROCESS;
   }
 
   pushHistory(caseDoc, {
@@ -1833,29 +1956,27 @@ export async function submitCaseToQc(
   if (caseDoc.status === CASE_STATUSES.CANCELLED) {
     throw new AppError('Cannot submit a cancelled case', 400);
   }
-  if (caseDoc.status === CASE_STATUSES.WAITING_CLARIFICATION) {
-    throw new AppError('Resolve clarifications before submitting to QC', 400);
+  if (
+    caseDoc.status === CASE_STATUSES.WAITING_FOR_APPROVAL ||
+    caseDoc.status === CASE_STATUSES.APPROVED
+  ) {
+    throw new AppError('Case has already been delivered to the doctor', 400);
   }
-  if (caseDoc.status === CASE_STATUSES.QC_REVIEW) {
+  if (caseDoc.submittedToQcAt && !(caseDoc.qcRejectionCount ?? 0)) {
     return await toDetail(caseDoc, actor);
   }
-  if (
-    caseDoc.status === CASE_STATUSES.APPROVED ||
-    caseDoc.status === CASE_STATUSES.DELIVERED ||
-    caseDoc.status === CASE_STATUSES.COMPLETED
-  ) {
-    throw new AppError('Case has already passed QC', 400);
+  const openForQc = await countOpenClarifications(caseDoc._id as Types.ObjectId);
+  if (openForQc > 0) {
+    throw new AppError('Resolve clarifications before submitting to QC', 400);
   }
 
   if (input.notes?.trim()) {
     caseDoc.productionNotes = input.notes.trim();
   }
 
-  const isResubmit =
-    caseDoc.status === CASE_STATUSES.SENT_FOR_MODIFICATION ||
-    (caseDoc.qcRejectionCount ?? 0) > 0;
+  const isResubmit = (caseDoc.qcRejectionCount ?? 0) > 0;
 
-  caseDoc.status = CASE_STATUSES.QC_REVIEW;
+  caseDoc.status = CASE_STATUSES.IN_PROCESS;
   caseDoc.submittedToQcAt = new Date();
   caseDoc.submittedToQcById = new Types.ObjectId(actor.id);
   caseDoc.submittedToQcByName = actorName(actor);
@@ -1884,7 +2005,7 @@ export async function submitCaseToQc(
     action: isResubmit
       ? AUDIT_ACTIONS.CASE_PRODUCTION_RESUBMIT_QC
       : AUDIT_ACTIONS.CASE_PRODUCTION_SUBMIT_QC,
-    summary: `${actor.email} ${isResubmit ? 'resubmitted' : 'submitted'} case ${caseDoc.caseId} to QC`,
+    summary: `${actor.email} ${isResubmit ? 'resubmitted' : 'new_case'} case ${caseDoc.caseId} to QC`,
     actorId: actor.id,
     actorEmail: actor.email,
     actorName: actorName(actor),
@@ -1999,14 +2120,14 @@ export async function getQcDashboard(actor: CaseActor): Promise<QcDashboardDto> 
   const [pending, escalated] = await Promise.all([
     Case.find({
       isDeleted: false,
-      status: CASE_STATUSES.QC_REVIEW,
+      status: CASE_STATUSES.IN_PROCESS,
     })
       .sort({ priority: -1, submittedToQcAt: 1, updatedAt: 1 })
       .limit(100),
     Case.find({
       isDeleted: false,
       escalatedForOversight: true,
-      status: { $nin: [CASE_STATUSES.CANCELLED, CASE_STATUSES.COMPLETED] },
+      status: { $nin: [CASE_STATUSES.CANCELLED, CASE_STATUSES.APPROVED] },
     })
       .sort({ escalatedAt: -1, updatedAt: -1 })
       .limit(50),
@@ -2034,7 +2155,7 @@ export async function getEscalatedCasesQueue(actor: CaseActor): Promise<QcQueueC
   const cases = await Case.find({
     isDeleted: false,
     escalatedForOversight: true,
-    status: { $nin: [CASE_STATUSES.CANCELLED, CASE_STATUSES.COMPLETED] },
+    status: { $nin: [CASE_STATUSES.CANCELLED, CASE_STATUSES.APPROVED] },
   })
     .sort({ escalatedAt: -1, updatedAt: -1 })
     .limit(100);
@@ -2053,10 +2174,7 @@ export async function addQcComment(
   assertCanViewCase(actor, caseDoc);
 
   if (caseDoc.isDeleted) throw new AppError('Cannot review a deleted case', 400);
-  if (
-    caseDoc.status !== CASE_STATUSES.QC_REVIEW &&
-    caseDoc.status !== CASE_STATUSES.ORTHODONTIST_REVIEW
-  ) {
+  if (caseDoc.status !== CASE_STATUSES.IN_PROCESS || !caseDoc.submittedToQcAt) {
     throw new AppError('Case is not in a QC review queue', 400);
   }
 
@@ -2117,10 +2235,7 @@ export async function approveQcCase(
   assertCanViewCase(actor, caseDoc);
 
   if (caseDoc.isDeleted) throw new AppError('Cannot approve a deleted case', 400);
-  if (
-    caseDoc.status !== CASE_STATUSES.QC_REVIEW &&
-    caseDoc.status !== CASE_STATUSES.ORTHODONTIST_REVIEW
-  ) {
+  if (caseDoc.status !== CASE_STATUSES.IN_PROCESS || !caseDoc.submittedToQcAt) {
     throw new AppError('Only cases in QC or consultant review can be approved', 400);
   }
 
@@ -2148,7 +2263,7 @@ export async function approveQcCase(
   const uploadedAt = new Date();
   const hot = initialHotFields(uploadedAt);
 
-  caseDoc.status = CASE_STATUSES.DELIVERED;
+  caseDoc.status = CASE_STATUSES.WAITING_FOR_APPROVAL;
   caseDoc.doctorDecision = undefined;
   caseDoc.doctorDecisionNote = undefined;
   caseDoc.doctorDecisionAt = undefined;
@@ -2241,10 +2356,7 @@ export async function rejectQcCase(
   assertCanViewCase(actor, caseDoc);
 
   if (caseDoc.isDeleted) throw new AppError('Cannot reject a deleted case', 400);
-  if (
-    caseDoc.status !== CASE_STATUSES.QC_REVIEW &&
-    caseDoc.status !== CASE_STATUSES.ORTHODONTIST_REVIEW
-  ) {
+  if (caseDoc.status !== CASE_STATUSES.IN_PROCESS || !caseDoc.submittedToQcAt) {
     throw new AppError('Only cases in QC or consultant review can be rejected', 400);
   }
 
@@ -2255,7 +2367,7 @@ export async function rejectQcCase(
 
   const nextCount = (caseDoc.qcRejectionCount ?? 0) + 1;
   caseDoc.qcRejectionCount = nextCount;
-  caseDoc.status = CASE_STATUSES.SENT_FOR_MODIFICATION;
+  caseDoc.status = CASE_STATUSES.IN_PROCESS;
   caseDoc.lastQcErrorCode = input.errorCode;
   caseDoc.lastQcComments = comments;
   caseDoc.lastQcRequiredChanges = requiredChanges;
@@ -2373,14 +2485,12 @@ export async function getDesignerPerformance(
   for (const caseDoc of cases) {
     if (
       caseDoc.status === CASE_STATUSES.APPROVED ||
-      caseDoc.status === CASE_STATUSES.DELIVERED ||
-      caseDoc.status === CASE_STATUSES.COMPLETED
+      caseDoc.status === CASE_STATUSES.WAITING_FOR_APPROVAL
     ) {
       completedCases += 1;
     }
     if (
-      caseDoc.status === CASE_STATUSES.DESIGNER_WORKING ||
-      caseDoc.status === CASE_STATUSES.SENT_FOR_MODIFICATION
+      caseDoc.status === CASE_STATUSES.IN_PROCESS
     ) {
       inProductionCases += 1;
     }
@@ -2615,8 +2725,8 @@ export async function startCaseValidation(
     throw new AppError('Cannot validate a cancelled case', 400);
   }
 
-  if (caseDoc.status === CASE_STATUSES.SUBMITTED) {
-    caseDoc.status = CASE_STATUSES.UNDER_VALIDATION;
+  if (caseDoc.status === CASE_STATUSES.NEW_CASE) {
+    caseDoc.status = CASE_STATUSES.IN_PROCESS;
     pushHistory(caseDoc, {
       action: 'validation_started',
       summary: 'Case moved to under validation',
@@ -2659,7 +2769,7 @@ export async function markCaseValidated(
   if (caseDoc.status === CASE_STATUSES.CANCELLED) {
     throw new AppError('Cannot validate a cancelled case', 400);
   }
-  if (caseDoc.status === CASE_STATUSES.WAITING_CLARIFICATION) {
+  if (caseDoc.status === CASE_STATUSES.IN_PROCESS) {
     throw new AppError('Resolve open clarifications before validating', 400);
   }
 
@@ -2683,8 +2793,8 @@ export async function markCaseValidated(
     );
   }
 
-  if (caseDoc.status === CASE_STATUSES.SUBMITTED) {
-    caseDoc.status = CASE_STATUSES.UNDER_VALIDATION;
+  if (caseDoc.status === CASE_STATUSES.NEW_CASE) {
+    caseDoc.status = CASE_STATUSES.IN_PROCESS;
   }
 
   caseDoc.validatedAt = new Date();
@@ -2740,7 +2850,7 @@ export async function assignCase(
   if (caseDoc.status === CASE_STATUSES.CANCELLED) {
     throw new AppError('Cannot assign a cancelled case', 400);
   }
-  if (caseDoc.status === CASE_STATUSES.WAITING_CLARIFICATION) {
+  if (caseDoc.status === CASE_STATUSES.IN_PROCESS) {
     throw new AppError('Cannot assign while waiting for doctor clarification', 400);
   }
   if (!caseDoc.validatedAt) {
@@ -2759,7 +2869,7 @@ export async function assignCase(
     caseDoc.assignmentMode = ASSIGNMENT_MODES.DESIGNER;
     caseDoc.assignedDesignerId = designer._id as Types.ObjectId;
     caseDoc.assignedDesignerName = `${designer.firstName} ${designer.lastName}`.trim();
-    caseDoc.status = CASE_STATUSES.DESIGNER_WORKING;
+    caseDoc.status = CASE_STATUSES.IN_PROCESS;
 
     pushHistory(caseDoc, {
       action: 'assigned',
@@ -2771,7 +2881,7 @@ export async function assignCase(
     caseDoc.assignmentMode = ASSIGNMENT_MODES.AUTO_QUEUE;
     caseDoc.assignedDesignerId = undefined;
     caseDoc.assignedDesignerName = undefined;
-    caseDoc.status = CASE_STATUSES.DESIGNER_WORKING;
+    caseDoc.status = CASE_STATUSES.IN_PROCESS;
 
     pushHistory(caseDoc, {
       action: 'assigned',
@@ -3042,11 +3152,11 @@ export async function getConsultantDashboard(
 
   const cases = await Case.find({
     isDeleted: false,
-    status: { $nin: [CASE_STATUSES.CANCELLED, CASE_STATUSES.COMPLETED] },
+    status: { $nin: [CASE_STATUSES.CANCELLED, CASE_STATUSES.APPROVED] },
     $or: [
       { escalatedForOversight: true },
       { assignedConsultantId: new Types.ObjectId(actor.id) },
-      { status: CASE_STATUSES.ORTHODONTIST_REVIEW },
+      { status: CASE_STATUSES.IN_PROCESS },
       { 'clinicalRemarks.0': { $exists: true } },
     ],
   })
@@ -3244,7 +3354,7 @@ export async function recordDoctorCaseView(
   }
 
   if (
-    caseDoc.status !== CASE_STATUSES.DELIVERED &&
+    caseDoc.status !== CASE_STATUSES.WAITING_FOR_APPROVAL &&
     caseDoc.status !== CASE_STATUSES.APPROVED
   ) {
     return await toDetail(caseDoc, actor);
@@ -3330,7 +3440,7 @@ export async function submitDoctorDecision(
   }
 
   if (
-    caseDoc.status !== CASE_STATUSES.DELIVERED &&
+    caseDoc.status !== CASE_STATUSES.WAITING_FOR_APPROVAL &&
     caseDoc.status !== CASE_STATUSES.APPROVED
   ) {
     throw new AppError('Case is not awaiting doctor review', 400);
@@ -3338,6 +3448,7 @@ export async function submitDoctorDecision(
 
   const note = input.note?.trim() || '';
   const now = new Date();
+  const statusBeforeDecision = caseDoc.status;
 
   caseDoc.doctorDecision = input.decision;
   caseDoc.doctorDecisionNote = note || undefined;
@@ -3347,16 +3458,16 @@ export async function submitDoctorDecision(
   caseDoc.doctorEngagement.lastViewedAt = now;
 
   if (input.decision === DOCTOR_DECISIONS.APPROVE) {
-    caseDoc.status = CASE_STATUSES.COMPLETED;
+    caseDoc.status = CASE_STATUSES.APPROVED;
   } else if (input.decision === DOCTOR_DECISIONS.REQUEST_MODIFICATION) {
     if (!note) throw new AppError('Describe the modification you need', 400);
-    caseDoc.status = CASE_STATUSES.SENT_FOR_MODIFICATION;
+    caseDoc.status = CASE_STATUSES.IN_PROCESS;
   } else if (input.decision === DOCTOR_DECISIONS.CANCEL) {
     if (!note) throw new AppError('Provide a cancellation reason', 400);
     caseDoc.status = CASE_STATUSES.CANCELLED;
     caseDoc.cancelReason = note;
   } else if (input.decision === DOCTOR_DECISIONS.UNDER_REVIEW) {
-    caseDoc.status = CASE_STATUSES.DELIVERED;
+    caseDoc.status = CASE_STATUSES.WAITING_FOR_APPROVAL;
   }
 
   pushHistory(caseDoc, {
@@ -3367,6 +3478,44 @@ export async function submitDoctorDecision(
   });
 
   await caseDoc.save();
+
+  if (input.decision === DOCTOR_DECISIONS.CANCEL) {
+    const caseValue =
+      caseDoc.payment?.amountPaid ??
+      caseDoc.payment?.amountDue ??
+      caseDoc.commercial?.finalPayableAmount ??
+      0;
+    const refundAmount = Number(caseValue) > 0 ? Number(caseValue) : 0;
+    const { CancellationAudit } = await import('../../models/CancellationAudit');
+    await CancellationAudit.create({
+      caseMongoId: caseDoc._id,
+      caseId: caseDoc.caseId,
+      patientName: caseDoc.patientName,
+      doctorUserId: caseDoc.doctorId,
+      doctorName: caseDoc.doctorName,
+      doctorDisplayId: caseDoc.doctorDisplayId,
+      companyName: caseDoc.practiceName || caseDoc.clinicName,
+      caseCategory: caseDoc.caseCategory,
+      caseType: caseDoc.caseType,
+      treatmentPlanName: caseDoc.commercial?.treatmentPlanName,
+      caseValue: refundAmount,
+      invoiceNumber: caseDoc.payment?.invoiceNumber,
+      paymentStatus: caseDoc.payment?.status,
+      refundAmount,
+      refundStatus: refundAmount > 0 ? REFUND_STATUSES.PENDING : REFUND_STATUSES.NOT_APPLICABLE,
+      cancellationReason: note,
+      cancellationRemarks: 'post-delivery',
+      statusAtCancellation: statusBeforeDecision,
+      submittedAt: caseDoc.submittedAt ?? caseDoc.createdAt,
+      cancelledAt: now,
+      remainingWindowSeconds: 0,
+      cancelledById: actor.id,
+      cancelledByName: actorName(actor),
+      cancelledByEmail: actor.email,
+      ipAddress: audit?.ipAddress,
+      userAgent: audit?.userAgent,
+    });
+  }
 
   await recordActivity({
     action: AUDIT_ACTIONS.CASE_DOCTOR_DECISION,
@@ -3421,7 +3570,7 @@ export async function getDoctorDeliveryQueue(
     doctorId: new Types.ObjectId(actor.id),
     isDeleted: false,
     status: {
-      $in: [CASE_STATUSES.DELIVERED, CASE_STATUSES.APPROVED, CASE_STATUSES.COMPLETED],
+      $in: [CASE_STATUSES.WAITING_FOR_APPROVAL, CASE_STATUSES.APPROVED, CASE_STATUSES.APPROVED],
     },
   })
     .sort({ updatedAt: -1 })

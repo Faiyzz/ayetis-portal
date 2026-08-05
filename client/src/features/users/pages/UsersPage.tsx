@@ -3,6 +3,7 @@ import {
   ACCOUNT_STATUSES,
   ACCOUNT_TYPE_LABELS,
   ROLE_LABELS,
+  ROLES,
   type AccountStatus,
   type PublicUser,
 } from '@ayetis/shared';
@@ -11,6 +12,7 @@ import { Link } from 'react-router-dom';
 import { dialog } from '@/components/dialog';
 import { PageHeader } from '@/components/PageHeader';
 import { usePermissions } from '@/features/auth/permissions';
+import { updateDoctorSlaHours } from '@/features/commercial/api';
 import { toast } from '@/features/notifications/toastStore';
 import * as usersApi from '@/features/users/api';
 import { getErrorMessage } from '@/lib/api';
@@ -98,6 +100,32 @@ export function UsersPage() {
     }
   }
 
+  async function handleSla(user: PublicUser) {
+    const current = user.slaBusinessHours ?? 48;
+    const value = await dialog.prompt({
+      title: 'Set SLA business hours',
+      message: `Business-hour SLA for ${user.email} (excludes weekends). Current: ${current}h.`,
+      label: 'SLA hours',
+      placeholder: String(current),
+      defaultValue: String(current),
+      confirmLabel: 'Save SLA',
+      minLength: 1,
+    });
+    if (!value) return;
+    const hours = Number(value);
+    if (!Number.isFinite(hours) || hours < 1) {
+      toast().warning('Enter a positive number of hours');
+      return;
+    }
+    try {
+      await updateDoctorSlaHours(user.id, hours);
+      toast().success(`SLA set to ${hours}h`);
+      await load();
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to update SLA hours'));
+    }
+  }
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -142,6 +170,7 @@ export function UsersPage() {
                   <th className="px-5 py-3 font-medium">User</th>
                   <th className="px-5 py-3 font-medium">Role / Type</th>
                   <th className="px-5 py-3 font-medium">Doctor ID</th>
+                  <th className="px-5 py-3 font-medium">SLA</th>
                   <th className="px-5 py-3 font-medium">Status</th>
                   <th className="px-5 py-3 font-medium">Actions</th>
                 </tr>
@@ -163,6 +192,11 @@ export function UsersPage() {
                     </td>
                     <td className="px-5 py-3 font-mono text-xs text-muted">
                       {user.doctorId || '—'}
+                    </td>
+                    <td className="px-5 py-3 text-sm text-muted">
+                      {user.role === ROLES.DOCTOR
+                        ? `${user.slaBusinessHours ?? 48}h`
+                        : '—'}
                     </td>
                     <td className="px-5 py-3">
                       <span
@@ -217,6 +251,15 @@ export function UsersPage() {
                               </button>
                             ) : null}
                           </>
+                        ) : null}
+                        {can(PERMISSIONS.SLA_CONFIGURE) && user.role === ROLES.DOCTOR ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleSla(user)}
+                            className="font-medium text-muted hover:text-ink"
+                          >
+                            Set SLA
+                          </button>
                         ) : null}
                         {can(PERMISSIONS.USER_RESET_PASSWORD) ? (
                           <button

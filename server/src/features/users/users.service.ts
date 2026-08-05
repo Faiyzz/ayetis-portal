@@ -121,6 +121,7 @@ export function toPublicUser(
     doctorId: user.doctorId ?? null,
     clinicName: user.clinicName ?? null,
     companyName: user.companyName ?? null,
+    slaBusinessHours: user.slaBusinessHours ?? null,
     isActive: accountStatus === ACCOUNT_STATUSES.ACTIVE,
     departmentId: user.departmentId ? String(user.departmentId) : null,
     departmentName: user.departmentName ?? null,

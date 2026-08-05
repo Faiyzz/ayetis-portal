@@ -4,6 +4,7 @@ export * from './types';
 export * from './account';
 export * from './portals';
 export * from './audit';
+export * from './caseTaxonomy';
 export * from './cases';
 export * from './treatment';
 export * from './geo';

@@ -66,6 +66,13 @@ export const PERMISSIONS = {
   // Delete approval workflow
   DELETE_REQUEST_REVIEW: 'delete_request:review',
 
+  // Cancellation & commercial
+  CANCELLATION_REPORT_VIEW: 'cancellation_report:view',
+  CANCELLATION_REFUND_UPDATE: 'cancellation_refund:update',
+  SLA_CONFIGURE: 'sla:configure',
+  TREATMENT_PLAN_MANAGE: 'treatment_plan:manage',
+  DISCOUNT_CODE_MANAGE: 'discount_code:manage',
+
   // Audit
   AUDIT_VIEW: 'audit:view',
 } as const;
@@ -116,6 +123,11 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.COMPLAINT_VIEW]: 'View complaints and ratings',
   [PERMISSIONS.COMPLAINT_MANAGE]: 'Manage complaints',
   [PERMISSIONS.DELETE_REQUEST_REVIEW]: 'Approve or reject delete requests',
+  [PERMISSIONS.CANCELLATION_REPORT_VIEW]: 'View cancellation audit reports',
+  [PERMISSIONS.CANCELLATION_REFUND_UPDATE]: 'Update cancellation refund status',
+  [PERMISSIONS.SLA_CONFIGURE]: 'Configure doctor SLA hours',
+  [PERMISSIONS.TREATMENT_PLAN_MANAGE]: 'Manage treatment plans',
+  [PERMISSIONS.DISCOUNT_CODE_MANAGE]: 'Manage discount codes',
   [PERMISSIONS.AUDIT_VIEW]: 'View activity logs',
 };
 
@@ -129,6 +141,7 @@ export type PermissionGroup =
   | 'Reports'
   | 'Departments'
   | 'Complaints'
+  | 'Commercial'
   | 'Audit';
 
 export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
@@ -173,6 +186,11 @@ export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
   [PERMISSIONS.COMPLAINT_VIEW]: 'Complaints',
   [PERMISSIONS.COMPLAINT_MANAGE]: 'Complaints',
   [PERMISSIONS.DELETE_REQUEST_REVIEW]: 'Audit',
+  [PERMISSIONS.CANCELLATION_REPORT_VIEW]: 'Reports',
+  [PERMISSIONS.CANCELLATION_REFUND_UPDATE]: 'Commercial',
+  [PERMISSIONS.SLA_CONFIGURE]: 'Commercial',
+  [PERMISSIONS.TREATMENT_PLAN_MANAGE]: 'Commercial',
+  [PERMISSIONS.DISCOUNT_CODE_MANAGE]: 'Commercial',
   [PERMISSIONS.AUDIT_VIEW]: 'Audit',
 };
 
@@ -263,6 +281,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     PERMISSIONS.TEAM_MANAGE,
     PERMISSIONS.COMPLAINT_CREATE,
     PERMISSIONS.COMPLAINT_VIEW,
+    PERMISSIONS.CANCELLATION_REPORT_VIEW,
   ],
 
   [ROLES.ANALYTICS]: [
@@ -273,6 +292,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     PERMISSIONS.REPORT_VIEW_ALL,
     PERMISSIONS.CASE_VIEW_ALL,
     PERMISSIONS.COMPLAINT_VIEW,
+    PERMISSIONS.CANCELLATION_REPORT_VIEW,
   ],
 };
 

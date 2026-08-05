@@ -31,12 +31,11 @@ export function DoctorDeliveryPanel({
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const awaiting =
-    caseData.status === 'delivered' ||
+    caseData.status === 'waiting_for_approval' ||
     (caseData.status === 'approved' && !caseData.doctorDecision);
   const canDownloadFinal =
-    caseData.status === 'completed' ||
-    caseData.status === 'delivered' ||
-    caseData.status === 'approved';
+    caseData.status === 'approved' ||
+    caseData.status === 'waiting_for_approval';
 
   useEffect(() => {
     if (!awaiting) return;
@@ -64,7 +63,7 @@ export function DoctorDeliveryPanel({
     return () => window.clearInterval(timer);
   }, [caseData.caseId, caseData.delivery?.storageTier, onUpdated]);
 
-  if (!caseData.delivery && !awaiting && caseData.status !== 'completed') {
+  if (!caseData.delivery && !awaiting && caseData.status !== 'approved') {
     return null;
   }
 

@@ -27,6 +27,8 @@ export interface PublicUser {
   doctorId: string | null;
   clinicName: string | null;
   companyName: string | null;
+  /** Doctor SLA target in business hours (excludes weekends). */
+  slaBusinessHours: number | null;
   /** Derived: accountStatus === 'active' */
   isActive: boolean;
   departmentId: string | null;

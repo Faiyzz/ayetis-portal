@@ -227,6 +227,7 @@ export async function cancelCase(req: AuthenticatedRequest, res: Response, next:
       req.params.caseId,
       req.body.reason,
       getRequestAuditContext(req),
+      req.body.remarks,
     );
     res.json({
       success: true,

@@ -169,6 +169,7 @@ export function resolveCoordinatorQueue(input: {
   validatedAt?: Date | string | null;
   assignmentMode?: AssignmentMode | null;
   assignedDesignerId?: string | null;
+  openClarificationCount?: number;
 }): CoordinatorQueue {
   const mode = input.assignmentMode ?? ASSIGNMENT_MODES.NONE;
   const assigned =
@@ -176,15 +177,26 @@ export function resolveCoordinatorQueue(input: {
     mode === ASSIGNMENT_MODES.DESIGNER ||
     Boolean(input.assignedDesignerId);
 
-  if (input.status === CASE_STATUSES.WAITING_CLARIFICATION) {
-    return COORDINATOR_QUEUES.WAITING_DOCTOR;
-  }
-
-  if (assigned && input.status !== CASE_STATUSES.CANCELLED) {
+  if (input.status === CASE_STATUSES.CANCELLED || input.status === CASE_STATUSES.APPROVED) {
     return COORDINATOR_QUEUES.ASSIGNED;
   }
 
-  if (input.status === CASE_STATUSES.SUBMITTED) {
+  if (input.status === CASE_STATUSES.WAITING_FOR_APPROVAL) {
+    return COORDINATOR_QUEUES.WAITING_DOCTOR;
+  }
+
+  if ((input.openClarificationCount ?? 0) > 0 && input.status === CASE_STATUSES.IN_PROCESS) {
+    return COORDINATOR_QUEUES.WAITING_DOCTOR;
+  }
+
+  if (assigned && input.status === CASE_STATUSES.IN_PROCESS) {
+    return COORDINATOR_QUEUES.ASSIGNED;
+  }
+
+  if (
+    input.status === CASE_STATUSES.NEW_CASE ||
+    input.status === CASE_STATUSES.SAVED_FOR_SUBMISSION
+  ) {
     return COORDINATOR_QUEUES.NEW;
   }
 
@@ -192,11 +204,10 @@ export function resolveCoordinatorQueue(input: {
     return COORDINATOR_QUEUES.READY_FOR_ASSIGNMENT;
   }
 
-  if (input.status === CASE_STATUSES.UNDER_VALIDATION && !input.validatedAt) {
+  if (input.status === CASE_STATUSES.IN_PROCESS && !input.validatedAt) {
     return COORDINATOR_QUEUES.PENDING_VALIDATION;
   }
 
-  // Later pipeline stages without an assignee still sit in pending until validated/assigned.
   if (!input.validatedAt) {
     return COORDINATOR_QUEUES.PENDING_VALIDATION;
   }

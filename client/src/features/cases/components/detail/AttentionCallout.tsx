@@ -21,7 +21,7 @@ export function buildAttentionItems(
   const items: AttentionItem[] = [];
   const deliveryLocked = isCaseDeliveryLocked(caseData.status);
 
-  if (caseData.status === 'waiting_clarification') {
+  if (caseData.status === 'in_process') {
     items.push({
       id: 'waiting-clarification',
       title: 'Waiting for clarification',

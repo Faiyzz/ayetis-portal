@@ -13,6 +13,8 @@ import { CaseDetailPage } from '@/features/cases/pages/CaseDetailPage';
 import { CasesPage } from '@/features/cases/pages/CasesPage';
 import { CreateCasePage } from '@/features/cases/pages/CreateCasePage';
 import { EditCasePage } from '@/features/cases/pages/EditCasePage';
+import { CancellationReportPage } from '@/features/cancellations/pages/CancellationReportPage';
+import { CommercialAdminPage } from '@/features/commercial/pages/CommercialAdminPage';
 import { ComplaintsPage } from '@/features/complaints/pages/ComplaintsPage';
 import { NotificationCenterPage } from '@/features/notifications/pages/NotificationCenterPage';
 import { CreateUserPage } from '@/features/users/pages/CreateUserPage';
@@ -113,6 +115,25 @@ export function AppRouter() {
 
           <Route element={<RequirePermission permission={PERMISSIONS.AUDIT_VIEW} />}>
             <Route path="activity" element={<ActivityLogPage />} />
+          </Route>
+
+          <Route
+            element={<RequirePermission permission={PERMISSIONS.CANCELLATION_REPORT_VIEW} />}
+          >
+            <Route path="cancellations" element={<CancellationReportPage />} />
+          </Route>
+
+          <Route
+            element={
+              <RequireAnyPermission
+                permissions={[
+                  PERMISSIONS.TREATMENT_PLAN_MANAGE,
+                  PERMISSIONS.DISCOUNT_CODE_MANAGE,
+                ]}
+              />
+            }
+          >
+            <Route path="commercial" element={<CommercialAdminPage />} />
           </Route>
         </Route>
       </Route>

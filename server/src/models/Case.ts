@@ -1,8 +1,10 @@
 import {
   ALL_ARCH_OPTIONS,
   ALL_ASSIGNMENT_MODES,
+  ALL_CASE_CATEGORIES,
   ALL_CASE_PRIORITIES,
   ALL_CASE_STATUSES,
+  ALL_CASE_TYPES,
   ALL_CONSULTANT_INDICATORS,
   ALL_DOCTOR_DECISIONS,
   ALL_FILE_CATEGORIES,
@@ -13,6 +15,12 @@ import {
   ASSIGNMENT_MODES,
   CASE_PRIORITIES,
   CASE_STATUSES,
+  CASE_CATEGORIES,
+  CASE_TYPES,
+  EMPTY_CASE_COMMERCIAL,
+  EMPTY_CLINICAL_PREFERENCES,
+  EMPTY_OCCLUSION_GOALS,
+  EMPTY_RECORDS_NUMBERING,
   EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORIES,
   FILE_RESTORE_STATUSES,
@@ -21,8 +29,14 @@ import {
   QC_REVIEW_OUTCOMES,
   type ArchOption,
   type AssignmentMode,
+  type CaseCategory,
+  type CaseCommercial,
   type CasePriority,
   type CaseStatus,
+  type CaseType,
+  type ClinicalPreferences,
+  type OcclusionGoals,
+  type RecordsNumbering,
   type ConsultantIndicator,
   type DoctorDecision,
   type FileCategory,
@@ -142,6 +156,18 @@ export interface ICase extends Document {
   /** Business Doctor ID (DR-########) for privacy-scoped display */
   doctorDisplayId?: string;
   doctorEmail: string;
+  caseCategory?: CaseCategory;
+  caseType?: CaseType;
+  chiefComplaint?: string;
+  practiceName?: string;
+  patientDateOfBirth?: Date;
+  recordsNumbering?: RecordsNumbering;
+  clinicalPreferences?: ClinicalPreferences;
+  occlusionGoals?: OcclusionGoals;
+  commercial?: CaseCommercial;
+  submittedAt?: Date;
+  slaHours?: number;
+  slaDeadlineAt?: Date;
   patientName: string;
   patientAge?: number;
   patientGender: string;
@@ -382,6 +408,18 @@ const caseSchema = new Schema<ICase>(
     doctorName: { type: String, required: true },
     doctorDisplayId: { type: String, trim: true, index: true },
     doctorEmail: { type: String, required: true, lowercase: true, index: true },
+    caseCategory: { type: String, enum: ALL_CASE_CATEGORIES, index: true },
+    caseType: { type: String, enum: ALL_CASE_TYPES, index: true },
+    chiefComplaint: { type: String, default: '', trim: true },
+    practiceName: { type: String, default: '', trim: true },
+    patientDateOfBirth: { type: Date },
+    recordsNumbering: { type: Schema.Types.Mixed, default: () => ({ ...EMPTY_RECORDS_NUMBERING }) },
+    clinicalPreferences: { type: Schema.Types.Mixed, default: () => ({ ...EMPTY_CLINICAL_PREFERENCES }) },
+    occlusionGoals: { type: Schema.Types.Mixed, default: () => ({ ...EMPTY_OCCLUSION_GOALS }) },
+    commercial: { type: Schema.Types.Mixed, default: () => ({ ...EMPTY_CASE_COMMERCIAL }) },
+    submittedAt: { type: Date, index: true },
+    slaHours: { type: Number },
+    slaDeadlineAt: { type: Date, index: true },
     patientName: { type: String, required: true, trim: true, index: true },
     patientAge: { type: Number, min: 0, max: 120 },
     patientGender: { type: String, default: '', trim: true },
@@ -405,7 +443,7 @@ const caseSchema = new Schema<ICase>(
     status: {
       type: String,
       enum: ALL_CASE_STATUSES,
-      default: CASE_STATUSES.SUBMITTED,
+      default: CASE_STATUSES.NEW_CASE,
       index: true,
     },
     priority: {

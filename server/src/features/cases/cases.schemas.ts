@@ -4,8 +4,10 @@ import {
   ALL_CASE_STATUSES,
   ALL_PAYMENT_STATUSES,
   isArchOption,
+  isCaseCategory,
   isCasePriority,
   isCaseStatus,
+  isCaseType,
   isConsultantIndicator,
   isDoctorDecision,
   isFileCategory,
@@ -15,6 +17,70 @@ import {
   type CaseStatus,
 } from '@ayetis/shared';
 import { z } from 'zod';
+
+const looseStringArray = z.array(z.string().trim().max(40)).optional();
+
+const recordsNumberingSchema = z
+  .object({
+    toothNumberingSystem: z.string().optional(),
+    impressionMethod: z.string().optional(),
+    impressionsTaken: looseStringArray,
+    additionalRecords: z.array(z.string().trim().max(120)).optional(),
+    treatArches: z.string().optional(),
+    velocityPerStage: z.string().optional(),
+    velocityCustomMm: z.string().optional(),
+    caseComplexity: z.string().optional(),
+    wearSchedule: z.string().optional(),
+    trimlineHeight: z.string().optional(),
+    retainerRequired: z.boolean().nullable().optional(),
+    plannedTreatmentDuration: z.string().optional(),
+  })
+  .optional();
+
+const clinicalPreferencesSchema = z
+  .object({
+    doNotMoveTeeth: looseStringArray,
+    avoidEngagersTeeth: looseStringArray,
+    extractionTeeth: looseStringArray,
+    leaveSpacesOpenTeeth: looseStringArray,
+  })
+  .optional();
+
+const occlusionGoalsSchema = z
+  .object({
+    upperMidlineMm: z.number().nullable().optional(),
+    upperMidlineObjective: z.string().optional(),
+    lowerMidlineMm: z.number().nullable().optional(),
+    lowerMidlineObjective: z.string().optional(),
+    overjetMm: z.number().nullable().optional(),
+    overjetObjective: z.string().optional(),
+    overbitePercent: z.number().nullable().optional(),
+    overbiteObjective: z.string().optional(),
+    canineRelationship: z.string().optional(),
+    molarRelationship: z.string().optional(),
+    anteriorCrossbite: z.string().optional(),
+    posteriorCrossbite: z.string().optional(),
+    deciduousTeeth: z.string().optional(),
+    iprAllowed: z.boolean().nullable().optional(),
+    engagersAllowed: z.boolean().nullable().optional(),
+    spaceManagement: z.string().optional(),
+    clinicalInstructions: z.string().optional(),
+  })
+  .optional();
+
+const commercialSchema = z
+  .object({
+    treatmentApproach: z.string().optional(),
+    treatmentSubCategory: z.string().optional(),
+    treatmentPlanId: z.string().nullable().optional(),
+    treatmentPlanName: z.string().optional(),
+    currency: z.string().optional(),
+    unitPrice: z.number().nullable().optional(),
+    discountCode: z.string().optional(),
+    discountAmount: z.number().nullable().optional(),
+    finalPayableAmount: z.number().nullable().optional(),
+  })
+  .optional();
 
 const prioritySchema = z
   .string()
@@ -69,11 +135,26 @@ export const createCaseSchema = z.object({
   patientName: z.string().trim().min(1, 'Patient name is required').max(120),
   patientAge: z.number().int().min(0).max(120).nullable().optional(),
   patientGender: z.string().trim().max(40).optional(),
+  patientDateOfBirth: z.string().trim().max(40).nullable().optional(),
   clinicName: z.string().trim().max(120).optional(),
+  practiceName: z.string().trim().max(160).optional(),
   country: z.string().trim().max(80).optional(),
+  chiefComplaint: z.string().trim().max(2000).optional(),
+  caseCategory: z
+    .string()
+    .optional()
+    .refine((value) => !value || isCaseCategory(value), { message: 'Invalid case category' }),
+  caseType: z
+    .string()
+    .optional()
+    .refine((value) => !value || isCaseType(value), { message: 'Invalid case type' }),
   treatmentSummary: z.string().trim().min(1, 'Treatment summary is required').max(2000),
   instructions: z.string().trim().max(5000).optional(),
   treatmentInstructions: treatmentInstructionsSchema,
+  recordsNumbering: recordsNumberingSchema,
+  clinicalPreferences: clinicalPreferencesSchema,
+  occlusionGoals: occlusionGoalsSchema,
+  commercial: commercialSchema,
   priority: z
     .string()
     .optional()
@@ -81,6 +162,7 @@ export const createCaseSchema = z.object({
       message: 'Invalid priority',
     }),
   initialNote: z.string().trim().max(2000).optional(),
+  asDraft: z.boolean().optional(),
   doctorId: z.string().trim().min(1).optional(),
 });
 
@@ -89,11 +171,26 @@ export const updateCaseSchema = z
     patientName: z.string().trim().min(1).max(120).optional(),
     patientAge: z.number().int().min(0).max(120).nullable().optional(),
     patientGender: z.string().trim().max(40).optional(),
+    patientDateOfBirth: z.string().trim().max(40).nullable().optional(),
     clinicName: z.string().trim().max(120).optional(),
+    practiceName: z.string().trim().max(160).optional(),
     country: z.string().trim().max(80).optional(),
+    chiefComplaint: z.string().trim().max(2000).optional(),
+    caseCategory: z
+      .string()
+      .optional()
+      .refine((value) => !value || isCaseCategory(value), { message: 'Invalid case category' }),
+    caseType: z
+      .string()
+      .optional()
+      .refine((value) => !value || isCaseType(value), { message: 'Invalid case type' }),
     treatmentSummary: z.string().trim().min(1).max(2000).optional(),
     instructions: z.string().trim().max(5000).optional(),
     treatmentInstructions: treatmentInstructionsSchema,
+    recordsNumbering: recordsNumberingSchema,
+    clinicalPreferences: clinicalPreferencesSchema,
+    occlusionGoals: occlusionGoalsSchema,
+    commercial: commercialSchema,
     priority: z
       .string()
       .optional()
@@ -102,6 +199,7 @@ export const updateCaseSchema = z
       .string()
       .optional()
       .refine((value) => !value || isCaseStatus(value), { message: 'Invalid status' }),
+    submitDraft: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',
@@ -142,6 +240,7 @@ export const updatePaymentSchema = z
 
 export const reasonSchema = z.object({
   reason: z.string().trim().min(3, 'Reason is required').max(500),
+  remarks: z.string().trim().max(2000).optional(),
 });
 
 export const addNoteSchema = z.object({

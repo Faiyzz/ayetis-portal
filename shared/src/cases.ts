@@ -19,17 +19,12 @@ import type {
 } from './treatment';
 
 export const CASE_STATUSES = {
-  SUBMITTED: 'submitted',
-  UNDER_VALIDATION: 'under_validation',
-  WAITING_CLARIFICATION: 'waiting_clarification',
-  SENT_FOR_MODIFICATION: 'sent_for_modification',
-  DESIGNER_WORKING: 'designer_working',
-  QC_REVIEW: 'qc_review',
-  ORTHODONTIST_REVIEW: 'orthodontist_review',
+  NEW_CASE: 'new_case',
+  IN_PROCESS: 'in_process',
+  WAITING_FOR_APPROVAL: 'waiting_for_approval',
   APPROVED: 'approved',
-  DELIVERED: 'delivered',
-  COMPLETED: 'completed',
   CANCELLED: 'cancelled',
+  SAVED_FOR_SUBMISSION: 'saved_for_submission',
 } as const;
 
 export type CaseStatus = (typeof CASE_STATUSES)[keyof typeof CASE_STATUSES];
@@ -37,42 +32,29 @@ export type CaseStatus = (typeof CASE_STATUSES)[keyof typeof CASE_STATUSES];
 export const ALL_CASE_STATUSES: CaseStatus[] = Object.values(CASE_STATUSES);
 
 export const CASE_STATUS_LABELS: Record<CaseStatus, string> = {
-  [CASE_STATUSES.SUBMITTED]: 'Submitted',
-  [CASE_STATUSES.UNDER_VALIDATION]: 'Under Validation',
-  [CASE_STATUSES.WAITING_CLARIFICATION]: 'Waiting for Clarification',
-  [CASE_STATUSES.SENT_FOR_MODIFICATION]: 'Sent for Modification',
-  [CASE_STATUSES.DESIGNER_WORKING]: 'Designer Working',
-  [CASE_STATUSES.QC_REVIEW]: 'QC Review',
-  [CASE_STATUSES.ORTHODONTIST_REVIEW]: 'Orthodontist Review',
+  [CASE_STATUSES.NEW_CASE]: 'New Case',
+  [CASE_STATUSES.IN_PROCESS]: 'In Process',
+  [CASE_STATUSES.WAITING_FOR_APPROVAL]: 'Waiting for Approval',
   [CASE_STATUSES.APPROVED]: 'Approved',
-  [CASE_STATUSES.DELIVERED]: 'Delivered',
-  [CASE_STATUSES.COMPLETED]: 'Completed',
   [CASE_STATUSES.CANCELLED]: 'Cancelled',
+  [CASE_STATUSES.SAVED_FOR_SUBMISSION]: 'Saved for Submission',
 };
 
-/** Primary happy-path stages shown on the visual timeline. */
+/** Primary happy-path stages shown on the visual timeline (URD doctor lifecycle). */
 export const CASE_TIMELINE_STATUSES: CaseStatus[] = [
-  CASE_STATUSES.SUBMITTED,
-  CASE_STATUSES.UNDER_VALIDATION,
-  CASE_STATUSES.DESIGNER_WORKING,
-  CASE_STATUSES.QC_REVIEW,
+  CASE_STATUSES.NEW_CASE,
+  CASE_STATUSES.IN_PROCESS,
+  CASE_STATUSES.WAITING_FOR_APPROVAL,
   CASE_STATUSES.APPROVED,
-  CASE_STATUSES.DELIVERED,
-  CASE_STATUSES.COMPLETED,
 ];
 
-/** Maps non-linear statuses onto the nearest timeline stage for visualization. */
+/** Maps statuses onto the nearest timeline stage for visualization. */
 export const CASE_STATUS_TIMELINE_ANCHOR: Record<CaseStatus, CaseStatus> = {
-  [CASE_STATUSES.SUBMITTED]: CASE_STATUSES.SUBMITTED,
-  [CASE_STATUSES.UNDER_VALIDATION]: CASE_STATUSES.UNDER_VALIDATION,
-  [CASE_STATUSES.WAITING_CLARIFICATION]: CASE_STATUSES.UNDER_VALIDATION,
-  [CASE_STATUSES.SENT_FOR_MODIFICATION]: CASE_STATUSES.DESIGNER_WORKING,
-  [CASE_STATUSES.DESIGNER_WORKING]: CASE_STATUSES.DESIGNER_WORKING,
-  [CASE_STATUSES.QC_REVIEW]: CASE_STATUSES.QC_REVIEW,
-  [CASE_STATUSES.ORTHODONTIST_REVIEW]: CASE_STATUSES.QC_REVIEW,
+  [CASE_STATUSES.SAVED_FOR_SUBMISSION]: CASE_STATUSES.NEW_CASE,
+  [CASE_STATUSES.NEW_CASE]: CASE_STATUSES.NEW_CASE,
+  [CASE_STATUSES.IN_PROCESS]: CASE_STATUSES.IN_PROCESS,
+  [CASE_STATUSES.WAITING_FOR_APPROVAL]: CASE_STATUSES.WAITING_FOR_APPROVAL,
   [CASE_STATUSES.APPROVED]: CASE_STATUSES.APPROVED,
-  [CASE_STATUSES.DELIVERED]: CASE_STATUSES.DELIVERED,
-  [CASE_STATUSES.COMPLETED]: CASE_STATUSES.COMPLETED,
   [CASE_STATUSES.CANCELLED]: CASE_STATUSES.CANCELLED,
 };
 
@@ -90,6 +72,14 @@ export function buildCaseTimeline(currentStatus: CaseStatus): TimelineStep[] {
       status,
       label: CASE_STATUS_LABELS[status],
       state: index === 0 ? 'complete' : 'cancelled',
+    }));
+  }
+
+  if (currentStatus === CASE_STATUSES.SAVED_FOR_SUBMISSION) {
+    return CASE_TIMELINE_STATUSES.map((status, index) => ({
+      status,
+      label: CASE_STATUS_LABELS[status],
+      state: index === 0 ? 'current' : 'upcoming',
     }));
   }
 
@@ -251,8 +241,17 @@ export interface CaseListItemDto {
   doctorEmail: string;
   status: CaseStatus;
   priority: CasePriority;
+  caseCategory: import('./caseTaxonomy').CaseCategory | null;
+  caseType: import('./caseTaxonomy').CaseType | null;
+  chiefComplaint: string;
   treatmentSummary: string;
   paymentStatus: PaymentStatus;
+  submittedAt: string | null;
+  slaHours: number | null;
+  slaDeadlineAt: string | null;
+  slaUtilizationPercent: number | null;
+  slaProgressColor: import('./caseTaxonomy').SlaProgressColor | null;
+  cancelWindowRemainingSeconds: number | null;
   openClarificationCount: number;
   assignedDesignerId: string | null;
   assignedDesignerName: string | null;
@@ -268,10 +267,16 @@ export interface CaseListItemDto {
 
 export interface CaseDetailDto extends CaseListItemDto {
   clinicName: string;
+  practiceName: string;
   patientGender: string;
+  patientDateOfBirth: string | null;
   instructions: string;
   country: string;
   treatmentInstructions: TreatmentInstructions;
+  recordsNumbering: import('./treatment').RecordsNumbering | null;
+  clinicalPreferences: import('./treatment').ClinicalPreferences | null;
+  occlusionGoals: import('./treatment').OcclusionGoals | null;
+  commercial: import('./treatment').CaseCommercial | null;
   payment: CasePaymentOverview;
   cancelReason: string | null;
   deletedAt: string | null;
@@ -318,13 +323,24 @@ export interface CreateCaseInput {
   patientName: string;
   patientAge?: number | null;
   patientGender?: string;
+  patientDateOfBirth?: string | null;
   clinicName?: string;
+  practiceName?: string;
   country?: string;
+  chiefComplaint?: string;
+  caseCategory?: import('./caseTaxonomy').CaseCategory;
+  caseType?: import('./caseTaxonomy').CaseType;
   treatmentSummary: string;
   instructions?: string;
   treatmentInstructions?: Partial<TreatmentInstructions>;
+  recordsNumbering?: Partial<import('./treatment').RecordsNumbering>;
+  clinicalPreferences?: Partial<import('./treatment').ClinicalPreferences>;
+  occlusionGoals?: Partial<import('./treatment').OcclusionGoals>;
+  commercial?: Partial<import('./treatment').CaseCommercial>;
   priority?: CasePriority;
   initialNote?: string;
+  /** Save as draft without starting the 15-minute clock / SLA. */
+  asDraft?: boolean;
   /** Treating doctor. Required when the creator is not a doctor. */
   doctorId?: string;
 }
@@ -333,17 +349,29 @@ export interface UpdateCaseInput {
   patientName?: string;
   patientAge?: number | null;
   patientGender?: string;
+  patientDateOfBirth?: string | null;
   clinicName?: string;
+  practiceName?: string;
   country?: string;
+  chiefComplaint?: string;
+  caseCategory?: import('./caseTaxonomy').CaseCategory;
+  caseType?: import('./caseTaxonomy').CaseType;
   treatmentSummary?: string;
   instructions?: string;
   treatmentInstructions?: Partial<TreatmentInstructions>;
+  recordsNumbering?: Partial<import('./treatment').RecordsNumbering>;
+  clinicalPreferences?: Partial<import('./treatment').ClinicalPreferences>;
+  occlusionGoals?: Partial<import('./treatment').OcclusionGoals>;
+  commercial?: Partial<import('./treatment').CaseCommercial>;
   priority?: CasePriority;
   status?: CaseStatus;
+  /** Promote a draft to New Case (starts SLA + cancel window). */
+  submitDraft?: boolean;
 }
 
 export interface CancelCaseInput {
   reason: string;
+  remarks?: string;
 }
 
 export interface SoftDeleteCaseInput {
@@ -367,14 +395,13 @@ export function isCasePriority(value: string): value is CasePriority {
 }
 
 /**
- * After delivery (or cancel/complete), production-side editing is closed.
- * Doctor decision on `delivered` remains allowed separately in the delivery UI.
- * Modification requests move the case back to `sent_for_modification` and unlock again.
+ * After delivery to doctor (waiting_for_approval) or terminal approved/cancelled,
+ * production-side editing is closed. Doctor decision remains allowed on waiting_for_approval.
+ * Modification requests move the case back to in_process and unlock again.
  */
 export const CASE_DELIVERY_LOCKED_STATUSES: CaseStatus[] = [
-  CASE_STATUSES.DELIVERED,
+  CASE_STATUSES.WAITING_FOR_APPROVAL,
   CASE_STATUSES.APPROVED,
-  CASE_STATUSES.COMPLETED,
   CASE_STATUSES.CANCELLED,
 ];
 

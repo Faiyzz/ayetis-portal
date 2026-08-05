@@ -36,6 +36,8 @@ export interface IUser extends Document {
   passwordHistory: string[];
   passwordChangedAt?: Date;
   mustChangePassword: boolean;
+  /** SLA business hours for this doctor's cases (default 48). */
+  slaBusinessHours: number;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
@@ -144,6 +146,11 @@ const userSchema = new Schema<IUser>(
     mustChangePassword: {
       type: Boolean,
       default: false,
+    },
+    slaBusinessHours: {
+      type: Number,
+      default: 48,
+      min: 1,
     },
   },
   {

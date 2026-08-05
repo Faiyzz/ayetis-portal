@@ -49,7 +49,7 @@ export function CaseValidationAssignPanel({
   if (!canValidate && !canAssign) return null;
 
   const validation = caseData.validation;
-  const isWaiting = caseData.status === 'waiting_clarification';
+  const isWaiting = caseData.status === 'in_process';
 
   async function handleStart() {
     setBusy('start');
@@ -144,7 +144,7 @@ export function CaseValidationAssignPanel({
           ) : null}
 
           <div className="flex flex-wrap gap-2">
-            {caseData.status === 'submitted' ? (
+            {caseData.status === 'new_case' ? (
               <button
                 type="button"
                 disabled={busy !== null}

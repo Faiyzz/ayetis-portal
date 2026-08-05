@@ -173,7 +173,7 @@ export async function createClarification(
   });
 
   const previousStatus = caseDoc.status;
-  caseDoc.status = CASE_STATUSES.WAITING_CLARIFICATION;
+  caseDoc.status = CASE_STATUSES.IN_PROCESS;
   caseDoc.history.unshift({
     _id: new Types.ObjectId(),
     action: 'clarification_created',
@@ -289,8 +289,8 @@ export async function replyToClarification(
     clarification.status = CLARIFICATION_STATUSES.AWAITING_TEAM;
   } else {
     clarification.status = CLARIFICATION_STATUSES.AWAITING_DOCTOR;
-    if (caseDoc.status !== CASE_STATUSES.WAITING_CLARIFICATION) {
-      caseDoc.status = CASE_STATUSES.WAITING_CLARIFICATION;
+    if (caseDoc.status !== CASE_STATUSES.IN_PROCESS) {
+      caseDoc.status = CASE_STATUSES.IN_PROCESS;
     }
   }
 
@@ -413,8 +413,8 @@ export async function resolveClarification(
     },
   });
 
-  if (openCount === 0 && caseDoc.status === CASE_STATUSES.WAITING_CLARIFICATION) {
-    caseDoc.status = CASE_STATUSES.UNDER_VALIDATION;
+  if (openCount === 0 && caseDoc.status === CASE_STATUSES.IN_PROCESS) {
+    caseDoc.status = CASE_STATUSES.IN_PROCESS;
   }
 
   caseDoc.history.unshift({

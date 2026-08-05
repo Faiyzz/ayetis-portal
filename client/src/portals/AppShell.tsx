@@ -247,6 +247,22 @@ function buildNavItems(
       isActive: (pathname) => pathname.startsWith('/app/activity'),
     },
     {
+      id: 'cancellations',
+      label: 'Cancellations',
+      to: '/app/cancellations',
+      icon: <IconList />,
+      permission: PERMISSIONS.CANCELLATION_REPORT_VIEW,
+      isActive: (pathname) => pathname.startsWith('/app/cancellations'),
+    },
+    {
+      id: 'commercial',
+      label: 'Commercial',
+      to: '/app/commercial',
+      icon: <IconBriefcase />,
+      anyOf: [PERMISSIONS.TREATMENT_PLAN_MANAGE, PERMISSIONS.DISCOUNT_CODE_MANAGE],
+      isActive: (pathname) => pathname.startsWith('/app/commercial'),
+    },
+    {
       id: 'password',
       label: 'Password',
       to: '/app/change-password',

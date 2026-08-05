@@ -100,7 +100,7 @@ export async function getPipelineReport(
 
   const openCases = await Case.find({
     isDeleted: false,
-    status: { $nin: [CASE_STATUSES.COMPLETED, CASE_STATUSES.CANCELLED] },
+    status: { $nin: [CASE_STATUSES.APPROVED, CASE_STATUSES.CANCELLED] },
   }).select('status assignmentMode assignedDesignerId');
 
   const byStatusMap = new Map<string, number>();
@@ -119,27 +119,35 @@ export async function getPipelineReport(
   let delivered = 0;
 
   for (const c of openCases) {
-    if (
-      c.status === CASE_STATUSES.SUBMITTED ||
-      c.status === CASE_STATUSES.UNDER_VALIDATION
-    ) {
-      if (!c.assignedDesignerId && c.assignmentMode !== ASSIGNMENT_MODES.AUTO_QUEUE) unassigned += 1;
-      else assigned += 1;
-    } else if (c.status === CASE_STATUSES.DESIGNER_WORKING) {
+    if (c.status === CASE_STATUSES.WAITING_FOR_APPROVAL || c.status === CASE_STATUSES.APPROVED) {
+      delivered += 1;
+      continue;
+    }
+    if (c.status !== CASE_STATUSES.IN_PROCESS && c.status !== CASE_STATUSES.NEW_CASE) {
+      continue;
+    }
+    if (c.status === CASE_STATUSES.IN_PROCESS && c.submittedToQcAt) {
+      if ((c.qcRejectionCount ?? 0) > 0 && !c.submittedToQcAt) {
+        qcRejected += 1;
+      } else {
+        qcPending += 1;
+        qcRunning += 1;
+      }
+      if (c.assignedDesignerId || c.assignmentMode === ASSIGNMENT_MODES.AUTO_QUEUE) assigned += 1;
+      else unassigned += 1;
+      continue;
+    }
+    if (c.status === CASE_STATUSES.IN_PROCESS && c.productionStartedAt) {
       inProduction += 1;
       assigned += 1;
-    } else if (c.status === CASE_STATUSES.QC_REVIEW) {
-      qcPending += 1;
-      qcRunning += 1;
-    } else if (c.status === CASE_STATUSES.SENT_FOR_MODIFICATION) {
-      qcRejected += 1;
-    } else if (c.status === CASE_STATUSES.DELIVERED || c.status === CASE_STATUSES.APPROVED) {
-      delivered += 1;
+      continue;
     }
+    if (!c.assignedDesignerId && c.assignmentMode !== ASSIGNMENT_MODES.AUTO_QUEUE) unassigned += 1;
+    else assigned += 1;
   }
 
   for (const c of cases) {
-    if (c.status === CASE_STATUSES.COMPLETED) completed += 1;
+    if (c.status === CASE_STATUSES.APPROVED) completed += 1;
     if (c.status === CASE_STATUSES.CANCELLED) cancelled += 1;
   }
 
@@ -191,9 +199,8 @@ export async function getDesignerDeptReport(
     const mine = cases.filter((c) => String(c.assignedDesignerId) === designer.id);
     const completed = mine.filter(
       (c) =>
-        c.status === CASE_STATUSES.COMPLETED ||
         c.status === CASE_STATUSES.APPROVED ||
-        c.status === CASE_STATUSES.DELIVERED,
+        c.status === CASE_STATUSES.WAITING_FOR_APPROVAL,
     );
     const hours = completed
       .map((c) => {

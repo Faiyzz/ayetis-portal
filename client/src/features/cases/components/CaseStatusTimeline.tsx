@@ -30,15 +30,15 @@ const stateStyles: Record<
   },
 };
 
-const TERMINAL_CURRENT = new Set(['completed', 'cancelled', 'delivered', 'approved']);
+const TERMINAL_CURRENT = new Set(['approved', 'cancelled', 'waiting_for_approval', 'approved']);
 
 function captionFor(step: TimelineStep, isCancelled?: boolean): string | null {
   if (isCancelled && step.state === 'cancelled') return 'Cancelled';
   if (step.state === 'current') {
-    if (TERMINAL_CURRENT.has(step.status) || step.status === 'completed') {
+    if (TERMINAL_CURRENT.has(step.status) || step.status === 'approved') {
       return step.status === 'cancelled' ? 'Cancelled' : 'Done';
     }
-    if (step.status === 'waiting_clarification') return 'Waiting';
+    if (step.status === 'in_process') return 'Waiting';
     return 'Current';
   }
   return stateStyles[step.state].caption;

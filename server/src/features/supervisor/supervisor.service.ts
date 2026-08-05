@@ -83,54 +83,40 @@ function classifyDesigner(
   hasAssignee: boolean,
   productionStarted: boolean,
 ): keyof SupervisorQueueCounts | null {
-  if (status === CASE_STATUSES.SENT_FOR_MODIFICATION) return 'returned';
-  if (
-    status === CASE_STATUSES.COMPLETED ||
-    status === CASE_STATUSES.DELIVERED ||
-    status === CASE_STATUSES.APPROVED
-  ) {
+  if (status === CASE_STATUSES.CANCELLED) return null;
+  if (status === CASE_STATUSES.WAITING_FOR_APPROVAL || status === CASE_STATUSES.APPROVED) {
     return hasAssignee ? 'completed' : null;
   }
-  if (status === CASE_STATUSES.DESIGNER_WORKING) {
-    return productionStarted ? 'active' : 'pending';
+  if (status === CASE_STATUSES.IN_PROCESS) {
+    if (productionStarted) return 'active';
+    return hasAssignee ? 'pending' : 'pending';
   }
-  if (
-    status === CASE_STATUSES.UNDER_VALIDATION ||
-    status === CASE_STATUSES.QC_REVIEW
-  ) {
-    return hasAssignee ? (status === CASE_STATUSES.QC_REVIEW ? 'active' : 'pending') : null;
-  }
-  if (!hasAssignee && status === CASE_STATUSES.DESIGNER_WORKING) return 'pending';
+  if (status === CASE_STATUSES.NEW_CASE) return 'pending';
   return null;
 }
 
 function classifyQc(status: string, hasRejection: boolean): keyof SupervisorQueueCounts | null {
-  if (status === CASE_STATUSES.QC_REVIEW) return 'pending';
-  if (status === CASE_STATUSES.ORTHODONTIST_REVIEW) return 'active';
-  if (status === CASE_STATUSES.SENT_FOR_MODIFICATION && hasRejection) return 'returned';
-  if (
-    status === CASE_STATUSES.DELIVERED ||
-    status === CASE_STATUSES.APPROVED ||
-    status === CASE_STATUSES.COMPLETED
-  ) {
+  if (status === CASE_STATUSES.IN_PROCESS) {
+    return hasRejection ? 'returned' : 'active';
+  }
+  if (status === CASE_STATUSES.WAITING_FOR_APPROVAL || status === CASE_STATUSES.APPROVED) {
     return 'completed';
   }
   return null;
 }
 
 function classifyConsultant(status: string, escalated: boolean, hasRemarks: boolean): keyof SupervisorQueueCounts | null {
-  if (escalated && !hasRemarks && status !== CASE_STATUSES.COMPLETED) return 'pending';
-  if (status === CASE_STATUSES.ORTHODONTIST_REVIEW) return 'active';
-  if (status === CASE_STATUSES.QC_REVIEW && escalated) return 'pending';
-  if (status === CASE_STATUSES.SENT_FOR_MODIFICATION && escalated) return 'returned';
+  if (status === CASE_STATUSES.CANCELLED) return null;
+  if (escalated && !hasRemarks && status !== CASE_STATUSES.APPROVED && status !== CASE_STATUSES.WAITING_FOR_APPROVAL) {
+    return 'pending';
+  }
   if (
-    (status === CASE_STATUSES.COMPLETED ||
-      status === CASE_STATUSES.DELIVERED ||
-      status === CASE_STATUSES.APPROVED) &&
+    (status === CASE_STATUSES.APPROVED || status === CASE_STATUSES.WAITING_FOR_APPROVAL) &&
     (escalated || hasRemarks)
   ) {
     return 'completed';
   }
+  if (status === CASE_STATUSES.IN_PROCESS && escalated) return 'active';
   if (hasRemarks && status !== CASE_STATUSES.CANCELLED) return 'active';
   return null;
 }
@@ -168,14 +154,14 @@ export async function getSupervisorDashboard(
 
     if (
       caseDoc.escalatedForOversight &&
-      caseDoc.status !== CASE_STATUSES.COMPLETED &&
+      caseDoc.status !== CASE_STATUSES.APPROVED &&
       caseDoc.status !== CASE_STATUSES.CANCELLED
     ) {
       escalatedCases.push(item);
     }
 
     const open =
-      caseDoc.status !== CASE_STATUSES.COMPLETED &&
+      caseDoc.status !== CASE_STATUSES.APPROVED &&
       caseDoc.status !== CASE_STATUSES.CANCELLED;
     if (open) {
       totalOpen += 1;
@@ -304,8 +290,8 @@ export async function getSupervisorPerformance(
       row.totalCases += 1;
       totalCases += 1;
       if (
-        caseDoc.status === CASE_STATUSES.COMPLETED ||
-        caseDoc.status === CASE_STATUSES.DELIVERED
+        caseDoc.status === CASE_STATUSES.APPROVED ||
+        caseDoc.status === CASE_STATUSES.WAITING_FOR_APPROVAL
       ) {
         row.completedCases += 1;
       }
