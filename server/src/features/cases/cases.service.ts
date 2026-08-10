@@ -143,6 +143,10 @@ export interface CaseActor {
   lastName: string;
   role: string;
   permissions: Permission[];
+  organizationId?: string | null;
+  facilityId?: string | null;
+  corporateCustomerId?: string | null;
+  assignedCountry?: string | null;
 }
 
 function actorName(actor: CaseActor) {
@@ -323,6 +327,9 @@ async function toListItem(
     doctorName,
     doctorDisplayId,
     doctorEmail: caseDoc.doctorEmail,
+    organizationId: caseDoc.organizationId ? String(caseDoc.organizationId) : null,
+    facilityId: caseDoc.facilityId ? String(caseDoc.facilityId) : null,
+    corporateCustomerId: caseDoc.corporateCustomerId ?? null,
     status: caseDoc.status,
     priority: caseDoc.priority,
     caseCategory: caseDoc.caseCategory ?? null,
@@ -552,6 +559,24 @@ function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
   if (permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ALL)) return;
 
   if (
+    permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ORG) &&
+    actor.organizationId &&
+    caseDoc.organizationId &&
+    String(caseDoc.organizationId) === actor.organizationId
+  ) {
+    return;
+  }
+
+  if (
+    permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_FACILITY) &&
+    actor.facilityId &&
+    caseDoc.facilityId &&
+    String(caseDoc.facilityId) === actor.facilityId
+  ) {
+    return;
+  }
+
+  if (
     permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_OWN) &&
     String(caseDoc.doctorId) === actor.id
   ) {
@@ -617,6 +642,30 @@ function buildVisibilityFilter(actor: CaseActor): Record<string, unknown> {
 
   const clauses: Record<string, unknown>[] = [];
 
+  if (
+    permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ORG) &&
+    actor.organizationId
+  ) {
+    clauses.push({ organizationId: new Types.ObjectId(actor.organizationId) });
+  }
+
+  if (permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_FACILITY)) {
+    if (actor.facilityId) {
+      clauses.push({ facilityId: new Types.ObjectId(actor.facilityId) });
+    } else if (
+      actor.organizationId &&
+      actor.assignedCountry &&
+      !permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ORG)
+    ) {
+      // Country-scoped without a fixed facility: filter by matching facility ids at query time
+      // via a marker that listCases will expand — see enrichCountryFacilityFilter.
+      clauses.push({
+        organizationId: new Types.ObjectId(actor.organizationId),
+        __countryScope: actor.assignedCountry,
+      });
+    }
+  }
+
   if (permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_OWN)) {
     clauses.push({ doctorId: new Types.ObjectId(actor.id) });
   }
@@ -671,6 +720,45 @@ function buildVisibilityFilter(actor: CaseActor): Record<string, unknown> {
   }
 
   return clauses.length === 1 ? clauses[0]! : { $or: clauses };
+}
+
+async function resolveVisibilityFilter(actor: CaseActor): Promise<Record<string, unknown>> {
+  const raw = buildVisibilityFilter(actor);
+  return expandCountryScopeFilter(raw);
+}
+
+async function expandCountryScopeFilter(
+  filter: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (filter.$or && Array.isArray(filter.$or)) {
+    const next = [];
+    for (const clause of filter.$or as Record<string, unknown>[]) {
+      next.push(await expandCountryScopeFilter(clause));
+    }
+    return { $or: next };
+  }
+
+  if (typeof filter.__countryScope === 'string') {
+    const country = filter.__countryScope;
+    const organizationId = filter.organizationId;
+    const { Facility } = await import('../../models/Facility');
+    const facilities = await Facility.find({
+      organizationId,
+      country: new RegExp(`^${escapeRegex(country)}$`, 'i'),
+      status: 'active',
+    }).select('_id');
+    const ids = facilities.map((f) => f._id);
+    return {
+      organizationId,
+      facilityId: { $in: ids },
+    };
+  }
+
+  return filter;
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function normalizeFieldValue(key: string, value: unknown): unknown {
@@ -747,7 +835,7 @@ export async function listCases(
 ): Promise<CaseListResult> {
   const page = Math.max(1, query.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 20));
-  const visibility = buildVisibilityFilter(actor);
+  const visibility = await resolveVisibilityFilter(actor);
   const conditions: Record<string, unknown>[] = [visibility];
 
   if (!query.includeDeleted || !permissionsInclude(actor.permissions, PERMISSIONS.CASE_DELETE)) {
@@ -846,6 +934,25 @@ export async function createCase(
     throw new AppError('Select the treating doctor for this case', 400);
   }
 
+  if (
+    actor.organizationId &&
+    doctor.organizationId &&
+    String(doctor.organizationId) !== actor.organizationId &&
+    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ALL)
+  ) {
+    throw new AppError('Doctor is outside your organization', 403);
+  }
+
+  if (
+    actor.facilityId &&
+    doctor.facilityId &&
+    String(doctor.facilityId) !== actor.facilityId &&
+    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ORG) &&
+    !permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ALL)
+  ) {
+    throw new AppError('Doctor is outside your facility', 403);
+  }
+
   let priority = input.priority ?? CASE_PRIORITIES.NORMAL;
   if (
     priority === CASE_PRIORITIES.URGENT &&
@@ -861,12 +968,41 @@ export async function createCase(
   const submittedAt = asDraft ? undefined : now;
 
   const caseId = await generateCaseId();
+
+  let facilityObjectId = doctor.facilityId || undefined;
+  if (input.facilityId) {
+    const { Facility } = await import('../../models/Facility');
+    const facility = await Facility.findById(input.facilityId);
+    if (!facility) throw new AppError('Facility not found', 404);
+    const doctorOrg = doctor.organizationId ? String(doctor.organizationId) : null;
+    if (doctorOrg && String(facility.organizationId) !== doctorOrg) {
+      throw new AppError('Facility does not belong to the doctor organization', 400);
+    }
+    if (
+      actor.organizationId &&
+      String(facility.organizationId) !== actor.organizationId &&
+      !permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ALL)
+    ) {
+      throw new AppError('Facility is outside your organization', 403);
+    }
+    facilityObjectId = facility._id;
+  } else if (!facilityObjectId && actor.facilityId) {
+    facilityObjectId = new Types.ObjectId(actor.facilityId);
+  }
+
+  if (doctor.organizationId && !facilityObjectId) {
+    throw new AppError('Select a facility for this corporate case', 400);
+  }
+
   const caseDoc = new Case({
     caseId,
     doctorId: doctor._id,
     doctorName: `${doctor.firstName} ${doctor.lastName}`.trim(),
     doctorDisplayId: doctor.doctorId,
     doctorEmail: doctor.email,
+    organizationId: doctor.organizationId || undefined,
+    facilityId: facilityObjectId,
+    corporateCustomerId: doctor.corporateCustomerId || actor.corporateCustomerId || undefined,
     caseCategory: input.caseCategory ?? CASE_CATEGORIES.DIGITAL_ALIGNER,
     caseType: input.caseType ?? CASE_TYPES.NEW,
     chiefComplaint: input.chiefComplaint?.trim() || input.treatmentSummary.trim(),
@@ -3245,6 +3381,10 @@ export async function resolveCaseActor(userId: string): Promise<CaseActor> {
     lastName: user.lastName,
     role: user.role,
     permissions,
+    organizationId: user.organizationId ? String(user.organizationId) : null,
+    facilityId: user.facilityId ? String(user.facilityId) : null,
+    corporateCustomerId: user.corporateCustomerId ?? null,
+    assignedCountry: user.assignedCountry ?? null,
   };
 }
 

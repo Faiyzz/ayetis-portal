@@ -121,6 +121,22 @@ export function toPublicUser(
     doctorId: user.doctorId ?? null,
     clinicName: user.clinicName ?? null,
     companyName: user.companyName ?? null,
+    companyAddress: user.companyAddress
+      ? {
+          street: user.companyAddress.street ?? '',
+          city: user.companyAddress.city ?? '',
+          state: user.companyAddress.state ?? '',
+          country: user.companyAddress.country ?? '',
+          postalCode: user.companyAddress.postalCode ?? '',
+        }
+      : null,
+    organizationId: user.organizationId ? String(user.organizationId) : null,
+    corporateCustomerId: user.corporateCustomerId ?? null,
+    facilityId: user.facilityId ? String(user.facilityId) : null,
+    employeeId: user.employeeId ?? null,
+    subAccountId: user.subAccountId ?? null,
+    assignedCountry: user.assignedCountry ?? null,
+    pendingEmailVerification: Boolean(user.pendingEmailVerification),
     slaBusinessHours: user.slaBusinessHours ?? null,
     isActive: accountStatus === ACCOUNT_STATUSES.ACTIVE,
     departmentId: user.departmentId ? String(user.departmentId) : null,

@@ -8,6 +8,13 @@ import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 import { RegistrationsPage } from '@/features/auth/pages/RegistrationsPage';
 import { VerifyEmailPage } from '@/features/auth/pages/VerifyEmailPage';
+import { CorporateDashboardPage } from '@/features/corporate/pages/CorporateDashboardPage';
+import { CorporateEmployeesPage } from '@/features/corporate/pages/CorporateEmployeesPage';
+import { CorporateFacilitiesPage } from '@/features/corporate/pages/CorporateFacilitiesPage';
+import { CorporateProfilePage } from '@/features/corporate/pages/CorporateProfilePage';
+import { CorporateSubAccountsPage } from '@/features/corporate/pages/CorporateSubAccountsPage';
+import { FacilityDashboardPage } from '@/features/corporate/pages/FacilityDashboardPage';
+import { VerifySubAccountPage } from '@/features/corporate/pages/VerifySubAccountPage';
 import { ActivityLogPage } from '@/features/audit/pages/ActivityLogPage';
 import { CaseDetailPage } from '@/features/cases/pages/CaseDetailPage';
 import { CasesPage } from '@/features/cases/pages/CasesPage';
@@ -40,6 +47,7 @@ export function AppRouter() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/verify-subaccount" element={<VerifySubAccountPage />} />
           <Route path="/confirm-password-reset" element={<ConfirmPasswordResetPage />} />
         </Route>
       </Route>
@@ -67,6 +75,8 @@ export function AppRouter() {
                   PERMISSIONS.CASE_VIEW_ASSIGNED,
                   PERMISSIONS.CASE_QC_REVIEW,
                   PERMISSIONS.CASE_CONSULT,
+                  PERMISSIONS.CASE_VIEW_ORG,
+                  PERMISSIONS.CASE_VIEW_FACILITY,
                 ]}
               />
             }
@@ -121,6 +131,31 @@ export function AppRouter() {
             element={<RequirePermission permission={PERMISSIONS.CANCELLATION_REPORT_VIEW} />}
           >
             <Route path="cancellations" element={<CancellationReportPage />} />
+          </Route>
+
+          <Route
+            element={
+              <RequireAnyPermission
+                permissions={[
+                  PERMISSIONS.ORG_MANAGE_SELF,
+                  PERMISSIONS.FACILITY_MANAGE,
+                  PERMISSIONS.EMPLOYEE_MANAGE,
+                  PERMISSIONS.SUBACCOUNT_MANAGE,
+                  PERMISSIONS.CASE_VIEW_ORG,
+                  PERMISSIONS.CASE_VIEW_ALL,
+                ]}
+              />
+            }
+          >
+            <Route path="corporate" element={<CorporateDashboardPage />} />
+            <Route path="corporate/profile" element={<CorporateProfilePage />} />
+            <Route path="corporate/facilities" element={<CorporateFacilitiesPage />} />
+            <Route path="corporate/employees" element={<CorporateEmployeesPage />} />
+            <Route path="corporate/subaccounts" element={<CorporateSubAccountsPage />} />
+          </Route>
+
+          <Route element={<RequirePermission permission={PERMISSIONS.CASE_VIEW_FACILITY} />}>
+            <Route path="facility" element={<FacilityDashboardPage />} />
           </Route>
 
           <Route

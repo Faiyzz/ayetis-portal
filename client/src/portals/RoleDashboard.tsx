@@ -16,6 +16,8 @@ import { DesignerDashboard } from '@/portals/DesignerDashboard';
 import { DoctorDashboard } from '@/portals/DoctorDashboard';
 import { QcDashboard } from '@/portals/QcDashboard';
 import { SupervisorDashboard } from '@/portals/SupervisorDashboard';
+import { CorporateDashboardPage } from '@/features/corporate/pages/CorporateDashboardPage';
+import { FacilityDashboardPage } from '@/features/corporate/pages/FacilityDashboardPage';
 
 interface RoleDashboardProps {
   role: Role;
@@ -62,6 +64,14 @@ export function RoleDashboard({ role }: RoleDashboardProps) {
 
   if (role === ROLES.ANALYTICS) {
     return <AnalyticsDashboard firstName={user.firstName} />;
+  }
+
+  if (role === ROLES.CORPORATE_ADMIN) {
+    return <CorporateDashboardPage />;
+  }
+
+  if (role === ROLES.FACILITY_ADMIN) {
+    return <FacilityDashboardPage />;
   }
 
   return <DashboardView config={getDashboardConfig(role)} firstName={user.firstName} />;

@@ -323,6 +323,9 @@ export interface CaseListItemDto {
   doctorName: string;
   doctorDisplayId: string | null;
   doctorEmail: string;
+  organizationId: string | null;
+  facilityId: string | null;
+  corporateCustomerId: string | null;
   status: CaseStatus;
   priority: CasePriority;
   caseCategory: import('./caseTaxonomy').CaseCategory | null;
@@ -427,6 +430,8 @@ export interface CreateCaseInput {
   asDraft?: boolean;
   /** Treating doctor. Required when the creator is not a doctor. */
   doctorId?: string;
+  /** Facility for corporate-originated cases when the treating doctor has no facility. */
+  facilityId?: string;
 }
 
 export interface UpdateCaseInput {

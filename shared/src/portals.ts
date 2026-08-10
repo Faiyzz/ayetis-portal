@@ -255,6 +255,72 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
       },
     ],
   },
+  [ROLES.CORPORATE_ADMIN]: {
+    role: ROLES.CORPORATE_ADMIN,
+    title: 'Corporate Admin portal',
+    subtitle: 'Manage facilities, employees, sub-accounts, and organization cases.',
+    path: '/app/corporate',
+    highlights: [
+      'Organization profile and facilities worldwide',
+      'Employees and sub-accounts with verified emails',
+      'Cases across all facilities in your company',
+    ],
+    shortcuts: [
+      {
+        label: 'Corporate home',
+        description: 'Dashboard counts and facilities',
+        to: '/app/corporate',
+      },
+      {
+        label: 'Facilities',
+        description: 'Create and manage branches',
+        to: '/app/corporate/facilities',
+      },
+      {
+        label: 'Employees',
+        description: 'Create facility employees',
+        to: '/app/corporate/employees',
+      },
+      {
+        label: 'Sub-accounts',
+        description: 'Create doctor sub-accounts',
+        to: '/app/corporate/subaccounts',
+      },
+      {
+        label: 'Cases',
+        description: 'Organization cases',
+        to: '/app/cases',
+      },
+    ],
+  },
+  [ROLES.FACILITY_ADMIN]: {
+    role: ROLES.FACILITY_ADMIN,
+    title: 'Facility Admin portal',
+    subtitle: 'Manage your facility cases and local employees.',
+    path: '/app/facility',
+    highlights: [
+      'Facility-scoped case visibility',
+      'Create cases for your facility',
+      'Manage local employees',
+    ],
+    shortcuts: [
+      {
+        label: 'Facility home',
+        description: 'Facility overview',
+        to: '/app/facility',
+      },
+      {
+        label: 'Cases',
+        description: 'Facility cases',
+        to: '/app/cases',
+      },
+      {
+        label: 'Create case',
+        description: 'Submit a new case',
+        to: '/app/cases/new',
+      },
+    ],
+  },
 };
 
 export function getDashboardPath(role: Role): string {

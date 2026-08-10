@@ -164,6 +164,7 @@ export const createCaseSchema = z.object({
   initialNote: z.string().trim().max(2000).optional(),
   asDraft: z.boolean().optional(),
   doctorId: z.string().trim().min(1).optional(),
+  facilityId: z.string().trim().min(1).optional(),
 });
 
 export const updateCaseSchema = z

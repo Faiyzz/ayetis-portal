@@ -25,6 +25,25 @@ export interface IUser extends Document {
   doctorId?: string;
   clinicName?: string;
   companyName?: string;
+  companyAddress?: {
+    street: string;
+    city: string;
+    state: string;
+    country: string;
+    postalCode: string;
+  };
+  organizationId?: Types.ObjectId;
+  corporateCustomerId?: string;
+  facilityId?: Types.ObjectId;
+  employeeId?: string;
+  subAccountId?: string;
+  assignedCountry?: string;
+  mobile?: string;
+  emailVerifiedAt?: Date;
+  subAccountVerificationTokenHash?: string;
+  subAccountVerificationExpires?: Date;
+  /** Pending email verification for sub-accounts */
+  pendingEmailVerification?: boolean;
   /** @deprecated Prefer accountStatus — kept in sync for compatibility */
   isActive: boolean;
   departmentId?: Types.ObjectId;
@@ -102,6 +121,53 @@ const userSchema = new Schema<IUser>(
       type: String,
       trim: true,
     },
+    companyAddress: {
+      street: { type: String, trim: true, default: '' },
+      city: { type: String, trim: true, default: '' },
+      state: { type: String, trim: true, default: '' },
+      country: { type: String, trim: true, default: '' },
+      postalCode: { type: String, trim: true, default: '' },
+    },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      index: true,
+    },
+    corporateCustomerId: {
+      type: String,
+      trim: true,
+      index: true,
+      sparse: true,
+    },
+    facilityId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Facility',
+      index: true,
+    },
+    employeeId: {
+      type: String,
+      trim: true,
+      sparse: true,
+      unique: true,
+    },
+    subAccountId: {
+      type: String,
+      trim: true,
+      sparse: true,
+      unique: true,
+    },
+    assignedCountry: {
+      type: String,
+      trim: true,
+    },
+    mobile: {
+      type: String,
+      trim: true,
+    },
+    emailVerifiedAt: { type: Date },
+    subAccountVerificationTokenHash: { type: String, select: false },
+    subAccountVerificationExpires: { type: Date, select: false },
+    pendingEmailVerification: { type: Boolean, default: false, index: true },
     isActive: {
       type: Boolean,
       default: true,

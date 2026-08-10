@@ -16,6 +16,13 @@ export interface RegisterPayload {
   accountType: AccountType;
   clinicName?: string;
   companyName?: string;
+  companyAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postalCode?: string;
+  };
 }
 
 export interface LoginPayload {

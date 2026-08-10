@@ -16,6 +16,13 @@ export interface IRegistrationRequest extends Document {
   accountType: AccountType;
   clinicName?: string;
   companyName?: string;
+  companyAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postalCode?: string;
+  };
   status: RegistrationStatus;
   emailVerifiedAt?: Date;
   verificationTokenHash?: string;
@@ -64,6 +71,13 @@ const registrationRequestSchema = new Schema<IRegistrationRequest>(
     companyName: {
       type: String,
       trim: true,
+    },
+    companyAddress: {
+      street: { type: String, trim: true, default: '' },
+      city: { type: String, trim: true, default: '' },
+      state: { type: String, trim: true, default: '' },
+      country: { type: String, trim: true, default: '' },
+      postalCode: { type: String, trim: true, default: '' },
     },
     status: {
       type: String,

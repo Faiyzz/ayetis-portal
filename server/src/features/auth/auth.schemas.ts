@@ -30,6 +30,15 @@ export const registerSchema = z
     accountType: accountTypeSchema.default(ACCOUNT_TYPES.INDIVIDUAL),
     clinicName: z.string().trim().max(160).optional(),
     companyName: z.string().trim().max(160).optional(),
+    companyAddress: z
+      .object({
+        street: z.string().trim().max(200).optional(),
+        city: z.string().trim().max(120).optional(),
+        state: z.string().trim().max(120).optional(),
+        country: z.string().trim().max(80).optional(),
+        postalCode: z.string().trim().max(40).optional(),
+      })
+      .optional(),
   })
   .superRefine((value, ctx) => {
     if (value.accountType === ACCOUNT_TYPES.CORPORATE) {
@@ -38,6 +47,14 @@ export const registerSchema = z
           code: z.ZodIssueCode.custom,
           message: 'Company name is required for corporate accounts',
           path: ['companyName'],
+        });
+      }
+      const addr = value.companyAddress;
+      if (!addr?.street?.trim() || !addr?.city?.trim() || !addr?.country?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Company address (street, city, country) is required',
+          path: ['companyAddress'],
         });
       }
     } else if (value.clinicName !== undefined && value.clinicName.length === 0) {

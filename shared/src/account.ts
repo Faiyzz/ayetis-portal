@@ -114,6 +114,7 @@ export interface RegistrationRequestDto {
   accountType: AccountType;
   clinicName: string | null;
   companyName: string | null;
+  companyAddress: import('./corporate').CompanyAddress | null;
   status: RegistrationStatus;
   emailVerifiedAt: string | null;
   rejectionReason: string | null;

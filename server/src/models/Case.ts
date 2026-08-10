@@ -158,6 +158,9 @@ export interface ICase extends Document {
   /** Business Doctor ID (DR-########) for privacy-scoped display */
   doctorDisplayId?: string;
   doctorEmail: string;
+  organizationId?: Types.ObjectId;
+  facilityId?: Types.ObjectId;
+  corporateCustomerId?: string;
   caseCategory?: CaseCategory;
   caseType?: CaseType;
   chiefComplaint?: string;
@@ -412,6 +415,9 @@ const caseSchema = new Schema<ICase>(
     doctorName: { type: String, required: true },
     doctorDisplayId: { type: String, trim: true, index: true },
     doctorEmail: { type: String, required: true, lowercase: true, index: true },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', index: true },
+    facilityId: { type: Schema.Types.ObjectId, ref: 'Facility', index: true },
+    corporateCustomerId: { type: String, trim: true, index: true },
     caseCategory: { type: String, enum: ALL_CASE_CATEGORIES, index: true },
     caseType: { type: String, enum: ALL_CASE_TYPES, index: true },
     chiefComplaint: { type: String, default: '', trim: true },

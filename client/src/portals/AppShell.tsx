@@ -137,6 +137,7 @@ function buildNavItems(
   options: {
     canCreateCase: boolean;
     canCreateUser: boolean;
+    canManageCorporate: boolean;
   },
 ): NavItem[] {
   const caseChildren: NavChild[] = [
@@ -198,10 +199,61 @@ function buildNavItems(
         PERMISSIONS.CASE_VIEW_OWN,
         PERMISSIONS.CASE_VIEW_ALL,
         PERMISSIONS.CASE_VIEW_ASSIGNED,
+        PERMISSIONS.CASE_VIEW_ORG,
+        PERMISSIONS.CASE_VIEW_FACILITY,
       ],
       isActive: (pathname) => pathname.startsWith('/app/cases'),
       children: caseChildren,
     },
+    ...(options.canManageCorporate
+      ? [
+          {
+            id: 'corporate',
+            label: 'Corporate',
+            to: '/app/corporate',
+            icon: <IconUsers />,
+            anyOf: [
+              PERMISSIONS.ORG_MANAGE_SELF,
+              PERMISSIONS.FACILITY_MANAGE,
+              PERMISSIONS.EMPLOYEE_MANAGE,
+              PERMISSIONS.SUBACCOUNT_MANAGE,
+              PERMISSIONS.CASE_VIEW_ORG,
+              PERMISSIONS.CASE_VIEW_ALL,
+            ],
+            isActive: (pathname: string) => pathname.startsWith('/app/corporate'),
+            children: [
+              {
+                id: 'corp-home',
+                label: 'Overview',
+                to: '/app/corporate',
+                icon: <IconLayoutDashboard className="h-3.5 w-3.5" />,
+                isActive: (pathname: string) => pathname === '/app/corporate',
+              },
+              {
+                id: 'corp-facilities',
+                label: 'Facilities',
+                to: '/app/corporate/facilities',
+                icon: <IconList className="h-3.5 w-3.5" />,
+                isActive: (pathname: string) => pathname.startsWith('/app/corporate/facilities'),
+              },
+              {
+                id: 'corp-employees',
+                label: 'Employees',
+                to: '/app/corporate/employees',
+                icon: <IconUsers className="h-3.5 w-3.5" />,
+                isActive: (pathname: string) => pathname.startsWith('/app/corporate/employees'),
+              },
+              {
+                id: 'corp-subaccounts',
+                label: 'Sub-accounts',
+                to: '/app/corporate/subaccounts',
+                icon: <IconPlus className="h-3.5 w-3.5" />,
+                isActive: (pathname: string) => pathname.startsWith('/app/corporate/subaccounts'),
+              },
+            ],
+          } satisfies NavItem,
+        ]
+      : []),
     {
       id: 'users',
       label: 'Users',
@@ -463,6 +515,16 @@ export function AppShell() {
     PERMISSIONS.CASE_VIEW_OWN,
     PERMISSIONS.CASE_VIEW_ALL,
     PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_VIEW_ORG,
+    PERMISSIONS.CASE_VIEW_FACILITY,
+  );
+  const canManageCorporate = canAny(
+    PERMISSIONS.ORG_MANAGE_SELF,
+    PERMISSIONS.FACILITY_MANAGE,
+    PERMISSIONS.EMPLOYEE_MANAGE,
+    PERMISSIONS.SUBACCOUNT_MANAGE,
+    PERMISSIONS.CASE_VIEW_ORG,
+    PERMISSIONS.CASE_VIEW_ALL,
   );
   const canViewComplaints = canAny(
     PERMISSIONS.COMPLAINT_CREATE,
@@ -475,8 +537,10 @@ export function AppShell() {
       buildNavItems(dashboardPath, {
         canCreateCase,
         canCreateUser,
+        canManageCorporate,
       }).filter((item) => {
         if (item.id === 'cases') return canViewCases;
+        if (item.id === 'corporate') return canManageCorporate;
         if (item.id === 'users') return canListUsers;
         if (item.id === 'roles') return canViewRoles;
         if (item.id === 'activity') return canViewActivity;
@@ -487,6 +551,7 @@ export function AppShell() {
       dashboardPath,
       canCreateCase,
       canCreateUser,
+      canManageCorporate,
       canViewCases,
       canListUsers,
       canViewRoles,

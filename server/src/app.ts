@@ -15,6 +15,7 @@ import notificationsRoutes from './features/notifications/notifications.routes';
 import registrationsRoutes from './features/registrations/registrations.routes';
 import cancellationsRoutes from './features/cancellations/cancellations.routes';
 import commercialRoutes from './features/commercial/commercial.routes';
+import corporateRoutes from './features/corporate/corporate.routes';
 import reportsRoutes from './features/reports/reports.routes';
 import supervisorRoutes from './features/supervisor/supervisor.routes';
 import usersRoutes from './features/users/users.routes';
@@ -48,6 +49,7 @@ export function createApp() {
   app.use('/api/registrations', registrationsRoutes);
   app.use('/api/cancellations', cancellationsRoutes);
   app.use('/api/commercial', commercialRoutes);
+  app.use('/api/corporate', corporateRoutes);
   app.use('/api/activity', auditRoutes);
   app.use('/api/notifications', notificationsRoutes);
   app.use('/api/files', filesRoutes);

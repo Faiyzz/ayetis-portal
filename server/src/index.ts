@@ -5,11 +5,13 @@ import { startFileColdStorageJobs } from './jobs/fileColdStorage.job';
 import { startCaseLifecycleJobs } from './jobs/caseLifecycle.job';
 import { migrateAuthUsers } from './models/migrateAuthUsers';
 import { migrateCaseManagement } from './models/migrateCaseManagement';
+import { migrateCorporateHierarchy } from './models/migrateCorporateHierarchy';
 
 async function bootstrap() {
   await connectDatabase();
   await migrateAuthUsers();
   await migrateCaseManagement();
+  await migrateCorporateHierarchy();
 
   const app = createApp();
   app.listen(env.port, () => {

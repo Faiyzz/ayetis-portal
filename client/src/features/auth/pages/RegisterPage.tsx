@@ -24,6 +24,11 @@ export function RegisterPage() {
     password: '',
     clinicName: '',
     companyName: '',
+    street: '',
+    city: '',
+    state: '',
+    country: '',
+    postalCode: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -55,6 +60,16 @@ export function RegisterPage() {
           accountType === ACCOUNT_TYPES.INDIVIDUAL ? form.clinicName || undefined : undefined,
         companyName:
           accountType === ACCOUNT_TYPES.CORPORATE ? form.companyName || undefined : undefined,
+        companyAddress:
+          accountType === ACCOUNT_TYPES.CORPORATE
+            ? {
+                street: form.street,
+                city: form.city,
+                state: form.state,
+                country: form.country,
+                postalCode: form.postalCode,
+              }
+            : undefined,
       });
       setSuccessMessage(result.message);
       setDevVerifyUrl(result.verifyUrl ?? '');
@@ -160,6 +175,49 @@ export function RegisterPage() {
           accountType === ACCOUNT_TYPES.CORPORATE ? 'Acme Dental Group' : 'Smile Clinic'
         }
       />
+
+      {accountType === ACCOUNT_TYPES.CORPORATE ? (
+        <div className="space-y-4 rounded-xl border border-line bg-surface/40 p-4">
+          <p className="text-sm font-semibold text-ink">Company address</p>
+          <TextField
+            label="Street"
+            name="street"
+            required
+            value={form.street}
+            onChange={(e) => update('street', e.target.value)}
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              label="City"
+              name="city"
+              required
+              value={form.city}
+              onChange={(e) => update('city', e.target.value)}
+            />
+            <TextField
+              label="State / Province"
+              name="state"
+              value={form.state}
+              onChange={(e) => update('state', e.target.value)}
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              label="Country"
+              name="country"
+              required
+              value={form.country}
+              onChange={(e) => update('country', e.target.value)}
+            />
+            <TextField
+              label="Postal code"
+              name="postalCode"
+              value={form.postalCode}
+              onChange={(e) => update('postalCode', e.target.value)}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <TextField
         label="Email"

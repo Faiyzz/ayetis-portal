@@ -27,6 +27,14 @@ export interface PublicUser {
   doctorId: string | null;
   clinicName: string | null;
   companyName: string | null;
+  companyAddress: import('./corporate').CompanyAddress | null;
+  organizationId: string | null;
+  corporateCustomerId: string | null;
+  facilityId: string | null;
+  employeeId: string | null;
+  subAccountId: string | null;
+  assignedCountry: string | null;
+  pendingEmailVerification?: boolean;
   /** Doctor SLA target in business hours (excludes weekends). */
   slaBusinessHours: number | null;
   /** Derived: accountStatus === 'active' */
@@ -74,6 +82,13 @@ export interface ManagedUserDto {
   doctorId: string | null;
   clinicName: string | null;
   companyName: string | null;
+  companyAddress: import('./corporate').CompanyAddress | null;
+  organizationId: string | null;
+  corporateCustomerId: string | null;
+  facilityId: string | null;
+  employeeId: string | null;
+  subAccountId: string | null;
+  assignedCountry: string | null;
   /** Derived: accountStatus === 'active' */
   isActive: boolean;
   departmentId: string | null;

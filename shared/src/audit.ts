@@ -60,6 +60,15 @@ export const AUDIT_ACTIONS = {
   CLARIFICATION_CREATE: 'clarification.create',
   CLARIFICATION_REPLY: 'clarification.reply',
   CLARIFICATION_RESOLVE: 'clarification.resolve',
+  ORGANIZATION_CREATE: 'organization.create',
+  ORGANIZATION_UPDATE: 'organization.update',
+  FACILITY_CREATE: 'facility.create',
+  FACILITY_UPDATE: 'facility.update',
+  EMPLOYEE_CREATE: 'employee.create',
+  EMPLOYEE_UPDATE: 'employee.update',
+  SUBACCOUNT_CREATE: 'subaccount.create',
+  SUBACCOUNT_VERIFY: 'subaccount.verify',
+  SUBACCOUNT_ACTIVATE: 'subaccount.activate',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
@@ -128,6 +137,15 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   [AUDIT_ACTIONS.CLARIFICATION_CREATE]: 'Clarification created',
   [AUDIT_ACTIONS.CLARIFICATION_REPLY]: 'Clarification reply',
   [AUDIT_ACTIONS.CLARIFICATION_RESOLVE]: 'Clarification resolved',
+  [AUDIT_ACTIONS.ORGANIZATION_CREATE]: 'Organization created',
+  [AUDIT_ACTIONS.ORGANIZATION_UPDATE]: 'Organization updated',
+  [AUDIT_ACTIONS.FACILITY_CREATE]: 'Facility created',
+  [AUDIT_ACTIONS.FACILITY_UPDATE]: 'Facility updated',
+  [AUDIT_ACTIONS.EMPLOYEE_CREATE]: 'Employee created',
+  [AUDIT_ACTIONS.EMPLOYEE_UPDATE]: 'Employee updated',
+  [AUDIT_ACTIONS.SUBACCOUNT_CREATE]: 'Sub-account created',
+  [AUDIT_ACTIONS.SUBACCOUNT_VERIFY]: 'Sub-account email verified',
+  [AUDIT_ACTIONS.SUBACCOUNT_ACTIVATE]: 'Sub-account activated',
 };
 
 export type AuditTargetType =

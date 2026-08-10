@@ -132,6 +132,16 @@ export async function register(input: RegisterInput, ctx: RequestAuditContext = 
       accountType === ACCOUNT_TYPES.INDIVIDUAL ? input.clinicName || undefined : undefined,
     companyName:
       accountType === ACCOUNT_TYPES.CORPORATE ? input.companyName || undefined : undefined,
+    companyAddress:
+      accountType === ACCOUNT_TYPES.CORPORATE && input.companyAddress
+        ? {
+            street: input.companyAddress.street?.trim() || '',
+            city: input.companyAddress.city?.trim() || '',
+            state: input.companyAddress.state?.trim() || '',
+            country: input.companyAddress.country?.trim() || '',
+            postalCode: input.companyAddress.postalCode?.trim() || '',
+          }
+        : undefined,
     status: REGISTRATION_STATUSES.PENDING_EMAIL_VERIFICATION,
     verificationTokenHash: hashToken(rawToken),
     verificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -270,6 +280,20 @@ export async function login(input: LoginInput, ctx: RequestAuditContext = {}) {
       userAgent: ctx.userAgent,
     });
     throw new AppError(messages.accountBlocked, 403);
+  }
+
+  if (user.pendingEmailVerification) {
+    await recordActivity({
+      action: AUDIT_ACTIONS.AUTH_LOGIN_FAILED,
+      summary: `Failed login for ${user.email}: email not verified`,
+      ...actorFields(user),
+      targetType: 'auth',
+      targetId: user.id,
+      metadata: { reason: 'pending_email_verification' },
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+    });
+    throw new AppError('Please verify your email before signing in.', 403);
   }
 
   if (!canLogin(user.accountStatus)) {

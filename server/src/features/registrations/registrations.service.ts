@@ -3,6 +3,8 @@ import {
   ACCOUNT_TYPES,
   ACCOUNT_TYPE_LABELS,
   AUDIT_ACTIONS,
+  EMPTY_COMPANY_ADDRESS,
+  ORGANIZATION_STATUSES,
   REGISTRATION_STATUSES,
   ROLES,
   type RegistrationListResult,
@@ -11,7 +13,9 @@ import {
   type SystemMessages,
 } from '@ayetis/shared';
 import { env } from '../../config/env';
+import { generateCorporateCustomerId } from '../../models/CorporateCounter';
 import { generateDoctorId } from '../../models/DoctorCounter';
+import { Organization } from '../../models/Organization';
 import { RegistrationRequest, type IRegistrationRequest } from '../../models/RegistrationRequest';
 import {
   getSystemMessages,
@@ -45,6 +49,15 @@ function toDto(doc: IRegistrationRequest): RegistrationRequestDto {
     accountType: doc.accountType,
     clinicName: doc.clinicName ?? null,
     companyName: doc.companyName ?? null,
+    companyAddress: doc.companyAddress
+      ? {
+          street: doc.companyAddress.street ?? '',
+          city: doc.companyAddress.city ?? '',
+          state: doc.companyAddress.state ?? '',
+          country: doc.companyAddress.country ?? '',
+          postalCode: doc.companyAddress.postalCode ?? '',
+        }
+      : null,
     status: doc.status,
     emailVerifiedAt: doc.emailVerifiedAt ? doc.emailVerifiedAt.toISOString() : null,
     rejectionReason: doc.rejectionReason ?? null,
@@ -110,22 +123,55 @@ export async function approveRegistration(
     throw new AppError('Registration password is missing; ask the user to re-register', 400);
   }
 
-  const doctorId = await generateDoctorId();
+  const isCorporate = request.accountType === ACCOUNT_TYPES.CORPORATE;
+  let corporateCustomerId: string | undefined;
+  let organizationId: import('mongoose').Types.ObjectId | undefined;
+  let doctorId: string | undefined;
+
+  if (isCorporate) {
+    corporateCustomerId = await generateCorporateCustomerId();
+  } else {
+    doctorId = await generateDoctorId();
+  }
+
+  const address = {
+    ...EMPTY_COMPANY_ADDRESS,
+    ...(request.companyAddress ?? {}),
+  };
+
   const user = await User.create({
     email: request.email,
     password: request.passwordHash,
     firstName: request.firstName,
     lastName: request.lastName,
-    role: ROLES.DOCTOR,
+    role: isCorporate ? ROLES.CORPORATE_ADMIN : ROLES.DOCTOR,
     accountType: request.accountType,
     accountStatus: ACCOUNT_STATUSES.ACTIVE,
     doctorId,
     clinicName: request.clinicName,
     companyName: request.companyName,
+    companyAddress: isCorporate ? address : undefined,
+    corporateCustomerId,
     permissionGrants: [],
     permissionDenies: [],
     mustChangePassword: false,
   });
+
+  if (isCorporate && corporateCustomerId) {
+    const org = await Organization.create({
+      corporateCustomerId,
+      companyName: request.companyName || `${request.firstName} ${request.lastName}`.trim(),
+      address,
+      country: address.country || '',
+      status: ORGANIZATION_STATUSES.ACTIVE,
+      ownerUserId: user._id,
+      subAccountSeq: 0,
+      employeeSeq: 0,
+    });
+    organizationId = org._id as never;
+    user.organizationId = organizationId;
+    await user.save();
+  }
 
   request.status = REGISTRATION_STATUSES.APPROVED;
   request.approvedUserId = user._id;
@@ -133,6 +179,7 @@ export async function approveRegistration(
 
   const loginUrl = `${env.clientUrl}/login`;
   const name = `${user.firstName} ${user.lastName}`.trim();
+  const idLabel = isCorporate ? corporateCustomerId! : doctorId!;
 
   try {
     await sendTemplatedEmail(
@@ -140,7 +187,7 @@ export async function approveRegistration(
       accountCreationTemplate({
         name,
         email: user.email,
-        doctorId,
+        doctorId: idLabel,
         loginUrl,
         accountType: ACCOUNT_TYPE_LABELS[user.accountType],
       }),
@@ -151,16 +198,37 @@ export async function approveRegistration(
 
   await recordActivity({
     action: AUDIT_ACTIONS.REGISTRATION_APPROVE,
-    summary: `${actor.email} approved registration for ${request.email} → ${doctorId}`,
+    summary: `${actor.email} approved registration for ${request.email} → ${idLabel}`,
     actorId: actor.id,
     actorEmail: actor.email,
     actorRole: actor.role,
     targetType: 'registration',
     targetId: request.id,
-    metadata: { userId: user.id, doctorId, accountType: request.accountType },
+    metadata: {
+      userId: user.id,
+      doctorId,
+      corporateCustomerId,
+      organizationId: organizationId ? String(organizationId) : undefined,
+      accountType: request.accountType,
+    },
     ipAddress: audit.ipAddress,
     userAgent: audit.userAgent,
   });
+
+  if (isCorporate) {
+    await recordActivity({
+      action: AUDIT_ACTIONS.ORGANIZATION_CREATE,
+      summary: `Organization ${corporateCustomerId} created for ${request.companyName}`,
+      actorId: actor.id,
+      actorEmail: actor.email,
+      actorRole: actor.role,
+      targetType: 'system',
+      targetId: corporateCustomerId,
+      metadata: { organizationId: organizationId ? String(organizationId) : undefined },
+      ipAddress: audit.ipAddress,
+      userAgent: audit.userAgent,
+    });
+  }
 
   return {
     registration: toDto(request),

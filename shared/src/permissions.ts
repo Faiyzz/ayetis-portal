@@ -73,6 +73,16 @@ export const PERMISSIONS = {
   TREATMENT_PLAN_MANAGE: 'treatment_plan:manage',
   DISCOUNT_CODE_MANAGE: 'discount_code:manage',
 
+  // Corporate hierarchy
+  ORG_MANAGE_SELF: 'org:manage_self',
+  FACILITY_MANAGE: 'facility:manage',
+  EMPLOYEE_MANAGE: 'employee:manage',
+  SUBACCOUNT_MANAGE: 'subaccount:manage',
+  CASE_VIEW_FACILITY: 'case:view_facility',
+  CASE_VIEW_ORG: 'case:view_org',
+  CORPORATE_REPORT_VIEW: 'corporate_report:view',
+  CORPORATE_AUDIT_VIEW: 'corporate_audit:view',
+
   // Audit
   AUDIT_VIEW: 'audit:view',
 } as const;
@@ -128,6 +138,14 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.SLA_CONFIGURE]: 'Configure doctor SLA hours',
   [PERMISSIONS.TREATMENT_PLAN_MANAGE]: 'Manage treatment plans',
   [PERMISSIONS.DISCOUNT_CODE_MANAGE]: 'Manage discount codes',
+  [PERMISSIONS.ORG_MANAGE_SELF]: 'Manage own organization profile',
+  [PERMISSIONS.FACILITY_MANAGE]: 'Manage facilities',
+  [PERMISSIONS.EMPLOYEE_MANAGE]: 'Manage corporate employees',
+  [PERMISSIONS.SUBACCOUNT_MANAGE]: 'Manage corporate sub-accounts',
+  [PERMISSIONS.CASE_VIEW_FACILITY]: 'View facility cases',
+  [PERMISSIONS.CASE_VIEW_ORG]: 'View all organization cases',
+  [PERMISSIONS.CORPORATE_REPORT_VIEW]: 'View corporate reports',
+  [PERMISSIONS.CORPORATE_AUDIT_VIEW]: 'View corporate activity logs',
   [PERMISSIONS.AUDIT_VIEW]: 'View activity logs',
 };
 
@@ -142,6 +160,7 @@ export type PermissionGroup =
   | 'Departments'
   | 'Complaints'
   | 'Commercial'
+  | 'Corporate'
   | 'Audit';
 
 export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
@@ -191,6 +210,14 @@ export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
   [PERMISSIONS.SLA_CONFIGURE]: 'Commercial',
   [PERMISSIONS.TREATMENT_PLAN_MANAGE]: 'Commercial',
   [PERMISSIONS.DISCOUNT_CODE_MANAGE]: 'Commercial',
+  [PERMISSIONS.ORG_MANAGE_SELF]: 'Corporate',
+  [PERMISSIONS.FACILITY_MANAGE]: 'Corporate',
+  [PERMISSIONS.EMPLOYEE_MANAGE]: 'Corporate',
+  [PERMISSIONS.SUBACCOUNT_MANAGE]: 'Corporate',
+  [PERMISSIONS.CASE_VIEW_FACILITY]: 'Cases',
+  [PERMISSIONS.CASE_VIEW_ORG]: 'Cases',
+  [PERMISSIONS.CORPORATE_REPORT_VIEW]: 'Corporate',
+  [PERMISSIONS.CORPORATE_AUDIT_VIEW]: 'Corporate',
   [PERMISSIONS.AUDIT_VIEW]: 'Audit',
 };
 
@@ -203,8 +230,37 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     PERMISSIONS.USER_CHANGE_PASSWORD,
     PERMISSIONS.CASE_CREATE,
     PERMISSIONS.CASE_VIEW_OWN,
+    PERMISSIONS.CASE_VIEW_FACILITY,
     PERMISSIONS.CASE_APPROVE,
     PERMISSIONS.CLARIFICATION_REPLY,
+  ],
+
+  [ROLES.CORPORATE_ADMIN]: [
+    PERMISSIONS.USER_VIEW_OWN,
+    PERMISSIONS.USER_UPDATE_OWN,
+    PERMISSIONS.USER_CHANGE_PASSWORD,
+    PERMISSIONS.ORG_MANAGE_SELF,
+    PERMISSIONS.FACILITY_MANAGE,
+    PERMISSIONS.EMPLOYEE_MANAGE,
+    PERMISSIONS.SUBACCOUNT_MANAGE,
+    PERMISSIONS.CASE_VIEW_ORG,
+    PERMISSIONS.CASE_CREATE,
+    PERMISSIONS.CASE_APPROVE,
+    PERMISSIONS.CLARIFICATION_REPLY,
+    PERMISSIONS.CORPORATE_REPORT_VIEW,
+    PERMISSIONS.CORPORATE_AUDIT_VIEW,
+    PERMISSIONS.USER_RESET_PASSWORD,
+  ],
+
+  [ROLES.FACILITY_ADMIN]: [
+    PERMISSIONS.USER_VIEW_OWN,
+    PERMISSIONS.USER_UPDATE_OWN,
+    PERMISSIONS.USER_CHANGE_PASSWORD,
+    PERMISSIONS.CASE_VIEW_FACILITY,
+    PERMISSIONS.CASE_CREATE,
+    PERMISSIONS.CASE_APPROVE,
+    PERMISSIONS.CLARIFICATION_REPLY,
+    PERMISSIONS.EMPLOYEE_MANAGE,
   ],
 
   [ROLES.COORDINATOR]: [
