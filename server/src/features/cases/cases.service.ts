@@ -1139,8 +1139,13 @@ export async function updateCase(
     'patientName',
     'patientAge',
     'patientGender',
+    'patientDateOfBirth',
     'clinicName',
+    'practiceName',
     'country',
+    'chiefComplaint',
+    'caseCategory',
+    'caseType',
     'treatmentSummary',
     'instructions',
     'priority',
@@ -1176,6 +1181,66 @@ export async function updateCase(
       changes.push({
         field: 'treatmentInstructions',
         label: 'Treatment instructions',
+        from: previous,
+        to: next,
+      });
+    }
+  }
+
+  if (input.recordsNumbering) {
+    const previous = { ...EMPTY_RECORDS_NUMBERING, ...(caseDoc.recordsNumbering ?? {}) };
+    const next = { ...previous, ...input.recordsNumbering };
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      caseDoc.recordsNumbering = next;
+      changes.push({
+        field: 'recordsNumbering',
+        label: 'Records & numbering',
+        from: previous,
+        to: next,
+      });
+    }
+  }
+
+  if (input.clinicalPreferences) {
+    const previous = { ...EMPTY_CLINICAL_PREFERENCES, ...(caseDoc.clinicalPreferences ?? {}) };
+    const next = { ...previous, ...input.clinicalPreferences };
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      caseDoc.clinicalPreferences = next;
+      changes.push({
+        field: 'clinicalPreferences',
+        label: 'Clinical preferences',
+        from: previous,
+        to: next,
+      });
+    }
+  }
+
+  if (input.occlusionGoals) {
+    const previous = { ...EMPTY_OCCLUSION_GOALS, ...(caseDoc.occlusionGoals ?? {}) };
+    const next = { ...previous, ...input.occlusionGoals };
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      caseDoc.occlusionGoals = next;
+      changes.push({
+        field: 'occlusionGoals',
+        label: 'Occlusion goals',
+        from: previous,
+        to: next,
+      });
+    }
+  }
+
+  if (input.commercial) {
+    const previous = { ...EMPTY_CASE_COMMERCIAL, ...(caseDoc.commercial ?? {}) };
+    const next = { ...previous, ...input.commercial };
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      caseDoc.commercial = next;
+      if (caseDoc.payment) {
+        caseDoc.payment.currency = next.currency || caseDoc.payment.currency;
+        caseDoc.payment.amountDue = next.finalPayableAmount ?? next.unitPrice ?? caseDoc.payment.amountDue;
+      }
+      changes.push({
+        field: 'commercial',
+        label: 'Commercial',
         from: previous,
         to: next,
       });

@@ -1,8 +1,26 @@
 import {
+  ALL_ADDITIONAL_RECORDS,
   ALL_ARCH_OPTIONS,
+  ALL_CASE_COMPLEXITIES,
   ALL_CASE_PRIORITIES,
   ALL_CASE_STATUSES,
+  ALL_CROSSBITE_OBJECTIVES,
+  ALL_DECIDUOUS_TEETH_OPTIONS,
+  ALL_IMPRESSION_METHODS,
+  ALL_IMPROVE_OBJECTIVES,
+  ALL_MIDLINE_OBJECTIVES,
   ALL_PAYMENT_STATUSES,
+  ALL_RELATIONSHIP_OBJECTIVES,
+  ALL_SPACE_MANAGEMENT_OPTIONS,
+  ALL_TOOTH_NUMBERING_SYSTEMS,
+  ALL_TREATMENT_APPROACHES,
+  ALL_TRIMLINE_HEIGHTS,
+  ALL_VELOCITY_PER_STAGE,
+  ALL_WEAR_SCHEDULES,
+  AESTHETIC_SUBCATEGORIES,
+  CASE_CATEGORIES,
+  COMPLEX_SUBCATEGORIES,
+  firstFieldError,
   isArchOption,
   isCaseCategory,
   isCasePriority,
@@ -13,27 +31,56 @@ import {
   isFileCategory,
   isPaymentStatus,
   isQcErrorCode,
+  validateDigitalAlignerPart1,
+  validateDigitalAlignerPart3,
   type CasePriority,
   type CaseStatus,
+  type DigitalAlignerPart1Input,
+  type DigitalAlignerPart3Input,
 } from '@ayetis/shared';
 import { z } from 'zod';
 
 const looseStringArray = z.array(z.string().trim().max(40)).optional();
 
+const enumOrEmpty = (values: readonly string[]) =>
+  z
+    .string()
+    .optional()
+    .refine((value) => !value || values.includes(value), {
+      message: `Must be one of: ${values.join(', ')}`,
+    });
+
 const recordsNumberingSchema = z
   .object({
-    toothNumberingSystem: z.string().optional(),
-    impressionMethod: z.string().optional(),
-    impressionsTaken: looseStringArray,
-    additionalRecords: z.array(z.string().trim().max(120)).optional(),
-    treatArches: z.string().optional(),
-    velocityPerStage: z.string().optional(),
-    velocityCustomMm: z.string().optional(),
-    caseComplexity: z.string().optional(),
-    wearSchedule: z.string().optional(),
-    trimlineHeight: z.string().optional(),
+    toothNumberingSystem: enumOrEmpty(ALL_TOOTH_NUMBERING_SYSTEMS),
+    impressionMethod: enumOrEmpty(ALL_IMPRESSION_METHODS),
+    impressionsTaken: z
+      .array(z.string().trim())
+      .optional()
+      .refine(
+        (arr) => !arr || arr.every((v) => (ALL_ARCH_OPTIONS as string[]).includes(v)),
+        { message: 'Invalid impressionsTaken arch' },
+      ),
+    additionalRecords: z
+      .array(z.string().trim().max(120))
+      .optional()
+      .refine(
+        (arr) =>
+          !arr ||
+          arr.every(
+            (v) =>
+              (ALL_ADDITIONAL_RECORDS as string[]).includes(v) || v.length > 0,
+          ),
+        { message: 'Invalid additional record' },
+      ),
+    treatArches: enumOrEmpty(ALL_ARCH_OPTIONS),
+    velocityPerStage: enumOrEmpty(ALL_VELOCITY_PER_STAGE),
+    velocityCustomMm: z.string().trim().max(40).optional(),
+    caseComplexity: enumOrEmpty(ALL_CASE_COMPLEXITIES),
+    wearSchedule: enumOrEmpty(ALL_WEAR_SCHEDULES),
+    trimlineHeight: enumOrEmpty(ALL_TRIMLINE_HEIGHTS),
     retainerRequired: z.boolean().nullable().optional(),
-    plannedTreatmentDuration: z.string().optional(),
+    plannedTreatmentDuration: z.string().trim().max(200).optional(),
   })
   .optional();
 
@@ -49,29 +96,34 @@ const clinicalPreferencesSchema = z
 const occlusionGoalsSchema = z
   .object({
     upperMidlineMm: z.number().nullable().optional(),
-    upperMidlineObjective: z.string().optional(),
+    upperMidlineObjective: enumOrEmpty(ALL_MIDLINE_OBJECTIVES),
     lowerMidlineMm: z.number().nullable().optional(),
-    lowerMidlineObjective: z.string().optional(),
+    lowerMidlineObjective: enumOrEmpty(ALL_MIDLINE_OBJECTIVES),
     overjetMm: z.number().nullable().optional(),
-    overjetObjective: z.string().optional(),
+    overjetObjective: enumOrEmpty(ALL_IMPROVE_OBJECTIVES),
     overbitePercent: z.number().nullable().optional(),
-    overbiteObjective: z.string().optional(),
-    canineRelationship: z.string().optional(),
-    molarRelationship: z.string().optional(),
-    anteriorCrossbite: z.string().optional(),
-    posteriorCrossbite: z.string().optional(),
-    deciduousTeeth: z.string().optional(),
+    overbiteObjective: enumOrEmpty(ALL_IMPROVE_OBJECTIVES),
+    canineRelationship: enumOrEmpty(ALL_RELATIONSHIP_OBJECTIVES),
+    molarRelationship: enumOrEmpty(ALL_RELATIONSHIP_OBJECTIVES),
+    anteriorCrossbite: enumOrEmpty(ALL_CROSSBITE_OBJECTIVES),
+    posteriorCrossbite: enumOrEmpty(ALL_CROSSBITE_OBJECTIVES),
+    deciduousTeeth: enumOrEmpty(ALL_DECIDUOUS_TEETH_OPTIONS),
     iprAllowed: z.boolean().nullable().optional(),
     engagersAllowed: z.boolean().nullable().optional(),
-    spaceManagement: z.string().optional(),
-    clinicalInstructions: z.string().optional(),
+    spaceManagement: enumOrEmpty(ALL_SPACE_MANAGEMENT_OPTIONS),
+    clinicalInstructions: z.string().trim().max(5000).optional(),
   })
   .optional();
 
+const ALL_SUBCATEGORIES = [
+  ...AESTHETIC_SUBCATEGORIES,
+  ...COMPLEX_SUBCATEGORIES,
+] as const;
+
 const commercialSchema = z
   .object({
-    treatmentApproach: z.string().optional(),
-    treatmentSubCategory: z.string().optional(),
+    treatmentApproach: enumOrEmpty(ALL_TREATMENT_APPROACHES),
+    treatmentSubCategory: enumOrEmpty(ALL_SUBCATEGORIES),
     treatmentPlanId: z.string().nullable().optional(),
     treatmentPlanName: z.string().optional(),
     currency: z.string().optional(),
@@ -131,41 +183,69 @@ export const listCasesQuerySchema = z.object({
     .transform((value) => value === true || value === 'true'),
 });
 
-export const createCaseSchema = z.object({
-  patientName: z.string().trim().min(1, 'Patient name is required').max(120),
-  patientAge: z.number().int().min(0).max(120).nullable().optional(),
-  patientGender: z.string().trim().max(40).optional(),
-  patientDateOfBirth: z.string().trim().max(40).nullable().optional(),
-  clinicName: z.string().trim().max(120).optional(),
-  practiceName: z.string().trim().max(160).optional(),
-  country: z.string().trim().max(80).optional(),
-  chiefComplaint: z.string().trim().max(2000).optional(),
-  caseCategory: z
-    .string()
-    .optional()
-    .refine((value) => !value || isCaseCategory(value), { message: 'Invalid case category' }),
-  caseType: z
-    .string()
-    .optional()
-    .refine((value) => !value || isCaseType(value), { message: 'Invalid case type' }),
-  treatmentSummary: z.string().trim().min(1, 'Treatment summary is required').max(2000),
-  instructions: z.string().trim().max(5000).optional(),
-  treatmentInstructions: treatmentInstructionsSchema,
-  recordsNumbering: recordsNumberingSchema,
-  clinicalPreferences: clinicalPreferencesSchema,
-  occlusionGoals: occlusionGoalsSchema,
-  commercial: commercialSchema,
-  priority: z
-    .string()
-    .optional()
-    .refine((value) => !value || isCasePriority(value), {
-      message: 'Invalid priority',
-    }),
-  initialNote: z.string().trim().max(2000).optional(),
-  asDraft: z.boolean().optional(),
-  doctorId: z.string().trim().min(1).optional(),
-  facilityId: z.string().trim().min(1).optional(),
-});
+export const createCaseSchema = z
+  .object({
+    patientName: z.string().trim().min(1, 'Patient name is required').max(120),
+    patientAge: z.number().int().min(0).max(120).nullable().optional(),
+    patientGender: z.string().trim().max(40).optional(),
+    patientDateOfBirth: z.string().trim().max(40).nullable().optional(),
+    clinicName: z.string().trim().max(120).optional(),
+    practiceName: z.string().trim().max(160).optional(),
+    country: z.string().trim().max(80).optional(),
+    chiefComplaint: z.string().trim().max(2000).optional(),
+    caseCategory: z
+      .string()
+      .optional()
+      .refine((value) => !value || isCaseCategory(value), { message: 'Invalid case category' }),
+    caseType: z
+      .string()
+      .optional()
+      .refine((value) => !value || isCaseType(value), { message: 'Invalid case type' }),
+    treatmentSummary: z.string().trim().min(1, 'Treatment summary is required').max(2000),
+    instructions: z.string().trim().max(5000).optional(),
+    treatmentInstructions: treatmentInstructionsSchema,
+    recordsNumbering: recordsNumberingSchema,
+    clinicalPreferences: clinicalPreferencesSchema,
+    occlusionGoals: occlusionGoalsSchema,
+    commercial: commercialSchema,
+    priority: z
+      .string()
+      .optional()
+      .refine((value) => !value || isCasePriority(value), {
+        message: 'Invalid priority',
+      }),
+    initialNote: z.string().trim().max(2000).optional(),
+    asDraft: z.boolean().optional(),
+    doctorId: z.string().trim().min(1).optional(),
+    facilityId: z.string().trim().min(1).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.asDraft) return;
+    if (value.caseCategory !== CASE_CATEGORIES.DIGITAL_ALIGNER) return;
+
+    const part1 = validateDigitalAlignerPart1({
+      patientName: value.patientName,
+      practiceName: value.practiceName,
+      clinicName: value.clinicName,
+      chiefComplaint: value.chiefComplaint,
+      patientDateOfBirth: value.patientDateOfBirth,
+      caseCategory: value.caseCategory,
+      caseType: value.caseType,
+      recordsNumbering: value.recordsNumbering as DigitalAlignerPart1Input['recordsNumbering'],
+    });
+    const part3 = validateDigitalAlignerPart3({
+      commercial: value.commercial as DigitalAlignerPart3Input['commercial'],
+    });
+    const combined = { ...part1, ...part3 };
+    const message = firstFieldError(combined);
+    if (message) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+        path: [Object.keys(combined)[0]!.split('.')[0]!],
+      });
+    }
+  });
 
 export const updateCaseSchema = z
   .object({
