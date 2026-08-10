@@ -263,6 +263,12 @@ export const uploadFilesMetaSchema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 
+export const viewerLinkSchema = z.object({
+  url: z.string().trim().url('Enter a valid URL').max(2000),
+  label: z.string().trim().max(160).optional(),
+  note: z.string().trim().max(500).optional(),
+});
+
 export const validateCaseSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
   force: z.boolean().optional(),

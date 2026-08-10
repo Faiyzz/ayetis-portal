@@ -38,12 +38,18 @@ function fileFilter(
     mime.startsWith('video/') ||
     mime === 'application/pdf' ||
     mime === 'application/zip' ||
+    mime === 'application/x-zip-compressed' ||
+    mime === 'application/x-rar-compressed' ||
+    mime === 'application/vnd.rar' ||
+    mime === 'application/x-7z-compressed' ||
     mime === 'application/octet-stream' ||
     mime === 'model/stl' ||
     mime === 'model/obj' ||
     mime.includes('stl') ||
     mime.includes('dicom') ||
-    mime === 'text/html';
+    mime === 'text/html' ||
+    mime === 'text/csv' ||
+    mime === 'text/plain';
 
   if (isAllowedUploadFilename(file.originalname) || allowedMime) {
     cb(null, true);

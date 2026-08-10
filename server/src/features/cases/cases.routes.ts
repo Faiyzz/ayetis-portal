@@ -28,6 +28,7 @@ import {
   updatePaymentSchema,
   uploadFilesMetaSchema,
   validateCaseSchema,
+  viewerLinkSchema,
 } from './cases.schemas';
 
 const router = Router();
@@ -217,6 +218,13 @@ router.post(
   caseFileUpload.array('files', 20),
   validate(uploadFilesMetaSchema),
   casesController.uploadFiles,
+);
+
+router.post(
+  '/:caseId/files/link',
+  requireAnyPermission(PERMISSIONS.CASE_CREATE, PERMISSIONS.CASE_UPDATE),
+  validate(viewerLinkSchema),
+  casesController.attachViewerLink,
 );
 
 router.get(

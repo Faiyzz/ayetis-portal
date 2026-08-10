@@ -116,6 +116,14 @@ export async function uploadCaseFiles(
   return data.data;
 }
 
+export async function attachCaseViewerLink(
+  caseId: string,
+  payload: { url: string; label?: string; note?: string },
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/files/link`, payload);
+  return data.data;
+}
+
 export function caseFileDownloadUrl(caseId: string, fileId: string): string {
   return `/api/cases/${caseId}/files/${fileId}`;
 }

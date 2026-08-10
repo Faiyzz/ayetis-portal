@@ -67,6 +67,8 @@ export interface ICaseFile {
   sizeBytes: number;
   category: FileCategory;
   storageKey: string;
+  viewUrl?: string;
+  extractedFrom?: string;
   uploadedById?: Types.ObjectId;
   uploadedByName: string;
   version: number;
@@ -244,6 +246,8 @@ const caseFileSchema = new Schema<ICaseFile>(
       default: FILE_CATEGORIES.OTHER,
     },
     storageKey: { type: String, required: true },
+    viewUrl: { type: String, trim: true },
+    extractedFrom: { type: String, trim: true },
     uploadedById: { type: Schema.Types.ObjectId, ref: 'User' },
     uploadedByName: { type: String, required: true },
     version: { type: Number, default: 1, min: 1 },

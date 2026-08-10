@@ -13,6 +13,7 @@ import {
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import {
+  attachCaseViewerLink,
   downloadAllCaseFiles,
   downloadCaseFile,
   fetchCase,
@@ -23,6 +24,9 @@ import {
 import { EmptyState } from '@/features/cases/components/detail/EmptyState';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorCode, getErrorMessage } from '@/lib/api';
+
+const UPLOAD_ACCEPT =
+  '.stl,.obj,.ply,.dcm,.dicom,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.pdf,.zip,.rar,.7z,.mp4,.mov,.webm,.avi,.mkv,.wmv,.html,.htm,.txt,.csv,.doc,.docx,.xls,.xlsx,image/*,video/*,application/zip,application/x-7z-compressed,application/vnd.rar';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -65,6 +69,10 @@ function StorageBadge({ tier }: { tier: FileStorageTier }) {
   );
 }
 
+function isViewerLink(file: CaseFileDto) {
+  return file.category === FILE_CATEGORIES.HTML_LINK || Boolean(file.viewUrl);
+}
+
 function FileActions({
   file,
   downloadingId,
@@ -78,6 +86,19 @@ function FileActions({
   onDownload: (file: CaseFileDto) => void;
   onRestore: (file: CaseFileDto) => void;
 }) {
+  if (isViewerLink(file) && file.viewUrl) {
+    return (
+      <a
+        href={file.viewUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-brand-700 hover:border-brand-300"
+      >
+        Open link
+      </a>
+    );
+  }
+
   const tier = file.storageTier ?? FILE_STORAGE_TIERS.HOT;
   if (tier === FILE_STORAGE_TIERS.PURGED) {
     return <span className="text-xs text-muted">Removed</span>;
@@ -133,6 +154,9 @@ export function CaseFilesPanel({
   const [filterCategory, setFilterCategory] = useState<FileCategory | ''>('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [showUpload, setShowUpload] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkLabel, setLinkLabel] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
 
   const restoringIds = useMemo(
     () => files.filter((f) => f.storageTier === FILE_STORAGE_TIERS.RESTORING).map((f) => f.id),
@@ -206,7 +230,14 @@ export function CaseFilesPanel({
       setCategory('');
       if (inputRef.current) inputRef.current.value = '';
       setShowUpload(false);
-      toast().success(selected.length === 1 ? 'File uploaded' : `${selected.length} files uploaded`);
+      const extracted = selected.some((f) => /\.(zip|rar|7z)$/i.test(f.name));
+      toast().success(
+        extracted
+          ? 'Archive extracted — supported files attached to the case'
+          : selected.length === 1
+            ? 'File uploaded'
+            : `${selected.length} files uploaded`,
+      );
     } catch (err) {
       toast().error(getErrorMessage(err, 'Unable to upload files'));
     } finally {
@@ -242,6 +273,31 @@ export function CaseFilesPanel({
     }
   }
 
+  async function handleAttachLink(event: FormEvent) {
+    event.preventDefault();
+    if (!linkUrl.trim()) {
+      toast().warning('Enter a viewer URL');
+      return;
+    }
+    setLinkBusy(true);
+    try {
+      onUpdated(
+        await attachCaseViewerLink(caseId, {
+          url: linkUrl.trim(),
+          label: linkLabel.trim() || undefined,
+          note: note.trim() || undefined,
+        }),
+      );
+      setLinkUrl('');
+      setLinkLabel('');
+      toast().success('Viewer link attached');
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to attach viewer link'));
+    } finally {
+      setLinkBusy(false);
+    }
+  }
+
   async function handleDownloadAll() {
     setDownloadingAll(true);
     try {
@@ -264,7 +320,8 @@ export function CaseFilesPanel({
         <div>
           <h2 className="text-sm font-semibold text-ink">Patient files</h2>
           <p className="mt-0.5 text-sm text-muted">
-            Unused files move to cold storage after the hot window. Restore before downloading again.
+            ZIP/RAR/7Z archives auto-extract; STL members become scan files. Also attach HTML viewer
+            links. Unused files move to cold storage after the hot window.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -333,62 +390,100 @@ export function CaseFilesPanel({
       </div>
 
       {showUpload && canUpload ? (
-        <form
-          onSubmit={handleUpload}
-          className="space-y-3 border-b border-line bg-surface/30 px-4 py-4"
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            accept=".stl,.obj,.ply,.dcm,.dicom,image/*,.pdf,.zip,video/*,.mp4,.mov,.webm,.html,.htm"
-            onChange={(e) => onPick(e.target.files)}
-            className="block w-full text-sm text-ink file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
-          />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-ink">Category (optional)</span>
-              <select
-                value={category}
-                onChange={(e) => setCategory((e.target.value || '') as FileCategory | '')}
-                className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
-              >
-                <option value="">Auto-detect</option>
-                {ALL_FILE_CATEGORIES.filter((c) => c !== FILE_CATEGORIES.OTHER).map((value) => (
-                  <option key={value} value={value}>
-                    {FILE_CATEGORY_LABELS[value]}
+        <div className="space-y-4 border-b border-line bg-surface/30 px-4 py-4">
+          <form onSubmit={handleUpload} className="space-y-3">
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              accept={UPLOAD_ACCEPT}
+              onChange={(e) => onPick(e.target.files)}
+              className="block w-full text-sm text-ink file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
+            />
+            <p className="text-xs text-muted">
+              Supported: STL, OBJ, PLY, DICOM, images, OPG/CBCT (named), PDF, videos, ZIP/RAR/7Z,
+              HTML, office docs.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-ink">Category (optional)</span>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory((e.target.value || '') as FileCategory | '')}
+                  className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+                >
+                  <option value="">Auto-detect</option>
+                  {ALL_FILE_CATEGORIES.filter(
+                    (c) => c !== FILE_CATEGORIES.OTHER && c !== FILE_CATEGORIES.ARCHIVE,
+                  ).map((value) => (
+                    <option key={value} value={value}>
+                      {FILE_CATEGORY_LABELS[value]}
+                    </option>
+                  ))}
+                  <option value={FILE_CATEGORIES.OTHER}>
+                    {FILE_CATEGORY_LABELS[FILE_CATEGORIES.OTHER]}
                   </option>
+                </select>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-ink">Note (optional)</span>
+                <input
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="e.g. Upper arch STL"
+                  className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+                />
+              </label>
+            </div>
+            {selected.length > 0 ? (
+              <ul className="space-y-1 text-xs text-muted">
+                {selected.map((file) => (
+                  <li key={`${file.name}-${file.size}`}>
+                    {file.name} · {formatBytes(file.size)}
+                    {/\.(zip|rar|7z)$/i.test(file.name) ? ' · will auto-extract' : ''}
+                  </li>
                 ))}
-                <option value={FILE_CATEGORIES.OTHER}>
-                  {FILE_CATEGORY_LABELS[FILE_CATEGORIES.OTHER]}
-                </option>
-              </select>
-            </label>
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-ink">Note (optional)</span>
-              <input
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="e.g. Upper arch STL"
-                className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
-              />
-            </label>
-          </div>
-          {selected.length > 0 ? (
-            <ul className="space-y-1 text-xs text-muted">
-              {selected.map((file) => (
-                <li key={`${file.name}-${file.size}`}>
-                  {file.name} · {formatBytes(file.size)}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <div className="max-w-xs">
-            <AuthButton loading={uploading} disabled={selected.length === 0}>
-              Upload files
-            </AuthButton>
-          </div>
-        </form>
+              </ul>
+            ) : null}
+            <div className="max-w-xs">
+              <AuthButton loading={uploading} disabled={selected.length === 0}>
+                Upload files
+              </AuthButton>
+            </div>
+          </form>
+
+          <form
+            onSubmit={handleAttachLink}
+            className="space-y-3 border-t border-dashed border-line pt-4"
+          >
+            <h3 className="text-sm font-semibold text-ink">HTML viewer link</h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block space-y-1.5 sm:col-span-2">
+                <span className="text-sm font-medium text-ink">URL</span>
+                <input
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://viewer.example.com/case/…"
+                  className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-ink">Label (optional)</span>
+                <input
+                  value={linkLabel}
+                  onChange={(e) => setLinkLabel(e.target.value)}
+                  placeholder="3D viewer"
+                  className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+                />
+              </label>
+            </div>
+            <div className="max-w-xs">
+              <AuthButton type="submit" loading={linkBusy} disabled={!linkUrl.trim()}>
+                Attach link
+              </AuthButton>
+            </div>
+          </form>
+        </div>
       ) : null}
 
       <div className="p-4">
@@ -476,6 +571,16 @@ export function CaseFilesPanel({
                             <StorageBadge tier={latest.storageTier ?? FILE_STORAGE_TIERS.HOT} />
                           </div>
                           {latest.note ? <p className="text-xs text-muted">{latest.note}</p> : null}
+                          {latest.extractedFrom ? (
+                            <p className="text-xs text-brand-700">
+                              Extracted from {latest.extractedFrom}
+                            </p>
+                          ) : null}
+                          {latest.viewUrl ? (
+                            <p className="truncate text-xs text-muted" title={latest.viewUrl}>
+                              {latest.viewUrl}
+                            </p>
+                          ) : null}
                           <p className="text-xs text-muted">v{latest.version} (latest)</p>
                         </td>
                         <td className="px-2 py-2.5 text-muted">

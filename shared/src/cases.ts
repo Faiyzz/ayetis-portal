@@ -115,11 +115,14 @@ export const CASE_PRIORITY_LABELS: Record<CasePriority, string> = {
 export const FILE_CATEGORIES = {
   STL: 'stl',
   SCAN: 'scan',
+  DICOM: 'dicom',
   PHOTO: 'photo',
   XRAY: 'xray',
   PDF: 'pdf',
   VIDEO: 'video',
   MODEL: 'model',
+  HTML_LINK: 'html_link',
+  ARCHIVE: 'archive',
   OTHER: 'other',
 } as const;
 
@@ -130,13 +133,19 @@ export const ALL_FILE_CATEGORIES: FileCategory[] = Object.values(FILE_CATEGORIES
 export const FILE_CATEGORY_LABELS: Record<FileCategory, string> = {
   [FILE_CATEGORIES.STL]: 'STL',
   [FILE_CATEGORIES.SCAN]: 'Scan',
+  [FILE_CATEGORIES.DICOM]: 'DICOM',
   [FILE_CATEGORIES.PHOTO]: 'Photo',
-  [FILE_CATEGORIES.XRAY]: 'X-ray',
+  [FILE_CATEGORIES.XRAY]: 'X-ray / OPG / CBCT',
   [FILE_CATEGORIES.PDF]: 'PDF',
   [FILE_CATEGORIES.VIDEO]: 'Video',
   [FILE_CATEGORIES.MODEL]: '3D model',
+  [FILE_CATEGORIES.HTML_LINK]: 'HTML viewer link',
+  [FILE_CATEGORIES.ARCHIVE]: 'Archive',
   [FILE_CATEGORIES.OTHER]: 'Other',
 };
+
+/** Archive formats that are auto-extracted on upload (URD §7.1). */
+export const ARCHIVE_UPLOAD_EXTENSIONS = ['.zip', '.rar', '.7z'] as const;
 
 /** Extensions accepted for case file uploads (plus image/* and video/* mime families). */
 export const ALLOWED_UPLOAD_EXTENSIONS = [
@@ -156,18 +165,89 @@ export const ALLOWED_UPLOAD_EXTENSIONS = [
   '.tiff',
   '.pdf',
   '.zip',
+  '.rar',
+  '.7z',
   '.mp4',
   '.mov',
   '.webm',
   '.avi',
   '.mkv',
+  '.wmv',
   '.html',
   '.htm',
+  '.txt',
+  '.csv',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
 ] as const;
 
+export function getFilenameExtension(filename: string): string {
+  const lower = filename.toLowerCase().trim();
+  const idx = lower.lastIndexOf('.');
+  if (idx < 0) return '';
+  return lower.slice(idx);
+}
+
+export function isArchiveFilename(filename: string): boolean {
+  const ext = getFilenameExtension(filename);
+  return (ARCHIVE_UPLOAD_EXTENSIONS as readonly string[]).includes(ext);
+}
+
 export function isAllowedUploadFilename(filename: string): boolean {
-  const lower = filename.toLowerCase();
-  return ALLOWED_UPLOAD_EXTENSIONS.some((ext) => lower.endsWith(ext));
+  const ext = getFilenameExtension(filename);
+  return (ALLOWED_UPLOAD_EXTENSIONS as readonly string[]).includes(ext);
+}
+
+/**
+ * URD: STL files extracted from archives are digital scan files.
+ * Standalone STL uploads keep the STL category for clarity.
+ */
+export function classifyUploadFile(
+  originalName: string,
+  mimeType = '',
+  options: { fromArchive?: boolean; explicit?: string } = {},
+): FileCategory {
+  if (options.explicit && isFileCategory(options.explicit)) {
+    return options.explicit;
+  }
+
+  const lower = originalName.toLowerCase();
+  const mime = mimeType.toLowerCase();
+
+  if (lower.endsWith('.stl') || mime.includes('stl') || mime.includes('sla')) {
+    return options.fromArchive ? FILE_CATEGORIES.SCAN : FILE_CATEGORIES.STL;
+  }
+  if (lower.endsWith('.dcm') || lower.endsWith('.dicom') || mime.includes('dicom')) {
+    return FILE_CATEGORIES.DICOM;
+  }
+  if (lower.endsWith('.obj') || lower.endsWith('.ply') || mime.includes('model')) {
+    return FILE_CATEGORIES.MODEL;
+  }
+  if (lower.endsWith('.pdf') || mime === 'application/pdf') {
+    return FILE_CATEGORIES.PDF;
+  }
+  if (
+    mime.startsWith('video/') ||
+    /\.(mp4|mov|webm|avi|mkv|wmv)$/i.test(lower)
+  ) {
+    return FILE_CATEGORIES.VIDEO;
+  }
+  if (isArchiveFilename(originalName)) {
+    return FILE_CATEGORIES.ARCHIVE;
+  }
+  if (
+    mime.startsWith('image/') ||
+    /\.(jpe?g|png|gif|webp|heic|bmp|tiff?)$/i.test(lower)
+  ) {
+    if (/x[-_]?ray|radiograph|opg|cbct|ceph/i.test(lower)) return FILE_CATEGORIES.XRAY;
+    return FILE_CATEGORIES.PHOTO;
+  }
+  if (/x[-_]?ray|radiograph|opg|cbct|ceph/i.test(lower)) return FILE_CATEGORIES.XRAY;
+  if (lower.includes('scan')) return FILE_CATEGORIES.SCAN;
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) return FILE_CATEGORIES.HTML_LINK;
+  return FILE_CATEGORIES.OTHER;
 }
 
 export const CASE_FIELD_LABELS: Record<string, string> = {
@@ -190,6 +270,10 @@ export interface CaseFileDto {
   sizeBytes: number;
   category: FileCategory;
   storageKey: string;
+  /** Present for HTML viewer link records (no binary payload). */
+  viewUrl: string | null;
+  /** Archive path when this member was extracted from ZIP/RAR/7Z. */
+  extractedFrom: string | null;
   uploadedById: string | null;
   uploadedByName: string;
   version: number;

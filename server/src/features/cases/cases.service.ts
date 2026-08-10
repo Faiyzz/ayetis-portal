@@ -42,7 +42,8 @@ import {
   computeDelayLevel,
   formatHistoryValue,
   isAllowedUploadFilename,
-  isFileCategory,
+  isArchiveFilename,
+  classifyUploadFile,
   labelForMonthKey,
   monthRangeUtc,
   formatDoctorDisplay,
@@ -92,12 +93,14 @@ import {
   type ValidationCheckItem,
 } from '@ayetis/shared';
 import { Types } from 'mongoose';
+import fs from 'fs';
 import { env } from '../../config/env';
 import { AppError } from '../../utils/AppError';
 import { computeSlaDeadline, slaUtilizationPercent as computeSlaUtilization } from '../../utils/businessHours';
 import { Case, type ICase, type IClinicalRemark, type IQcReview } from '../../models/Case';
 import { generateCaseId } from '../../models/CaseCounter';
 import { User } from '../../models/User';
+import { extractArchiveMembers } from '../../services/archiveExtract.service';
 import {
   caseDeliveredTemplate,
   caseEventTemplate,
@@ -530,6 +533,8 @@ async function toDetail(
       sizeBytes: file.sizeBytes,
       category: file.category || FILE_CATEGORIES.OTHER,
       storageKey: file.storageKey || '',
+      viewUrl: file.viewUrl || null,
+      extractedFrom: file.extractedFrom || null,
       uploadedById: file.uploadedById ? String(file.uploadedById) : null,
       uploadedByName: file.uploadedByName,
       version: file.version || 1,
@@ -680,42 +685,53 @@ function valuesEqual(a: unknown, b: unknown): boolean {
   return String(a) === String(b);
 }
 
-function detectCategory(originalName: string, mimeType: string, explicit?: string): FileCategory {
-  if (explicit && isFileCategory(explicit)) return explicit;
+function detectCategory(
+  originalName: string,
+  mimeType: string,
+  explicit?: string,
+  fromArchive = false,
+): FileCategory {
+  return classifyUploadFile(originalName, mimeType, { explicit, fromArchive });
+}
 
-  const lower = originalName.toLowerCase();
-  if (lower.endsWith('.stl') || mimeType.includes('sla') || mimeType.includes('stl')) {
-    return FILE_CATEGORIES.STL;
-  }
-  if (lower.endsWith('.obj') || lower.endsWith('.ply') || mimeType.includes('model')) {
-    return FILE_CATEGORIES.MODEL;
-  }
-  if (lower.endsWith('.pdf') || mimeType === 'application/pdf') {
-    return FILE_CATEGORIES.PDF;
-  }
-  if (
-    mimeType.startsWith('video/') ||
-    /\.(mp4|mov|webm|avi|mkv)$/i.test(lower)
-  ) {
-    return FILE_CATEGORIES.VIDEO;
-  }
-  if (
-    lower.endsWith('.dcm') ||
-    lower.endsWith('.dicom') ||
-    lower.includes('scan') ||
-    mimeType.includes('dicom')
-  ) {
-    return FILE_CATEGORIES.SCAN;
-  }
-  if (
-    mimeType.startsWith('image/') ||
-    /\.(jpe?g|png|gif|webp|heic|bmp|tiff?)$/i.test(lower)
-  ) {
-    if (/x[-_]?ray|radiograph|opg|cbct/i.test(lower)) return FILE_CATEGORIES.XRAY;
-    return FILE_CATEGORIES.PHOTO;
-  }
-  if (/x[-_]?ray|radiograph|opg|cbct/i.test(lower)) return FILE_CATEGORIES.XRAY;
-  return FILE_CATEGORIES.OTHER;
+function pushCaseFile(
+  caseDoc: ICase,
+  input: {
+    originalName: string;
+    mimeType: string;
+    sizeBytes: number;
+    storageKey: string;
+    category: FileCategory;
+    actor: CaseActor;
+    note?: string;
+    viewUrl?: string;
+    extractedFrom?: string;
+  },
+) {
+  const sameNameCount = caseDoc.files.filter(
+    (existing) => existing.originalName === input.originalName,
+  ).length;
+  const createdAt = new Date();
+  const hot = initialHotFields(createdAt);
+  caseDoc.files.unshift({
+    _id: new Types.ObjectId(),
+    filename: input.originalName.replace(/[^a-zA-Z0-9._-]/g, '_'),
+    originalName: input.originalName,
+    mimeType: input.mimeType || 'application/octet-stream',
+    sizeBytes: input.sizeBytes,
+    category: input.category,
+    storageKey: input.storageKey,
+    viewUrl: input.viewUrl,
+    extractedFrom: input.extractedFrom,
+    uploadedById: new Types.ObjectId(input.actor.id),
+    uploadedByName: actorName(input.actor),
+    version: sameNameCount + 1,
+    note: input.note?.trim() || undefined,
+    createdAt,
+    storageTier: hot.storageTier,
+    restoreStatus: hot.restoreStatus,
+    hotUntil: hot.hotUntil,
+  } as ICase['files'][number]);
 }
 
 export async function listCases(
@@ -1419,13 +1435,64 @@ export async function uploadCaseFiles(
   }
 
   const uploadedNames: string[] = [];
+  const extractedNotes: string[] = [];
 
   for (const file of files) {
-    if (!isAllowedUploadFilename(file.originalname) && !file.mimetype.startsWith('image/') && !file.mimetype.startsWith('video/')) {
+    if (
+      !isAllowedUploadFilename(file.originalname) &&
+      !file.mimetype.startsWith('image/') &&
+      !file.mimetype.startsWith('video/')
+    ) {
       throw new AppError(
-        `Unsupported file type: ${file.originalname}. Allowed: STL, OBJ, images, PDF, video, DICOM, ZIP, HTML.`,
+        `Unsupported file type: ${file.originalname}. Allowed: STL, OBJ, PLY, DICOM, images, OPG/CBCT, PDF, video, ZIP/RAR/7Z, HTML.`,
         400,
       );
+    }
+
+    // URD §7.1: compresssed uploads are extracted; members are stored (not the archive).
+    if (isArchiveFilename(file.originalname)) {
+      if (!file.path) {
+        throw new AppError('Archive upload requires disk-backed temp storage', 400);
+      }
+      const { members, cleanup } = await extractArchiveMembers({
+        archivePath: file.path,
+        originalName: file.originalname,
+      });
+      try {
+        for (const member of members) {
+          const category = detectCategory(
+            member.originalName,
+            member.mimeType,
+            options.category,
+            true,
+          );
+          const { storageKey } = await persistUploadedFile({
+            caseId: caseDoc.caseId,
+            originalName: member.originalName,
+            mimeType: member.mimeType,
+            tempPath: member.tempPath,
+          });
+          pushCaseFile(caseDoc, {
+            originalName: member.originalName,
+            mimeType: member.mimeType,
+            sizeBytes: member.sizeBytes,
+            storageKey,
+            category,
+            actor,
+            note: options.note?.trim() || undefined,
+            extractedFrom: file.originalname,
+          });
+          uploadedNames.push(member.originalName);
+        }
+        extractedNotes.push(
+          `${file.originalname} → ${members.length} file${members.length === 1 ? '' : 's'}`,
+        );
+      } finally {
+        await cleanup();
+        // remove multer temp for the archive itself
+        await fs.promises.unlink(file.path).catch(() => undefined);
+      }
+      continue;
     }
 
     const category = detectCategory(file.originalname, file.mimetype, options.category);
@@ -1437,50 +1504,38 @@ export async function uploadCaseFiles(
       tempPath: file.path,
     });
 
-    const sameNameCount = caseDoc.files.filter(
-      (existing) => existing.originalName === file.originalname,
-    ).length;
-
-    const createdAt = new Date();
-    const hot = initialHotFields(createdAt);
-    caseDoc.files.unshift({
-      _id: new Types.ObjectId(),
-      filename: file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'),
+    pushCaseFile(caseDoc, {
       originalName: file.originalname,
       mimeType: file.mimetype || 'application/octet-stream',
       sizeBytes: file.size,
-      category,
       storageKey,
-      uploadedById: new Types.ObjectId(actor.id),
-      uploadedByName: actorName(actor),
-      version: sameNameCount + 1,
+      category,
+      actor,
       note: options.note?.trim() || undefined,
-      createdAt,
-      storageTier: hot.storageTier,
-      restoreStatus: hot.restoreStatus,
-      hotUntil: hot.hotUntil,
-    } as ICase['files'][number]);
-
+    });
     uploadedNames.push(file.originalname);
   }
 
   pushHistory(caseDoc, {
-    action: 'file_uploaded',
+    action: extractedNotes.length ? 'archive_extracted' : 'file_uploaded',
     summary:
-      uploadedNames.length === 1
-        ? `Uploaded file: ${uploadedNames[0]}`
-        : `Uploaded ${uploadedNames.length} files`,
+      extractedNotes.length > 0
+        ? `Extracted ${extractedNotes.join('; ')}`
+        : uploadedNames.length === 1
+          ? `Uploaded file: ${uploadedNames[0]}`
+          : `Uploaded ${uploadedNames.length} files`,
     actor,
     metadata: {
       files: uploadedNames,
       category: options.category,
+      archives: extractedNotes,
     },
   });
 
   await caseDoc.save();
 
   await recordActivity({
-    action: AUDIT_ACTIONS.CASE_FILE_UPLOAD,
+    action: extractedNotes.length ? AUDIT_ACTIONS.CASE_FILE_EXTRACT : AUDIT_ACTIONS.CASE_FILE_UPLOAD,
     summary: `${actor.email} uploaded ${uploadedNames.length} file(s) to case ${caseDoc.caseId}`,
     actorId: actor.id,
     actorEmail: actor.email,
@@ -1488,7 +1543,69 @@ export async function uploadCaseFiles(
     actorRole: actor.role,
     targetType: 'case',
     targetId: caseDoc.caseId,
-    metadata: { files: uploadedNames },
+    metadata: { files: uploadedNames, archives: extractedNotes },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return await toDetail(caseDoc, actor);
+}
+
+export async function attachCaseViewerLink(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: { url: string; label?: string; note?: string },
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanUploadFiles(actor, caseDoc);
+  if (caseDoc.isDeleted) {
+    throw new AppError('Cannot attach links to a deleted case', 400);
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(input.url.trim());
+  } catch {
+    throw new AppError('Enter a valid absolute URL (https://…)', 400);
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new AppError('Viewer link must use http or https', 400);
+  }
+
+  const label = (input.label?.trim() || parsed.hostname || 'Viewer link').slice(0, 160);
+  const url = parsed.toString();
+
+  pushCaseFile(caseDoc, {
+    originalName: label,
+    mimeType: 'text/uri-list',
+    sizeBytes: 0,
+    storageKey: `link:${new Types.ObjectId().toHexString()}`,
+    category: FILE_CATEGORIES.HTML_LINK,
+    actor,
+    note: input.note?.trim() || undefined,
+    viewUrl: url,
+  });
+
+  pushHistory(caseDoc, {
+    action: 'viewer_link_attached',
+    summary: `Attached viewer link: ${label}`,
+    actor,
+    metadata: { url, label },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_FILE_LINK,
+    summary: `${actor.email} attached viewer link on case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    metadata: { url, label },
     ipAddress: audit?.ipAddress,
     userAgent: audit?.userAgent,
   });
@@ -1512,7 +1629,18 @@ export async function getCaseFileForDownload(
   }
 
   const file = caseDoc.files.find((item) => String(item._id) === fileId);
-  if (!file || !file.storageKey) {
+  if (!file) {
+    throw new AppError('File not found', 404);
+  }
+
+  if (file.category === FILE_CATEGORIES.HTML_LINK || file.viewUrl) {
+    throw new AppError(
+      'This is a viewer link — open the URL instead of downloading',
+      400,
+    );
+  }
+
+  if (!file.storageKey || file.storageKey.startsWith('link:')) {
     throw new AppError('File not found', 404);
   }
 

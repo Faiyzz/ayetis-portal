@@ -308,6 +308,28 @@ export async function uploadFiles(req: AuthenticatedRequest, res: Response, next
   }
 }
 
+export async function attachViewerLink(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.attachCaseViewerLink(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.status(201).json({
+      success: true,
+      data,
+      message: 'Viewer link attached',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function downloadFile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const file = await casesService.getCaseFileForDownload(

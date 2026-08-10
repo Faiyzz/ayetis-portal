@@ -802,9 +802,13 @@ export function CreateCasePage() {
             <input
               type="file"
               multiple
+              accept=".stl,.obj,.ply,.dcm,.dicom,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.pdf,.zip,.rar,.7z,.mp4,.mov,.webm,.avi,.mkv,.wmv,.html,.htm,.txt,.csv,image/*,video/*"
               onChange={(e) => setPendingFiles(Array.from(e.target.files ?? []))}
               className="block w-full text-sm"
             />
+            <p className="text-xs text-muted">
+              Archives (ZIP/RAR/7Z) are extracted after submit; STL members are classified as scans.
+            </p>
             {pendingFiles.length > 0 ? (
               <ul className="space-y-1 text-sm text-muted">
                 {pendingFiles.map((file) => (
