@@ -18,6 +18,7 @@ export const PORTAL_TEMPLATES = {
   ORTHODONTIST: 'orthodontist',
   SUPERVISOR: 'supervisor',
   ANALYTICS: 'analytics',
+  CUT: 'cut',
 } as const;
 
 export type PortalTemplate = (typeof PORTAL_TEMPLATES)[keyof typeof PORTAL_TEMPLATES];
@@ -204,7 +205,7 @@ export const SYSTEM_ROLE_SEEDS: SystemRoleSeed[] = [
   {
     key: EXTRA_SYSTEM_ROLES.CUT_OPERATOR,
     name: 'Cut Operator',
-    portalTemplate: PORTAL_TEMPLATES.DESIGNER,
+    portalTemplate: PORTAL_TEMPLATES.CUT,
     qcScope: QC_SCOPES.NONE,
     sortOrder: 100,
     useTemplateDefaults: true,
@@ -389,6 +390,10 @@ export const DEFAULT_CUT_OPERATOR_PERMISSIONS: Permission[] = [
   PERMISSIONS.USER_UPDATE_OWN,
   PERMISSIONS.USER_CHANGE_PASSWORD,
   PERMISSIONS.CASE_VIEW_ASSIGNED,
-  PERMISSIONS.CASE_DESIGN,
+  PERMISSIONS.CASE_CUT,
+  PERMISSIONS.CASE_CUT_REPORT_VIEW,
   PERMISSIONS.CASE_UPDATE,
+  PERMISSIONS.CLARIFICATION_CREATE,
+  PERMISSIONS.CLARIFICATION_REPLY,
+  PERMISSIONS.CLARIFICATION_RESOLVE,
 ];

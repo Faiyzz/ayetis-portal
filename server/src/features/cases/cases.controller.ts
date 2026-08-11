@@ -652,6 +652,104 @@ export async function qcPerformance(req: AuthenticatedRequest, res: Response, ne
   }
 }
 
+export async function cutDashboard(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.getCutDashboard(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function cutPerformance(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.getCutPerformance(await actor(req), {
+      month: req.query.month ? String(req.query.month) : undefined,
+      view: req.query.view === 'quarter' ? 'quarter' : 'month',
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listCutOperators(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.listCutOperatorAssignees(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function startCutWork(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.startCutWork(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Cut work started' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function saveCutProgress(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.saveCutProgress(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Cut progress saved' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function submitCutWork(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.submitCutWork(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Cut work submitted' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function requestCutRework(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.requestCutRework(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Cut rework requested' });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function downloadDeliveryVideo(
   req: AuthenticatedRequest,
   res: Response,

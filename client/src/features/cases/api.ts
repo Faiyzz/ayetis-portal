@@ -418,5 +418,55 @@ export async function assignCase(
   return data.data;
 }
 
+export async function fetchCutDashboard() {
+  const { data } = await api.get('/cases/dashboard/cut');
+  return data.data as import('@ayetis/shared').CutDashboardDto;
+}
+
+export async function fetchCutPerformance(params?: {
+  month?: string;
+  view?: 'month' | 'quarter';
+}) {
+  const { data } = await api.get('/cases/reports/cut/me', { params });
+  return data.data as import('@ayetis/shared').CutPerformanceDto;
+}
+
+export async function fetchCutOperatorAssignees() {
+  const { data } = await api.get('/cases/assignees/cut-operators');
+  return data.data as import('@ayetis/shared').CutOperatorAssigneeDto[];
+}
+
+export async function startCutWork(
+  caseId: string,
+  payload: import('@ayetis/shared').StartCutInput = {},
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/cut/start`, payload);
+  return data.data;
+}
+
+export async function saveCutProgress(
+  caseId: string,
+  payload: import('@ayetis/shared').SaveCutProgressInput = {},
+): Promise<CaseDetailDto> {
+  const { data } = await api.patch(`/cases/${caseId}/cut/progress`, payload);
+  return data.data;
+}
+
+export async function submitCutWork(
+  caseId: string,
+  payload: import('@ayetis/shared').SubmitCutInput = {},
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/cut/submit`, payload);
+  return data.data;
+}
+
+export async function requestCutRework(
+  caseId: string,
+  payload: import('@ayetis/shared').RequestCutReworkInput,
+): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/cut/rework`, payload);
+  return data.data;
+}
+
 export { CASE_PRIORITY_LABELS, formatHistoryValue };
 export type { CasePriority };

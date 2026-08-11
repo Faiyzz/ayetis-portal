@@ -123,6 +123,7 @@ export const FILE_CATEGORIES = {
   MODEL: 'model',
   HTML_LINK: 'html_link',
   ARCHIVE: 'archive',
+  CUT: 'cut',
   OTHER: 'other',
 } as const;
 
@@ -141,6 +142,7 @@ export const FILE_CATEGORY_LABELS: Record<FileCategory, string> = {
   [FILE_CATEGORIES.MODEL]: '3D model',
   [FILE_CATEGORIES.HTML_LINK]: 'HTML viewer link',
   [FILE_CATEGORIES.ARCHIVE]: 'Archive',
+  [FILE_CATEGORIES.CUT]: 'Cut output',
   [FILE_CATEGORIES.OTHER]: 'Other',
 };
 
@@ -343,6 +345,12 @@ export interface CaseListItemDto {
   assignedDesignerId: string | null;
   assignedDesignerName: string | null;
   assignmentMode: AssignmentMode;
+  cutRequired: boolean;
+  cutPhase: import('./cut').CutPhase;
+  cutAssignmentMode: import('./cut').CutAssignmentMode;
+  assignedCutOperatorId: string | null;
+  assignedCutOperatorName: string | null;
+  workflowLabel: string;
   validatedAt: string | null;
   consultantIndicator: ConsultantIndicator | null;
   queue: CoordinatorQueue | null;
@@ -378,6 +386,17 @@ export interface CaseDetailDto extends CaseListItemDto {
   submittedToQcAt: string | null;
   submittedToQcByName: string | null;
   productionNotes: string;
+  cutRequired: boolean;
+  cutPhase: import('./cut').CutPhase;
+  cutAssignmentMode: import('./cut').CutAssignmentMode;
+  assignedCutOperatorId: string | null;
+  assignedCutOperatorName: string | null;
+  cutStartedAt: string | null;
+  cutSubmittedAt: string | null;
+  cutCompletedAt: string | null;
+  cutNotes: string;
+  cutInternalComments: Array<{ id: string; body: string; authorName: string; createdAt: string }>;
+  cutRevisions: import('./cut').CutRevisionDto[];
   qcRejectionCount: number;
   escalatedForOversight: boolean;
   escalatedAt: string | null;

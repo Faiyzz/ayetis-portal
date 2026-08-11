@@ -12,6 +12,7 @@ export * from './treatment';
 export * from './commercial';
 export * from './cancellations';
 export * from './settings';
+export * from './cut';
 export * from './geo';
 export * from './clarifications';
 export * from './notifications';

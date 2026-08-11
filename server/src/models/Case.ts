@@ -6,6 +6,8 @@ import {
   ALL_CASE_STATUSES,
   ALL_CASE_TYPES,
   ALL_CONSULTANT_INDICATORS,
+  ALL_CUT_ASSIGNMENT_MODES,
+  ALL_CUT_PHASES,
   ALL_DOCTOR_DECISIONS,
   ALL_FILE_CATEGORIES,
   ALL_PAYMENT_STATUSES,
@@ -17,6 +19,8 @@ import {
   CASE_STATUSES,
   CASE_CATEGORIES,
   CASE_TYPES,
+  CUT_ASSIGNMENT_MODES,
+  CUT_PHASES,
   EMPTY_CASE_COMMERCIAL,
   EMPTY_CLINICAL_PREFERENCES,
   EMPTY_OCCLUSION_GOALS,
@@ -189,6 +193,33 @@ export interface ICase extends Document {
   assignedDesignerName?: string;
   assignedConsultantId?: Types.ObjectId;
   assignedConsultantName?: string;
+  cutRequired: boolean;
+  cutPhase: import('@ayetis/shared').CutPhase;
+  cutAssignmentMode: import('@ayetis/shared').CutAssignmentMode;
+  assignedCutOperatorId?: Types.ObjectId;
+  assignedCutOperatorName?: string;
+  cutStartedAt?: Date;
+  cutSubmittedAt?: Date;
+  cutCompletedAt?: Date;
+  cutNotes: string;
+  cutInternalComments: Array<{
+    _id: Types.ObjectId;
+    body: string;
+    authorId: Types.ObjectId;
+    authorName: string;
+    createdAt: Date;
+  }>;
+  cutRevisions: Array<{
+    _id: Types.ObjectId;
+    revision: number;
+    reason: string;
+    comments: string;
+    requestedById: Types.ObjectId;
+    requestedByName: string;
+    requestedByRole: string;
+    requestedAt: Date;
+    completedAt?: Date;
+  }>;
   validatedAt?: Date;
   validatedById?: Types.ObjectId;
   validatedByName?: string;
@@ -475,6 +506,51 @@ const caseSchema = new Schema<ICase>(
     assignedDesignerName: { type: String },
     assignedConsultantId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     assignedConsultantName: { type: String },
+    cutRequired: { type: Boolean, default: false, index: true },
+    cutPhase: {
+      type: String,
+      enum: ALL_CUT_PHASES,
+      default: CUT_PHASES.NONE,
+      index: true,
+    },
+    cutAssignmentMode: {
+      type: String,
+      enum: ALL_CUT_ASSIGNMENT_MODES,
+      default: CUT_ASSIGNMENT_MODES.NONE,
+      index: true,
+    },
+    assignedCutOperatorId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    assignedCutOperatorName: { type: String },
+    cutStartedAt: { type: Date },
+    cutSubmittedAt: { type: Date },
+    cutCompletedAt: { type: Date },
+    cutNotes: { type: String, default: '', trim: true },
+    cutInternalComments: {
+      type: [
+        {
+          body: { type: String, required: true, trim: true },
+          authorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+          authorName: { type: String, required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
+    cutRevisions: {
+      type: [
+        {
+          revision: { type: Number, required: true },
+          reason: { type: String, required: true, trim: true },
+          comments: { type: String, default: '', trim: true },
+          requestedById: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+          requestedByName: { type: String, required: true },
+          requestedByRole: { type: String, required: true },
+          requestedAt: { type: Date, default: Date.now },
+          completedAt: { type: Date },
+        },
+      ],
+      default: [],
+    },
     validatedAt: { type: Date, index: true },
     validatedById: { type: Schema.Types.ObjectId, ref: 'User' },
     validatedByName: { type: String },
@@ -525,6 +601,7 @@ caseSchema.index({ status: 1, submittedToQcAt: -1 });
 caseSchema.index({ escalatedForOversight: 1, updatedAt: -1 });
 caseSchema.index({ assignedConsultantId: 1, updatedAt: -1 });
 caseSchema.index({ consultantIndicator: 1, updatedAt: -1 });
+caseSchema.index({ cutPhase: 1, cutAssignmentMode: 1, assignedCutOperatorId: 1 });
 
 export const Case: Model<ICase> = mongoose.models.Case ?? mongoose.model<ICase>('Case', caseSchema);
 

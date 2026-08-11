@@ -365,8 +365,11 @@ export const validateCaseSchema = z.object({
 
 export const assignCaseSchema = z
   .object({
-    mode: z.enum(['designer', 'auto_queue']),
+    mode: z.enum(['designer', 'auto_queue', 'cut_operator', 'cut_auto_queue']),
     designerId: z.string().trim().min(1).optional(),
+    cutOperatorId: z.string().trim().min(1).optional(),
+    cutRequired: z.boolean().optional(),
+    designerAutoQueueAfterCut: z.boolean().optional(),
     note: z.string().trim().max(1000).optional(),
   })
   .superRefine((value, ctx) => {
@@ -377,7 +380,33 @@ export const assignCaseSchema = z
         path: ['designerId'],
       });
     }
+    if (value.mode === 'cut_operator' && !value.cutOperatorId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'cutOperatorId is required when mode is cut_operator',
+        path: ['cutOperatorId'],
+      });
+    }
   });
+
+export const startCutSchema = z.object({
+  notes: z.string().trim().max(5000).optional(),
+});
+
+export const saveCutProgressSchema = z.object({
+  notes: z.string().trim().max(5000).optional(),
+  comment: z.string().trim().max(5000).optional(),
+});
+
+export const submitCutSchema = z.object({
+  notes: z.string().trim().max(5000).optional(),
+  designerAutoQueue: z.boolean().optional(),
+});
+
+export const requestCutReworkSchema = z.object({
+  reason: z.string().trim().min(1, 'Reason is required').max(500),
+  comments: z.string().trim().min(1, 'Comments are required').max(5000),
+});
 
 export const productionNotesSchema = z.object({
   notes: z.string().trim().max(5000).optional(),

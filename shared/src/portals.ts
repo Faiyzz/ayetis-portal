@@ -323,6 +323,29 @@ export const ROLE_DASHBOARDS: Record<PortalTemplate, RoleDashboardConfig> = {
       },
     ],
   },
+  [PORTAL_TEMPLATES.CUT]: {
+    role: 'cut_operator',
+    title: 'Cut Operator portal',
+    subtitle: 'Claim cut cases, process cutting work, and hand off to designers.',
+    path: '/app/cut',
+    highlights: [
+      'Cut auto-pick and assigned queues',
+      'Upload cut outputs and submit for designer assignment',
+      'Personal monthly and quarterly performance',
+    ],
+    shortcuts: [
+      {
+        label: 'Cut dashboard',
+        description: 'Assigned, queue, in progress, completed',
+        to: '/app/cut',
+      },
+      {
+        label: 'Cases',
+        description: 'Browse your cut cases',
+        to: '/app/cases',
+      },
+    ],
+  },
 };
 
 const ROLE_TO_PORTAL: Record<string, PortalTemplate> = Object.fromEntries(

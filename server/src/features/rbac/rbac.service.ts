@@ -2,6 +2,7 @@ import {
   ALL_PERMISSIONS,
   AUDIT_ACTIONS,
   ROLES,
+  PORTAL_TEMPLATES,
   SYSTEM_ROLE_SEEDS,
   getPermissionCatalog,
   getPermissionsForRole,
@@ -88,6 +89,9 @@ function assertNoOverlap(grants: Permission[], denies: Permission[]): void {
 function roleDefaults(key: string, portalTemplate: PortalTemplate): Permission[] {
   const fromKey = getPermissionsForRole(key);
   if (fromKey.length > 0) return [...fromKey];
+  if (portalTemplate === PORTAL_TEMPLATES.CUT) {
+    return [...getPermissionsForRole('cut_operator')];
+  }
   return [...getPermissionsForRole(portalTemplate)];
 }
 

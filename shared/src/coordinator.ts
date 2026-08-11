@@ -139,8 +139,12 @@ export interface ValidateCaseInput {
 }
 
 export interface AssignCaseInput {
-  mode: 'designer' | 'auto_queue';
+  mode: 'designer' | 'auto_queue' | 'cut_operator' | 'cut_auto_queue';
   designerId?: string;
+  cutOperatorId?: string;
+  cutRequired?: boolean;
+  /** After cut completes, hand designer to auto queue (default true when cut path). */
+  designerAutoQueueAfterCut?: boolean;
   note?: string;
 }
 

@@ -2,7 +2,10 @@ import {
   ASSIGNMENT_MODE_LABELS,
   CASE_PRIORITY_LABELS,
   CASE_STATUS_LABELS,
+  CUT_ASSIGNMENT_MODE_LABELS,
+  CUT_PHASES,
   type CaseDetailDto,
+  type CutOperatorAssigneeDto,
   type DesignerAssigneeDto,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -10,6 +13,7 @@ import { Link } from 'react-router-dom';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import {
   assignCase,
+  fetchCutOperatorAssignees,
   fetchDesignerAssignees,
   markCaseValidated,
   startCaseValidation,
@@ -33,8 +37,13 @@ export function CaseValidationAssignPanel({
   onOpenClarifications: () => void;
 }) {
   const [designers, setDesigners] = useState<DesignerAssigneeDto[]>([]);
+  const [cutOperators, setCutOperators] = useState<CutOperatorAssigneeDto[]>([]);
   const [designerId, setDesignerId] = useState('');
-  const [assignMode, setAssignMode] = useState<'designer' | 'auto_queue'>('designer');
+  const [cutOperatorId, setCutOperatorId] = useState('');
+  const [cutRequired, setCutRequired] = useState(false);
+  const [assignMode, setAssignMode] = useState<
+    'designer' | 'auto_queue' | 'cut_operator' | 'cut_auto_queue'
+  >('designer');
   const [force, setForce] = useState(false);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -44,12 +53,21 @@ export function CaseValidationAssignPanel({
     void fetchDesignerAssignees()
       .then(setDesigners)
       .catch(() => setDesigners([]));
+    void fetchCutOperatorAssignees()
+      .then(setCutOperators)
+      .catch(() => setCutOperators([]));
   }, [canAssign]);
+
+  useEffect(() => {
+    setCutRequired(caseData.cutRequired);
+  }, [caseData.caseId, caseData.cutRequired]);
 
   if (!canValidate && !canAssign) return null;
 
   const validation = caseData.validation;
   const isWaiting = caseData.status === 'in_process';
+  const waitingForDesigner = caseData.cutPhase === CUT_PHASES.WAITING_FOR_DESIGNER;
+  const showDesignerAssign = !cutRequired || waitingForDesigner;
 
   async function handleStart() {
     setBusy('start');
@@ -91,12 +109,18 @@ export function CaseValidationAssignPanel({
         await assignCase(caseData.caseId, {
           mode: assignMode,
           designerId: assignMode === 'designer' ? designerId : undefined,
+          cutOperatorId: assignMode === 'cut_operator' ? cutOperatorId : undefined,
+          cutRequired: cutRequired || undefined,
         }),
       );
       toast().success(
         assignMode === 'auto_queue'
           ? 'Sent to auto case-pick queue'
-          : 'Assigned to designer',
+          : assignMode === 'cut_auto_queue'
+            ? 'Sent to cut auto queue'
+            : assignMode === 'cut_operator'
+              ? 'Assigned to cut operator'
+              : 'Assigned to designer',
       );
     } catch (err) {
       toast().error(getErrorMessage(err, 'Unable to assign case'));
@@ -212,33 +236,91 @@ export function CaseValidationAssignPanel({
           <p className="text-sm text-muted">
             Current: {ASSIGNMENT_MODE_LABELS[caseData.assignmentMode]}
             {caseData.assignedDesignerName ? ` · ${caseData.assignedDesignerName}` : ''}
+            {caseData.cutRequired ? (
+              <>
+                {' '}
+                · Cut: {CUT_ASSIGNMENT_MODE_LABELS[caseData.cutAssignmentMode]}
+                {caseData.assignedCutOperatorName ? ` · ${caseData.assignedCutOperatorName}` : ''}
+              </>
+            ) : null}
           </p>
+
+          {waitingForDesigner ? (
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              Cut work is complete. Assign a designer for production.
+            </p>
+          ) : null}
 
           {!caseData.validatedAt ? (
             <p className="text-sm text-muted">Validate the case before assigning.</p>
-          ) : isWaiting ? (
+          ) : isWaiting && !waitingForDesigner ? (
             <p className="text-sm text-muted">Resolve clarifications before assigning.</p>
           ) : (
             <form onSubmit={handleAssign} className="space-y-3">
+              {!waitingForDesigner ? (
+                <label className="flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={cutRequired}
+                    onChange={(e) => {
+                      setCutRequired(e.target.checked);
+                      if (e.target.checked && (assignMode === 'designer' || assignMode === 'auto_queue')) {
+                        setAssignMode('cut_operator');
+                      }
+                      if (!e.target.checked && (assignMode === 'cut_operator' || assignMode === 'cut_auto_queue')) {
+                        setAssignMode('designer');
+                      }
+                    }}
+                  />
+                  Requires cutting before design
+                </label>
+              ) : null}
+
               <div className="flex flex-wrap gap-3 text-sm">
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="assignMode"
-                    checked={assignMode === 'designer'}
-                    onChange={() => setAssignMode('designer')}
-                  />
-                  Specific designer
-                </label>
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="assignMode"
-                    checked={assignMode === 'auto_queue'}
-                    onChange={() => setAssignMode('auto_queue')}
-                  />
-                  Auto case-pick queue
-                </label>
+                {showDesignerAssign ? (
+                  <>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="assignMode"
+                        checked={assignMode === 'designer'}
+                        onChange={() => setAssignMode('designer')}
+                      />
+                      Specific designer
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="assignMode"
+                        checked={assignMode === 'auto_queue'}
+                        onChange={() => setAssignMode('auto_queue')}
+                      />
+                      Designer auto case-pick queue
+                    </label>
+                  </>
+                ) : null}
+                {cutRequired && !waitingForDesigner ? (
+                  <>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="assignMode"
+                        checked={assignMode === 'cut_operator'}
+                        onChange={() => setAssignMode('cut_operator')}
+                      />
+                      Specific cut operator
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="assignMode"
+                        checked={assignMode === 'cut_auto_queue'}
+                        onChange={() => setAssignMode('cut_auto_queue')}
+                      />
+                      Cut auto case-pick queue
+                    </label>
+                  </>
+                ) : null}
               </div>
 
               {assignMode === 'designer' ? (
@@ -260,12 +342,40 @@ export function CaseValidationAssignPanel({
                 </label>
               ) : null}
 
+              {assignMode === 'cut_operator' ? (
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-ink">Cut operator</span>
+                  <select
+                    required
+                    value={cutOperatorId}
+                    onChange={(e) => setCutOperatorId(e.target.value)}
+                    className="w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+                  >
+                    <option value="">Select cut operator…</option>
+                    {cutOperators.map((operator) => (
+                      <option key={operator.id} value={operator.id}>
+                        {operator.firstName} {operator.lastName} ({operator.email})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
               <div className="max-w-xs">
                 <AuthButton
                   loading={busy === 'assign'}
-                  disabled={assignMode === 'designer' && !designerId}
+                  disabled={
+                    (assignMode === 'designer' && !designerId) ||
+                    (assignMode === 'cut_operator' && !cutOperatorId)
+                  }
                 >
-                  {assignMode === 'auto_queue' ? 'Send to auto queue' : 'Assign designer'}
+                  {assignMode === 'auto_queue'
+                    ? 'Send to designer auto queue'
+                    : assignMode === 'cut_auto_queue'
+                      ? 'Send to cut auto queue'
+                      : assignMode === 'cut_operator'
+                        ? 'Assign cut operator'
+                        : 'Assign designer'}
                 </AuthButton>
               </div>
             </form>

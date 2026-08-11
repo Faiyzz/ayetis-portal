@@ -22,6 +22,10 @@ import {
   qcCommentSchema,
   qcRejectSchema,
   reasonSchema,
+  requestCutReworkSchema,
+  saveCutProgressSchema,
+  startCutSchema,
+  submitCutSchema,
   setPrioritySchema,
   treatmentInstructionsBodySchema,
   updateCaseSchema,
@@ -43,6 +47,7 @@ router.get(
     PERMISSIONS.CASE_VIEW_ASSIGNED,
     PERMISSIONS.CASE_QC_REVIEW,
     PERMISSIONS.CASE_CONSULT,
+    PERMISSIONS.CASE_CUT,
   ),
   validate(listCasesQuerySchema, 'query'),
   casesController.listCases,
@@ -72,6 +77,12 @@ router.get(
 );
 
 router.get(
+  '/dashboard/cut',
+  requirePermission(PERMISSIONS.CASE_CUT),
+  casesController.cutDashboard,
+);
+
+router.get(
   '/dashboard/escalated',
   requireAnyPermission(
     PERMISSIONS.CASE_VIEW_ALL,
@@ -93,6 +104,13 @@ router.get(
   requirePermission(PERMISSIONS.CASE_QC_REVIEW),
   validate(performanceQuerySchema, 'query'),
   casesController.qcPerformance,
+);
+
+router.get(
+  '/reports/cut/me',
+  requirePermission(PERMISSIONS.CASE_CUT_REPORT_VIEW),
+  validate(performanceQuerySchema, 'query'),
+  casesController.cutPerformance,
 );
 
 router.get(
@@ -121,6 +139,12 @@ router.get(
 );
 
 router.get(
+  '/assignees/cut-operators',
+  requirePermission(PERMISSIONS.CASE_ASSIGN),
+  casesController.listCutOperators,
+);
+
+router.get(
   '/assignees/doctors',
   requirePermission(PERMISSIONS.CASE_CREATE),
   casesController.listDoctors,
@@ -134,8 +158,37 @@ router.get(
     PERMISSIONS.CASE_VIEW_ASSIGNED,
     PERMISSIONS.CASE_QC_REVIEW,
     PERMISSIONS.CASE_CONSULT,
+    PERMISSIONS.CASE_CUT,
   ),
   casesController.getCase,
+);
+
+router.post(
+  '/:caseId/cut/start',
+  requirePermission(PERMISSIONS.CASE_CUT),
+  validate(startCutSchema),
+  casesController.startCutWork,
+);
+
+router.patch(
+  '/:caseId/cut/progress',
+  requirePermission(PERMISSIONS.CASE_CUT),
+  validate(saveCutProgressSchema),
+  casesController.saveCutProgress,
+);
+
+router.post(
+  '/:caseId/cut/submit',
+  requirePermission(PERMISSIONS.CASE_CUT),
+  validate(submitCutSchema),
+  casesController.submitCutWork,
+);
+
+router.post(
+  '/:caseId/cut/rework',
+  requirePermission(PERMISSIONS.CASE_CUT_REWORK_REQUEST),
+  validate(requestCutReworkSchema),
+  casesController.requestCutRework,
 );
 
 router.patch(

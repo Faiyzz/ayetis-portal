@@ -31,6 +31,8 @@ import { CaseHistoryPanel } from '@/features/cases/components/CaseHistoryPanel';
 import { CasePaymentPanel } from '@/features/cases/components/CasePaymentPanel';
 import { ClarificationsPanel } from '@/features/cases/components/ClarificationsPanel';
 import { ClinicalRemarksPanel } from '@/features/cases/components/ClinicalRemarksPanel';
+import { CutReworkPanel } from '@/features/cases/components/CutReworkPanel';
+import { CutWorkPanel } from '@/features/cases/components/CutWorkPanel';
 import { DesignerProductionPanel } from '@/features/cases/components/DesignerProductionPanel';
 import { DetailSection } from '@/features/cases/components/DetailSection';
 import { DoctorDeliveryPanel } from '@/features/cases/components/DoctorDeliveryPanel';
@@ -118,6 +120,8 @@ export function CaseDetailPage() {
   const canValidateOrAssign =
     can(PERMISSIONS.CASE_VALIDATE) || can(PERMISSIONS.CASE_ASSIGN);
   const canDesign = can(PERMISSIONS.CASE_DESIGN);
+  const canCut = can(PERMISSIONS.CASE_CUT);
+  const canCutRework = can(PERMISSIONS.CASE_CUT_REWORK_REQUEST);
   const canQc = can(PERMISSIONS.CASE_QC_REVIEW);
   const canConsult = can(PERMISSIONS.CASE_CONSULT);
   const deliveryLocked = Boolean(caseData && isCaseDeliveryLocked(caseData.status));
@@ -161,7 +165,7 @@ export function CaseDetailPage() {
   const showWorkTab = Boolean(
     caseData &&
       !caseData.isDeleted &&
-      ((!deliveryLocked && (canDesign || canQc || canConsult)) ||
+      ((!deliveryLocked && (canDesign || canCut || canQc || canConsult || canCutRework)) ||
         showDoctorDelivery ||
         showDeliveryPackage),
   );
@@ -170,16 +174,19 @@ export function CaseDetailPage() {
     if (deliveryLocked) return 'Delivery';
     const kinds = [
       canDesign ? 'design' : null,
+      canCut ? 'cut' : null,
       canQc ? 'qc' : null,
       canConsult ? 'consult' : null,
+      canCutRework ? 'cut_rework' : null,
       showDoctorDelivery || showDeliveryPackage ? 'delivery' : null,
     ].filter(Boolean);
     if (kinds.length === 1 && kinds[0] === 'qc') return 'QC review';
     if (kinds.length === 1 && kinds[0] === 'design') return 'Designer work';
+    if (kinds.length === 1 && kinds[0] === 'cut') return 'Cut work';
     if (kinds.length === 1 && kinds[0] === 'consult') return 'Consultation';
     if (kinds.length === 1 && kinds[0] === 'delivery') return 'Delivery';
     return 'Work';
-  }, [canDesign, canQc, canConsult, showDoctorDelivery, showDeliveryPackage, deliveryLocked]);
+  }, [canDesign, canCut, canQc, canConsult, canCutRework, showDoctorDelivery, showDeliveryPackage, deliveryLocked]);
 
   const sections = useMemo(() => {
     if (!caseData) return [];
@@ -192,8 +199,10 @@ export function CaseDetailPage() {
     const options: { id: string; label: string }[] = [];
     if (!deliveryLocked) {
       if (canDesign) options.push({ id: 'design', label: 'Designer workspace' });
+      if (canCut) options.push({ id: 'cut', label: 'Cut workspace' });
       if (canQc) options.push({ id: 'qc', label: 'QC review' });
       if (canConsult) options.push({ id: 'consult', label: 'Consultation' });
+      if (canCutRework) options.push({ id: 'cut_rework', label: 'Cut rework' });
     }
     if (showDoctorDelivery || showDeliveryPackage) {
       options.push({ id: 'delivery', label: 'Delivery' });
@@ -201,8 +210,10 @@ export function CaseDetailPage() {
     return options;
   }, [
     canDesign,
+    canCut,
     canQc,
     canConsult,
+    canCutRework,
     showDoctorDelivery,
     showDeliveryPackage,
     deliveryLocked,
@@ -444,6 +455,18 @@ export function CaseDetailPage() {
           onUpdated={setCaseData}
           onOpenClarifications={openClarifications}
         />
+      ) : null}
+
+      {resolvedWorkFocus === 'cut' && canCut && !caseData.isDeleted ? (
+        <CutWorkPanel
+          caseData={caseData}
+          onUpdated={setCaseData}
+          onOpenFiles={() => setActiveSection('files')}
+        />
+      ) : null}
+
+      {resolvedWorkFocus === 'cut_rework' && canCutRework && !caseData.isDeleted ? (
+        <CutReworkPanel caseData={caseData} onUpdated={setCaseData} />
       ) : null}
 
       {resolvedWorkFocus === 'qc' && canQc && !caseData.isDeleted ? (

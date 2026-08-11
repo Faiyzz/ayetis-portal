@@ -1,6 +1,8 @@
 import {
   getDashboardConfig,
   getDashboardPath,
+  PORTAL_TEMPLATES,
+  resolvePortalTemplate,
   ROLES,
   type Role,
   type RoleDashboardConfig,
@@ -12,6 +14,7 @@ import { AdminDashboard } from '@/portals/AdminDashboard';
 import { AnalyticsDashboard } from '@/portals/AnalyticsDashboard';
 import { ConsultantDashboard } from '@/portals/ConsultantDashboard';
 import { CoordinatorDashboard } from '@/portals/CoordinatorDashboard';
+import { CutOperatorDashboard } from '@/portals/CutOperatorDashboard';
 import { DesignerDashboard } from '@/portals/DesignerDashboard';
 import { DoctorDashboard } from '@/portals/DoctorDashboard';
 import { QcDashboard } from '@/portals/QcDashboard';
@@ -52,6 +55,10 @@ export function RoleDashboard({ role }: RoleDashboardProps) {
 
   if (role === ROLES.QC) {
     return <QcDashboard firstName={user.firstName} />;
+  }
+
+  if (role === 'cut_operator' || resolvePortalTemplate(role) === PORTAL_TEMPLATES.CUT) {
+    return <CutOperatorDashboard firstName={user.firstName} />;
   }
 
   if (role === ROLES.ORTHODONTIST) {

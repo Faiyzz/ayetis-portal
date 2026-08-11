@@ -37,6 +37,7 @@ import {
   RequireAuth,
   RequirePermission,
 } from '@/portals/AppShell';
+import { CutDashboardRoute } from '@/portals/CutDashboardRoute';
 import { RoleDashboard } from '@/portals/RoleDashboard';
 import { RoleHomeRedirect } from '@/portals/roleRoutes';
 
@@ -64,6 +65,10 @@ export function AppRouter() {
             <Route key={role} path={role} element={<RoleDashboard role={role} />} />
           ))}
 
+          <Route element={<RequirePermission permission={PERMISSIONS.CASE_CUT} />}>
+            <Route path="cut" element={<CutDashboardRoute />} />
+          </Route>
+
           <Route element={<RequirePermission permission={PERMISSIONS.CASE_CREATE} />}>
             <Route path="cases/new" element={<CreateCasePage />} />
             <Route path="pay/:sessionId" element={<PaySessionPage />} />
@@ -78,6 +83,7 @@ export function AppRouter() {
                   PERMISSIONS.CASE_VIEW_ASSIGNED,
                   PERMISSIONS.CASE_QC_REVIEW,
                   PERMISSIONS.CASE_CONSULT,
+                  PERMISSIONS.CASE_CUT,
                   PERMISSIONS.CASE_VIEW_ORG,
                   PERMISSIONS.CASE_VIEW_FACILITY,
                 ]}

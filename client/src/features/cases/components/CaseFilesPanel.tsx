@@ -135,14 +135,16 @@ export function CaseFilesPanel({
   files,
   canUpload,
   onUpdated,
+  defaultUploadCategory,
 }: {
   caseId: string;
   files: CaseFileDto[];
   canUpload: boolean;
   onUpdated: (filesCase: CaseDetailDto) => void;
+  defaultUploadCategory?: FileCategory;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [category, setCategory] = useState<FileCategory | ''>('');
+  const [category, setCategory] = useState<FileCategory | ''>(defaultUploadCategory ?? '');
   const [note, setNote] = useState('');
   const [selected, setSelected] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);

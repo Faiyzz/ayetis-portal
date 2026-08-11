@@ -1,6 +1,10 @@
 export const NOTIFICATION_TYPES = {
   CASE_SUBMITTED: 'case_submitted',
   CASE_ASSIGNED: 'case_assigned',
+  CASE_CUT_ASSIGNED: 'case_cut_assigned',
+  CASE_CUT_CLAIMED: 'case_cut_claimed',
+  CASE_CUT_SUBMITTED: 'case_cut_submitted',
+  CASE_CUT_REWORK: 'case_cut_rework',
   CLARIFICATION_REQUIRED: 'clarification_required',
   CLARIFICATION_REPLIED: 'clarification_replied',
   CLARIFICATION_RESOLVED: 'clarification_resolved',
@@ -22,6 +26,10 @@ export const ALL_NOTIFICATION_TYPES: NotificationType[] = Object.values(NOTIFICA
 export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   [NOTIFICATION_TYPES.CASE_SUBMITTED]: 'New case submitted',
   [NOTIFICATION_TYPES.CASE_ASSIGNED]: 'Case assigned',
+  [NOTIFICATION_TYPES.CASE_CUT_ASSIGNED]: 'Cut case assigned',
+  [NOTIFICATION_TYPES.CASE_CUT_CLAIMED]: 'Cut case claimed',
+  [NOTIFICATION_TYPES.CASE_CUT_SUBMITTED]: 'Cut completed — waiting for designer',
+  [NOTIFICATION_TYPES.CASE_CUT_REWORK]: 'Cut rework requested',
   [NOTIFICATION_TYPES.CLARIFICATION_REQUIRED]: 'Clarification required',
   [NOTIFICATION_TYPES.CLARIFICATION_REPLIED]: 'Clarification reply',
   [NOTIFICATION_TYPES.CLARIFICATION_RESOLVED]: 'Clarification resolved',

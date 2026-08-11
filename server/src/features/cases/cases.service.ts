@@ -7,6 +7,7 @@ import {
   CASE_STATUSES,
   CASE_STATUS_LABELS,
   CASE_CATEGORIES,
+  CLARIFICATION_STATUSES,
   CASE_TYPES,
   CASE_CANCEL_WINDOW_MINUTES,
   DEFAULT_SLA_BUSINESS_HOURS,
@@ -37,8 +38,22 @@ import {
   QC_SCOPES,
   ROLES,
   ASSIGNMENT_QUEUES,
+  CUT_ASSIGNMENT_MODES,
+  CUT_PHASES,
   canQcCase,
+  getCaseWorkflowLabel,
+  type CutAssignmentMode,
+  type CutDashboardDto,
+  type CutOperatorAssigneeDto,
+  type CutPerformanceDto,
+  type CutPhase,
+  type CutQueueCaseDto,
+  type CutRevisionDto,
   type QcScope,
+  type RequestCutReworkInput,
+  type SaveCutProgressInput,
+  type StartCutInput,
+  type SubmitCutInput,
   ALL_COORDINATOR_QUEUES,
   ALL_DELAY_LEVELS,
   ALL_QC_ERROR_CODES,
@@ -372,8 +387,34 @@ async function toListItem(
     isDemo: Boolean(caseDoc.isDemo),
     invoiceId: caseDoc.invoiceId ? String(caseDoc.invoiceId) : null,
     createdAt: caseDoc.createdAt.toISOString(),
+    cutRequired: Boolean(caseDoc.cutRequired),
+    cutPhase: (caseDoc.cutPhase ?? CUT_PHASES.NONE) as CutPhase,
+    cutAssignmentMode: (caseDoc.cutAssignmentMode ??
+      CUT_ASSIGNMENT_MODES.NONE) as CutAssignmentMode,
+    assignedCutOperatorId: caseDoc.assignedCutOperatorId
+      ? String(caseDoc.assignedCutOperatorId)
+      : null,
+    assignedCutOperatorName: caseDoc.assignedCutOperatorName ?? null,
+    workflowLabel: getCaseWorkflowLabel(
+      caseDoc.status,
+      (caseDoc.cutPhase ?? CUT_PHASES.NONE) as CutPhase,
+    ),
     updatedAt: caseDoc.updatedAt.toISOString(),
   };
+}
+
+function mapCutRevisions(caseDoc: ICase): CutRevisionDto[] {
+  return (caseDoc.cutRevisions ?? []).map((revision) => ({
+    id: String(revision._id),
+    revision: revision.revision,
+    reason: revision.reason,
+    comments: revision.comments,
+    requestedById: String(revision.requestedById),
+    requestedByName: revision.requestedByName,
+    requestedByRole: revision.requestedByRole,
+    requestedAt: revision.requestedAt.toISOString(),
+    completedAt: revision.completedAt ? revision.completedAt.toISOString() : null,
+  }));
 }
 
 function mapClinicalRemarks(caseDoc: ICase): ClinicalRemarkDto[] {
@@ -559,8 +600,40 @@ async function toDetail(
     })),
     history: mapHistory(caseDoc),
     timeline: buildCaseTimeline(caseDoc.status),
+    cutStartedAt: caseDoc.cutStartedAt ? caseDoc.cutStartedAt.toISOString() : null,
+    cutSubmittedAt: caseDoc.cutSubmittedAt ? caseDoc.cutSubmittedAt.toISOString() : null,
+    cutCompletedAt: caseDoc.cutCompletedAt ? caseDoc.cutCompletedAt.toISOString() : null,
+    cutNotes: caseDoc.cutNotes || '',
+    cutInternalComments: (caseDoc.cutInternalComments ?? []).map((comment) => ({
+      id: String(comment._id),
+      body: comment.body,
+      authorName: comment.authorName,
+      createdAt: comment.createdAt.toISOString(),
+    })),
+    cutRevisions: mapCutRevisions(caseDoc),
     clarifications,
   };
+}
+
+function actorHasCutAccess(actor: CaseActor): boolean {
+  return (
+    permissionsInclude(actor.permissions, PERMISSIONS.CASE_CUT) ||
+    actor.role === 'cut_operator' ||
+    (actor.roles ?? []).includes('cut_operator')
+  );
+}
+
+function isCutCaseVisibleToOperator(actor: CaseActor, caseDoc: ICase): boolean {
+  if (!actorHasCutAccess(actor) || caseDoc.isDeleted) return false;
+  if (caseDoc.assignedCutOperatorId && String(caseDoc.assignedCutOperatorId) === actor.id) {
+    return true;
+  }
+  return (
+    caseDoc.cutAssignmentMode === CUT_ASSIGNMENT_MODES.AUTO_QUEUE &&
+    !caseDoc.assignedCutOperatorId &&
+    (caseDoc.cutPhase === CUT_PHASES.CUT_QUEUE ||
+      caseDoc.cutPhase === CUT_PHASES.CUT_REWORK)
+  );
 }
 
 function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
@@ -603,6 +676,10 @@ function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
     ) {
       return;
     }
+  }
+
+  if (isCutCaseVisibleToOperator(actor, caseDoc)) {
+    return;
   }
 
   if (
@@ -691,6 +768,19 @@ function buildVisibilityFilter(actor: CaseActor): Record<string, unknown> {
           CASE_STATUSES.IN_PROCESS,
         ],
       },
+      isDeleted: false,
+    });
+  }
+
+  if (actorHasCutAccess(actor)) {
+    clauses.push({ assignedCutOperatorId: new Types.ObjectId(actor.id), isDeleted: false });
+    clauses.push({
+      cutAssignmentMode: CUT_ASSIGNMENT_MODES.AUTO_QUEUE,
+      $or: [
+        { assignedCutOperatorId: { $exists: false } },
+        { assignedCutOperatorId: null },
+      ],
+      cutPhase: { $in: [CUT_PHASES.CUT_QUEUE, CUT_PHASES.CUT_REWORK] },
       isDeleted: false,
     });
   }
@@ -2317,6 +2407,11 @@ export async function startProduction(
     caseDoc.productionNotes = input.notes.trim();
   }
 
+  if (caseDoc.cutPhase === CUT_PHASES.WAITING_FOR_DESIGNER) {
+    caseDoc.cutPhase = CUT_PHASES.CUT_COMPLETE;
+    caseDoc.cutCompletedAt = new Date();
+  }
+
   // If auto-queue and unassigned, claim for this designer when they start.
   if (
     caseDoc.assignmentMode === ASSIGNMENT_MODES.AUTO_QUEUE &&
@@ -3318,11 +3413,27 @@ export async function assignCase(
   if (caseDoc.status === CASE_STATUSES.CANCELLED) {
     throw new AppError('Cannot assign a cancelled case', 400);
   }
-  if (caseDoc.status === CASE_STATUSES.IN_PROCESS) {
-    throw new AppError('Cannot assign while waiting for doctor clarification', 400);
-  }
   if (!caseDoc.validatedAt) {
     throw new AppError('Validate the case before assigning', 400);
+  }
+
+  const openClarifications = await countOpenClarifications(caseDoc._id as Types.ObjectId);
+  if (openClarifications > 0) {
+    throw new AppError('Cannot assign while waiting for doctor clarification', 400);
+  }
+
+  const isDesignerHandoff = caseDoc.cutPhase === CUT_PHASES.WAITING_FOR_DESIGNER;
+  const isCutAssignMode = input.mode === 'cut_operator' || input.mode === 'cut_auto_queue';
+  const allowInProcessAssign =
+    isDesignerHandoff ||
+    isCutAssignMode ||
+    (!caseDoc.assignedDesignerId &&
+      !caseDoc.productionStartedAt &&
+      !caseDoc.cutRequired &&
+      caseDoc.cutPhase === CUT_PHASES.NONE);
+
+  if (caseDoc.status === CASE_STATUSES.IN_PROCESS && !allowInProcessAssign) {
+    throw new AppError('Cannot assign while case is in process', 400);
   }
 
   if (input.mode === 'designer') {
@@ -3335,9 +3446,7 @@ export async function assignCase(
       ...(designer?.roles ?? []),
     ].filter(Boolean) as string[];
     const isDesignerLike =
-      designerRoles.includes(ROLES.DESIGNER) ||
-      designerRoles.includes('senior_designer') ||
-      designerRoles.includes('cut_operator');
+      designerRoles.includes(ROLES.DESIGNER) || designerRoles.includes('senior_designer');
     if (!designer || !designer.isActive || !isDesignerLike) {
       throw new AppError('Active designer not found', 404);
     }
@@ -3371,7 +3480,11 @@ export async function assignCase(
           action: 'assigned',
           summary: `Auto-assigned to ${caseDoc.assignedDesignerName} by rules`,
           actor,
-          metadata: { mode: 'auto_rules', designerId: designer.id, note: input.note?.trim() || undefined },
+          metadata: {
+            mode: 'auto_rules',
+            designerId: designer.id,
+            note: input.note?.trim() || undefined,
+          },
         });
       } else {
         caseDoc.assignmentMode = ASSIGNMENT_MODES.AUTO_QUEUE;
@@ -3398,14 +3511,101 @@ export async function assignCase(
         metadata: { mode: 'auto_queue', note: input.note?.trim() || undefined },
       });
     }
+  } else if (input.mode === 'cut_operator') {
+    if (!input.cutOperatorId) {
+      throw new AppError('cutOperatorId is required when assigning to a cut operator', 400);
+    }
+    const operator = await User.findById(input.cutOperatorId);
+    const operatorRoles = [
+      operator?.primaryRole || operator?.role,
+      ...(operator?.roles ?? []),
+    ].filter(Boolean) as string[];
+    if (
+      !operator ||
+      !operator.isActive ||
+      !operatorRoles.includes('cut_operator')
+    ) {
+      throw new AppError('Active cut operator not found', 404);
+    }
+
+    caseDoc.cutRequired = input.cutRequired !== false;
+    caseDoc.cutPhase = CUT_PHASES.CUT_ASSIGNED;
+    caseDoc.cutAssignmentMode = CUT_ASSIGNMENT_MODES.OPERATOR;
+    caseDoc.assignedCutOperatorId = operator._id as Types.ObjectId;
+    caseDoc.assignedCutOperatorName = `${operator.firstName} ${operator.lastName}`.trim();
+    caseDoc.status = CASE_STATUSES.IN_PROCESS;
+
+    pushHistory(caseDoc, {
+      action: 'cut_assigned',
+      summary: `Assigned to cut operator ${caseDoc.assignedCutOperatorName}`,
+      actor,
+      metadata: {
+        cutOperatorId: operator.id,
+        note: input.note?.trim() || undefined,
+      },
+    });
+  } else if (input.mode === 'cut_auto_queue') {
+    caseDoc.cutRequired = input.cutRequired !== false;
+    caseDoc.cutAssignmentMode = CUT_ASSIGNMENT_MODES.AUTO_QUEUE;
+    caseDoc.status = CASE_STATUSES.IN_PROCESS;
+
+    const { assignCaseByRules } = await import('../rbac/rbac.service');
+    const matchedId = await assignCaseByRules(
+      { country: caseDoc.country || '' },
+      ASSIGNMENT_QUEUES.CUT,
+    );
+
+    if (matchedId) {
+      const operator = await User.findById(matchedId);
+      if (operator) {
+        caseDoc.cutPhase = CUT_PHASES.CUT_ASSIGNED;
+        caseDoc.assignedCutOperatorId = operator._id as Types.ObjectId;
+        caseDoc.assignedCutOperatorName = `${operator.firstName} ${operator.lastName}`.trim();
+        pushHistory(caseDoc, {
+          action: 'cut_assigned',
+          summary: `Cut auto-assigned to ${caseDoc.assignedCutOperatorName} by rules`,
+          actor,
+          metadata: {
+            mode: 'auto_rules',
+            cutOperatorId: operator.id,
+            note: input.note?.trim() || undefined,
+          },
+        });
+      } else {
+        caseDoc.cutPhase = CUT_PHASES.CUT_QUEUE;
+        caseDoc.assignedCutOperatorId = undefined;
+        caseDoc.assignedCutOperatorName = undefined;
+        pushHistory(caseDoc, {
+          action: 'cut_assigned',
+          summary: 'Sent to cut auto case-pick queue',
+          actor,
+          metadata: { mode: 'cut_auto_queue', note: input.note?.trim() || undefined },
+        });
+      }
+    } else {
+      caseDoc.cutPhase = CUT_PHASES.CUT_QUEUE;
+      caseDoc.assignedCutOperatorId = undefined;
+      caseDoc.assignedCutOperatorName = undefined;
+      pushHistory(caseDoc, {
+        action: 'cut_assigned',
+        summary: 'Sent to cut auto case-pick queue',
+        actor,
+        metadata: { mode: 'cut_auto_queue', note: input.note?.trim() || undefined },
+      });
+    }
   } else {
     throw new AppError('Invalid assignment mode', 400);
   }
 
   await caseDoc.save();
 
+  const auditAction =
+    input.mode === 'cut_operator' || input.mode === 'cut_auto_queue'
+      ? AUDIT_ACTIONS.CASE_CUT_ASSIGN
+      : AUDIT_ACTIONS.CASE_ASSIGN;
+
   await recordActivity({
-    action: AUDIT_ACTIONS.CASE_ASSIGN,
+    action: auditAction,
     summary: `${actor.email} assigned case ${caseDoc.caseId} (${input.mode})`,
     actorId: actor.id,
     actorEmail: actor.email,
@@ -3416,6 +3616,7 @@ export async function assignCase(
     metadata: {
       mode: input.mode,
       designerId: input.designerId,
+      cutOperatorId: input.cutOperatorId,
       note: input.note,
     },
     ipAddress: audit?.ipAddress,
@@ -3448,7 +3649,604 @@ export async function assignCase(
       link: `/app/cases/${caseDoc.caseId}`,
       caseId: caseDoc.caseId,
     });
+  } else if (input.mode === 'cut_operator' && caseDoc.assignedCutOperatorId) {
+    const operatorId = String(caseDoc.assignedCutOperatorId);
+    await createNotification({
+      userId: operatorId,
+      type: NOTIFICATION_TYPES.CASE_CUT_ASSIGNED,
+      title: `Cut case assigned: ${caseDoc.caseId}`,
+      body: `${actorName(actor)} assigned ${caseDoc.patientName} for cutting.`,
+      link: `/app/cases/${caseDoc.caseId}`,
+      caseId: caseDoc.caseId,
+    });
+    await emailUsers([operatorId], {
+      subject: `Cut case assigned: ${caseDoc.caseId}`,
+      headline: 'Cut case assigned to you',
+      message: `${actorName(actor)} assigned case ${caseDoc.caseId} (${caseDoc.patientName}) for cutting.`,
+      caseId: caseDoc.caseId,
+      patientName: caseDoc.patientName,
+    });
+  } else if (input.mode === 'cut_auto_queue') {
+    const operatorIds = await findUserIdsByRoles(['cut_operator']);
+    await createNotificationsForUsers(operatorIds, {
+      type: NOTIFICATION_TYPES.CASE_CUT_ASSIGNED,
+      title: `Cut case in pick queue: ${caseDoc.caseId}`,
+      body: `${caseDoc.patientName} is available in the cut auto case-pick queue.`,
+      link: `/app/cases/${caseDoc.caseId}`,
+      caseId: caseDoc.caseId,
+    });
   }
+
+  return await toDetail(caseDoc, actor);
+}
+
+async function toCutQueueCaseDto(caseDoc: ICase): Promise<CutQueueCaseDto> {
+  const openClarificationCount = await countOpenClarifications(caseDoc._id as Types.ObjectId);
+  return {
+    id: caseDoc.id,
+    caseId: caseDoc.caseId,
+    patientName: caseDoc.patientName,
+    doctorName: caseDoc.doctorName,
+    status: caseDoc.status,
+    priority: caseDoc.priority,
+    treatmentSummary: caseDoc.treatmentSummary,
+    cutPhase: (caseDoc.cutPhase ?? CUT_PHASES.NONE) as CutPhase,
+    cutAssignmentMode: (caseDoc.cutAssignmentMode ??
+      CUT_ASSIGNMENT_MODES.NONE) as CutAssignmentMode,
+    assignedCutOperatorName: caseDoc.assignedCutOperatorName ?? null,
+    openClarificationCount,
+    fileCount: caseDoc.files?.length ?? 0,
+    cutStartedAt: caseDoc.cutStartedAt ? caseDoc.cutStartedAt.toISOString() : null,
+    cutSubmittedAt: caseDoc.cutSubmittedAt ? caseDoc.cutSubmittedAt.toISOString() : null,
+    createdAt: caseDoc.createdAt.toISOString(),
+    updatedAt: caseDoc.updatedAt.toISOString(),
+  };
+}
+
+function assertCanCutWork(actor: CaseActor, caseDoc: ICase) {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_CUT)) {
+    throw new AppError('You do not have permission to perform cut work', 403);
+  }
+  assertCanViewCase(actor, caseDoc);
+  if (
+    !caseDoc.assignedCutOperatorId ||
+    String(caseDoc.assignedCutOperatorId) !== actor.id
+  ) {
+    throw new AppError('Only the assigned cut operator can update this case', 403);
+  }
+}
+
+export async function listCutOperatorAssignees(
+  actor: CaseActor,
+): Promise<CutOperatorAssigneeDto[]> {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_ASSIGN)) {
+    throw new AppError('You do not have permission to list cut operators', 403);
+  }
+
+  const operators = await User.find({
+    $or: [{ role: 'cut_operator' }, { roles: 'cut_operator' }, { primaryRole: 'cut_operator' }],
+    isActive: true,
+  }).sort({ firstName: 1, lastName: 1 });
+
+  return operators.map((operator) => ({
+    id: operator.id,
+    firstName: operator.firstName,
+    lastName: operator.lastName,
+    email: operator.email,
+    isActive: operator.isActive,
+  }));
+}
+
+export async function getCutDashboard(actor: CaseActor): Promise<CutDashboardDto> {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_CUT)) {
+    throw new AppError('You do not have permission to view the cut dashboard', 403);
+  }
+
+  const operatorId = new Types.ObjectId(actor.id);
+  const baseFilter = { isDeleted: false, cutRequired: true };
+
+  const [assignedDocs, autoQueueDocs, inProgressDocs, operatorCases] = await Promise.all([
+    Case.find({
+      ...baseFilter,
+      assignedCutOperatorId: operatorId,
+      cutPhase: CUT_PHASES.CUT_ASSIGNED,
+    }).sort({ priority: -1, updatedAt: 1 }),
+    Case.find({
+      ...baseFilter,
+      cutAssignmentMode: CUT_ASSIGNMENT_MODES.AUTO_QUEUE,
+      $or: [{ assignedCutOperatorId: { $exists: false } }, { assignedCutOperatorId: null }],
+      cutPhase: { $in: [CUT_PHASES.CUT_QUEUE, CUT_PHASES.CUT_REWORK] },
+    }).sort({ priority: -1, updatedAt: 1 }),
+    Case.find({
+      ...baseFilter,
+      assignedCutOperatorId: operatorId,
+      cutPhase: CUT_PHASES.CUT_IN_PROGRESS,
+    }).sort({ cutStartedAt: 1, updatedAt: 1 }),
+    Case.find({
+      ...baseFilter,
+      assignedCutOperatorId: operatorId,
+    }).select('_id caseId'),
+  ]);
+
+  const operatorCaseIds = operatorCases.map((doc) => doc._id as Types.ObjectId);
+  let pendingClarificationDocs: ICase[] = [];
+  if (operatorCaseIds.length > 0) {
+    const { Clarification } = await import('../../models/Clarification');
+    const clarificationCaseIds = await Clarification.distinct('caseMongoId', {
+      caseMongoId: { $in: operatorCaseIds },
+      status: {
+        $in: [
+          CLARIFICATION_STATUSES.OPEN,
+          CLARIFICATION_STATUSES.AWAITING_DOCTOR,
+          CLARIFICATION_STATUSES.AWAITING_TEAM,
+        ],
+      },
+    });
+    if (clarificationCaseIds.length > 0) {
+      pendingClarificationDocs = await Case.find({
+        _id: { $in: clarificationCaseIds },
+        assignedCutOperatorId: operatorId,
+        isDeleted: false,
+      }).sort({ updatedAt: -1 });
+    }
+  }
+
+  const completedDocs = await Case.find({
+    ...baseFilter,
+    assignedCutOperatorId: operatorId,
+    cutPhase: { $in: [CUT_PHASES.CUT_COMPLETE, CUT_PHASES.WAITING_FOR_DESIGNER] },
+  }).sort({ cutSubmittedAt: -1, updatedAt: -1 });
+
+  const waitingForDesignerDocs = await Case.find({
+    ...baseFilter,
+    assignedCutOperatorId: operatorId,
+    cutPhase: CUT_PHASES.WAITING_FOR_DESIGNER,
+  }).sort({ cutSubmittedAt: -1, updatedAt: -1 });
+
+  const [
+    assigned,
+    autoQueue,
+    inProgress,
+    pendingClarification,
+    completed,
+    waitingForDesigner,
+  ] = await Promise.all([
+    Promise.all(assignedDocs.map(toCutQueueCaseDto)),
+    Promise.all(autoQueueDocs.map(toCutQueueCaseDto)),
+    Promise.all(inProgressDocs.map(toCutQueueCaseDto)),
+    Promise.all(pendingClarificationDocs.map(toCutQueueCaseDto)),
+    Promise.all(completedDocs.map(toCutQueueCaseDto)),
+    Promise.all(waitingForDesignerDocs.map(toCutQueueCaseDto)),
+  ]);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    assigned,
+    autoQueue,
+    inProgress,
+    pendingClarification,
+    completed,
+    waitingForDesigner,
+    counts: {
+      assigned: assigned.length,
+      autoQueue: autoQueue.length,
+      inProgress: inProgress.length,
+      pendingClarification: pendingClarification.length,
+      completed: completed.length,
+      waitingForDesigner: waitingForDesigner.length,
+    },
+  };
+}
+
+export async function getCutPerformance(
+  actor: CaseActor,
+  query: { month?: string; view?: 'month' | 'quarter' } = {},
+): Promise<CutPerformanceDto> {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_CUT_REPORT_VIEW)) {
+    throw new AppError('You do not have permission to view cut performance', 403);
+  }
+
+  const availableMonths = recentMonthOptions(3);
+  const periodKey =
+    query.month && availableMonths.some((m) => m.key === query.month)
+      ? query.month
+      : availableMonths[0]!.key;
+  const view = query.view === 'quarter' ? 'quarter' : 'month';
+
+  const range =
+    view === 'quarter'
+      ? quarterRangeUtc(periodKey)
+      : { ...monthRangeUtc(periodKey), label: labelForMonthKey(periodKey) };
+  const operatorId = new Types.ObjectId(actor.id);
+
+  const cases = await Case.find({
+    isDeleted: false,
+    assignedCutOperatorId: operatorId,
+    cutRequired: true,
+    $or: [
+      { cutStartedAt: { $gte: range.start, $lt: range.end } },
+      { cutSubmittedAt: { $gte: range.start, $lt: range.end } },
+    ],
+  }).select('cutStartedAt cutSubmittedAt cutPhase');
+
+  let totalAssigned = 0;
+  let totalCompleted = 0;
+  let pending = 0;
+  const completionHours: number[] = [];
+
+  for (const caseDoc of cases) {
+    const startedInPeriod =
+      caseDoc.cutStartedAt &&
+      caseDoc.cutStartedAt >= range.start &&
+      caseDoc.cutStartedAt < range.end;
+    const submittedInPeriod =
+      caseDoc.cutSubmittedAt &&
+      caseDoc.cutSubmittedAt >= range.start &&
+      caseDoc.cutSubmittedAt < range.end;
+
+    if (startedInPeriod) totalAssigned += 1;
+    if (submittedInPeriod) {
+      totalCompleted += 1;
+      if (caseDoc.cutStartedAt && caseDoc.cutSubmittedAt) {
+        completionHours.push(
+          (caseDoc.cutSubmittedAt.getTime() - caseDoc.cutStartedAt.getTime()) / 3_600_000,
+        );
+      }
+    }
+    if (
+      caseDoc.cutPhase === CUT_PHASES.CUT_IN_PROGRESS ||
+      caseDoc.cutPhase === CUT_PHASES.CUT_ASSIGNED ||
+      caseDoc.cutPhase === CUT_PHASES.CUT_REWORK
+    ) {
+      pending += 1;
+    }
+  }
+
+  const { Clarification } = await import('../../models/Clarification');
+  const clarificationsRaised = await Clarification.countDocuments({
+    createdById: operatorId,
+    createdAt: { $gte: range.start, $lt: range.end },
+  });
+
+  const averageCompletionHours =
+    completionHours.length > 0
+      ? Math.round(
+          (completionHours.reduce((sum, value) => sum + value, 0) / completionHours.length) * 10,
+        ) / 10
+      : null;
+
+  return {
+    view,
+    periodKey,
+    periodLabel: range.label,
+    availableMonths,
+    totalAssigned,
+    totalCompleted,
+    averageCompletionHours,
+    pending,
+    clarificationsRaised,
+  };
+}
+
+export async function startCutWork(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: StartCutInput = {},
+  audit?: RequestAuditContext,
+) {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_CUT)) {
+    throw new AppError('You do not have permission to start cut work', 403);
+  }
+
+  const actorObjectId = new Types.ObjectId(actor.id);
+  const idFilter = Types.ObjectId.isValid(caseIdOrMongoId)
+    ? { $or: [{ _id: caseIdOrMongoId }, { caseId: caseIdOrMongoId }] }
+    : { caseId: caseIdOrMongoId };
+  const filter = {
+    $and: [
+      idFilter,
+      { isDeleted: false },
+      { cutRequired: true },
+      {
+        cutPhase: {
+          $in: [CUT_PHASES.CUT_QUEUE, CUT_PHASES.CUT_ASSIGNED, CUT_PHASES.CUT_REWORK],
+        },
+      },
+      {
+        $or: [
+          { assignedCutOperatorId: { $exists: false } },
+          { assignedCutOperatorId: null },
+          { assignedCutOperatorId: actorObjectId },
+        ],
+      },
+    ],
+  };
+
+  const now = new Date();
+  const update: Record<string, unknown> = {
+    assignedCutOperatorId: actorObjectId,
+    assignedCutOperatorName: actorName(actor),
+    cutPhase: CUT_PHASES.CUT_IN_PROGRESS,
+    cutAssignmentMode: CUT_ASSIGNMENT_MODES.OPERATOR,
+    cutStartedAt: now,
+    status: CASE_STATUSES.IN_PROCESS,
+  };
+  if (input.notes?.trim()) {
+    update.cutNotes = input.notes.trim();
+  }
+
+  const caseDoc = await Case.findOneAndUpdate(filter, { $set: update }, { new: true });
+  if (!caseDoc) {
+    throw new AppError('Case is not available to claim for cut work', 409);
+  }
+
+  pushHistory(caseDoc, {
+    action: 'cut_started',
+    summary: 'Cut operator claimed case and started cut work',
+    actor,
+    metadata: { notes: input.notes?.trim() || undefined },
+  });
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_CUT_START,
+    summary: `${actor.email} started cut work on case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  await createNotification({
+    userId: actor.id,
+    type: NOTIFICATION_TYPES.CASE_CUT_CLAIMED,
+    title: `Cut case claimed: ${caseDoc.caseId}`,
+    body: `You claimed ${caseDoc.patientName} for cutting.`,
+    link: `/app/cases/${caseDoc.caseId}`,
+    caseId: caseDoc.caseId,
+  });
+
+  return await toDetail(caseDoc, actor);
+}
+
+export async function saveCutProgress(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: SaveCutProgressInput = {},
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanCutWork(actor, caseDoc);
+
+  if (caseDoc.isDeleted) throw new AppError('Cannot update a deleted case', 400);
+  if (
+    caseDoc.cutPhase !== CUT_PHASES.CUT_IN_PROGRESS &&
+    caseDoc.cutPhase !== CUT_PHASES.CUT_REWORK
+  ) {
+    throw new AppError('Case is not in an active cut work phase', 400);
+  }
+
+  if (input.notes !== undefined) {
+    caseDoc.cutNotes = input.notes.trim();
+  }
+  if (input.comment?.trim()) {
+    caseDoc.cutInternalComments.push({
+      _id: new Types.ObjectId(),
+      body: input.comment.trim(),
+      authorId: new Types.ObjectId(actor.id),
+      authorName: actorName(actor),
+      createdAt: new Date(),
+    } as (typeof caseDoc.cutInternalComments)[number]);
+  }
+
+  pushHistory(caseDoc, {
+    action: 'cut_progress_saved',
+    summary: 'Cut progress saved',
+    actor,
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_UPDATE,
+    summary: `${actor.email} saved cut progress on case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return await toDetail(caseDoc, actor);
+}
+
+export async function submitCutWork(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: SubmitCutInput = {},
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanCutWork(actor, caseDoc);
+
+  if (caseDoc.isDeleted) throw new AppError('Cannot submit cut work on a deleted case', 400);
+  if (
+    caseDoc.cutPhase !== CUT_PHASES.CUT_IN_PROGRESS &&
+    caseDoc.cutPhase !== CUT_PHASES.CUT_REWORK
+  ) {
+    throw new AppError('Case is not ready to submit cut work', 400);
+  }
+
+  const cutFiles = (caseDoc.files ?? []).filter(
+    (file) => file.category === FILE_CATEGORIES.CUT,
+  );
+  if (cutFiles.length === 0) {
+    throw new AppError('Upload at least one cut output file before submitting', 400);
+  }
+
+  const now = new Date();
+  if (input.notes?.trim()) {
+    caseDoc.cutNotes = input.notes.trim();
+  }
+  caseDoc.cutPhase = CUT_PHASES.WAITING_FOR_DESIGNER;
+  caseDoc.cutSubmittedAt = now;
+  caseDoc.status = CASE_STATUSES.IN_PROCESS;
+
+  const openRevision = (caseDoc.cutRevisions ?? []).find((revision) => !revision.completedAt);
+  if (openRevision) {
+    openRevision.completedAt = now;
+  }
+
+  const designerAutoQueue = input.designerAutoQueue !== false;
+  if (designerAutoQueue) {
+    caseDoc.assignmentMode = ASSIGNMENT_MODES.AUTO_QUEUE;
+    caseDoc.assignedDesignerId = undefined;
+    caseDoc.assignedDesignerName = undefined;
+  } else {
+    caseDoc.assignmentMode = ASSIGNMENT_MODES.NONE;
+    caseDoc.assignedDesignerId = undefined;
+    caseDoc.assignedDesignerName = undefined;
+  }
+
+  pushHistory(caseDoc, {
+    action: 'cut_submitted',
+    summary: designerAutoQueue
+      ? 'Cut work submitted — waiting for designer (auto queue)'
+      : 'Cut work submitted — waiting for coordinator designer assignment',
+    actor,
+    metadata: {
+      notes: input.notes?.trim() || undefined,
+      designerAutoQueue,
+    },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_CUT_SUBMIT,
+    summary: `${actor.email} submitted cut work on case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  const coordinatorIds = await findUserIdsByRoles([ROLES.COORDINATOR, ROLES.SUPERVISOR]);
+  await createNotificationsForUsers(coordinatorIds, {
+    type: NOTIFICATION_TYPES.CASE_CUT_SUBMITTED,
+    title: `Cut complete — ${caseDoc.caseId}`,
+    body: `${caseDoc.patientName} is waiting for designer assignment.`,
+    link: `/app/cases/${caseDoc.caseId}`,
+    caseId: caseDoc.caseId,
+  });
+
+  if (designerAutoQueue) {
+    const designerIds = await findUserIdsByRoles([ROLES.DESIGNER, 'senior_designer']);
+    await createNotificationsForUsers(designerIds, {
+      type: NOTIFICATION_TYPES.CASE_ASSIGNED,
+      title: `Case ready for design: ${caseDoc.caseId}`,
+      body: `${caseDoc.patientName} completed cutting and is in the designer auto queue.`,
+      link: `/app/cases/${caseDoc.caseId}`,
+      caseId: caseDoc.caseId,
+    });
+  }
+
+  return await toDetail(caseDoc, actor);
+}
+
+export async function requestCutRework(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: RequestCutReworkInput,
+  audit?: RequestAuditContext,
+) {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_CUT_REWORK_REQUEST)) {
+    throw new AppError('You do not have permission to request cut rework', 403);
+  }
+
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (caseDoc.isDeleted) throw new AppError('Cannot request rework on a deleted case', 400);
+  if (caseDoc.cutPhase !== CUT_PHASES.WAITING_FOR_DESIGNER) {
+    throw new AppError('Cut rework can only be requested while waiting for designer assignment', 400);
+  }
+  if (!caseDoc.assignedCutOperatorId) {
+    throw new AppError('No cut operator is associated with this case', 400);
+  }
+
+  const reason = input.reason.trim();
+  const comments = input.comments.trim();
+  if (!reason) throw new AppError('Rework reason is required', 400);
+  if (!comments) throw new AppError('Rework comments are required', 400);
+
+  const nextRevision = (caseDoc.cutRevisions?.length ?? 0) + 1;
+  caseDoc.cutRevisions.unshift({
+    _id: new Types.ObjectId(),
+    revision: nextRevision,
+    reason,
+    comments,
+    requestedById: new Types.ObjectId(actor.id),
+    requestedByName: actorName(actor),
+    requestedByRole: actor.role,
+    requestedAt: new Date(),
+  } as (typeof caseDoc.cutRevisions)[number]);
+
+  caseDoc.cutPhase = CUT_PHASES.CUT_REWORK;
+  caseDoc.cutSubmittedAt = undefined;
+  caseDoc.assignmentMode = ASSIGNMENT_MODES.NONE;
+  caseDoc.assignedDesignerId = undefined;
+  caseDoc.assignedDesignerName = undefined;
+
+  pushHistory(caseDoc, {
+    action: 'cut_rework_requested',
+    summary: `Cut rework requested (revision ${nextRevision})`,
+    actor,
+    metadata: { reason, comments },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_CUT_REWORK_REQUEST,
+    summary: `${actor.email} requested cut rework on case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  const operatorId = String(caseDoc.assignedCutOperatorId);
+  await createNotification({
+    userId: operatorId,
+    type: NOTIFICATION_TYPES.CASE_CUT_REWORK,
+    title: `Cut rework requested — ${caseDoc.caseId}`,
+    body: reason,
+    link: `/app/cases/${caseDoc.caseId}`,
+    caseId: caseDoc.caseId,
+  });
+  await emailUsers([operatorId], {
+    subject: `Cut rework requested: ${caseDoc.caseId}`,
+    headline: 'Cut rework requested',
+    message: `${actorName(actor)} requested cut rework on case ${caseDoc.caseId}: ${reason}`,
+    caseId: caseDoc.caseId,
+    patientName: caseDoc.patientName,
+  });
 
   return await toDetail(caseDoc, actor);
 }
