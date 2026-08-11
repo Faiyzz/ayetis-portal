@@ -20,6 +20,10 @@ export interface IOrganization extends Document {
   employeeSeq: number;
   billingArrangement?: import('@ayetis/shared').BillingArrangement;
   prepaidCaseBalance: number;
+  preferredCurrency?: string;
+  regionIds: Types.ObjectId[];
+  scopedCountryIds: Types.ObjectId[];
+  excludedCountryIds: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +62,10 @@ const organizationSchema = new Schema<IOrganization>(
     employeeSeq: { type: Number, default: 0, min: 0 },
     billingArrangement: { type: String, trim: true, index: true },
     prepaidCaseBalance: { type: Number, default: 0, min: 0 },
+    preferredCurrency: { type: String, uppercase: true, trim: true, default: 'USD' },
+    regionIds: { type: [{ type: Schema.Types.ObjectId, ref: 'Region' }], default: [] },
+    scopedCountryIds: { type: [{ type: Schema.Types.ObjectId, ref: 'Country' }], default: [] },
+    excludedCountryIds: { type: [{ type: Schema.Types.ObjectId, ref: 'Country' }], default: [] },
   },
   { timestamps: true },
 );

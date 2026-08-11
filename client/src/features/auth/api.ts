@@ -23,6 +23,19 @@ export interface RegisterPayload {
     country?: string;
     postalCode?: string;
   };
+  countryId?: string;
+  countryName?: string;
+  otherCountryName?: string;
+  mobileCountryCode?: string;
+  mobileNumber?: string;
+  gender?: string;
+  language?: string;
+  profession?: string;
+  professionSpecialization?: string;
+  academicTitle?: string;
+  academicTitleOther?: string;
+  privacyPolicyVersionAccepted?: string;
+  preferredCurrency?: string;
 }
 
 export interface LoginPayload {

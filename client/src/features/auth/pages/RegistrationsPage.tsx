@@ -1,11 +1,9 @@
 import {
-  ACCOUNT_STATUS_LABELS,
   ACCOUNT_TYPE_LABELS,
   REGISTRATION_STATUS_LABELS,
   REGISTRATION_STATUSES,
   type RegistrationRequestDto,
   type RegistrationStatus,
-  type SystemMessages,
 } from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -23,8 +21,6 @@ export function RegistrationsPage() {
     REGISTRATION_STATUSES.PENDING_APPROVAL,
   );
   const [loading, setLoading] = useState(true);
-  const [messages, setMessages] = useState<SystemMessages | null>(null);
-  const [savingMessages, setSavingMessages] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -34,9 +30,6 @@ export function RegistrationsPage() {
         pageSize: 50,
       });
       setItems(data.items);
-      if (can(PERMISSIONS.REGISTRATION_LIST)) {
-        setMessages(await authApi.fetchSystemMessages());
-      }
     } catch (err) {
       toast().error(getErrorMessage(err, 'Unable to load registrations'));
     } finally {
@@ -95,19 +88,6 @@ export function RegistrationsPage() {
       await load();
     } catch (err) {
       toast().error(getErrorMessage(err, 'Unable to hold registration'));
-    }
-  }
-
-  async function saveMessages() {
-    if (!messages) return;
-    setSavingMessages(true);
-    try {
-      setMessages(await authApi.updateSystemMessages(messages));
-      toast().success('System messages updated');
-    } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to update messages'));
-    } finally {
-      setSavingMessages(false);
     }
   }
 
@@ -224,39 +204,13 @@ export function RegistrationsPage() {
         )}
       </section>
 
-      {messages && can(PERMISSIONS.REGISTRATION_APPROVE) ? (
-        <section className="space-y-4 rounded-xl border border-line bg-white p-5">
-          <h2 className="text-lg font-semibold text-ink">Configurable system messages</h2>
-          {(
-            [
-              ['registrationConfirmation', 'After registration'],
-              ['emailVerifiedPending', 'After email verification'],
-              ['accountSuspended', 'Suspended account'],
-              ['accountBlocked', 'Blocked account'],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="block space-y-1.5 text-sm">
-              <span className="font-medium text-ink">{label}</span>
-              <textarea
-                className="min-h-20 w-full rounded-lg border border-line px-3 py-2 text-sm"
-                value={messages[key]}
-                onChange={(e) =>
-                  setMessages((prev) => (prev ? { ...prev, [key]: e.target.value } : prev))
-                }
-              />
-            </label>
-          ))}
-          <button
-            type="button"
-            disabled={savingMessages}
-            onClick={() => void saveMessages()}
-            className="rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
-          >
-            {savingMessages ? 'Saving…' : 'Save messages'}
-          </button>
-          <p className="text-xs text-muted">
-            Status labels reference: {Object.values(ACCOUNT_STATUS_LABELS).join(' / ')}
-          </p>
+      {can(PERMISSIONS.REGISTRATION_APPROVE) || can(PERMISSIONS.SETTINGS_MANAGE) ? (
+        <section className="rounded-xl border border-line bg-white p-5 text-sm text-muted">
+          System messages moved to{' '}
+          <Link to="/app/settings" className="font-semibold text-brand-600 hover:text-brand-700">
+            Settings → System messages
+          </Link>
+          .
         </section>
       ) : null}
     </div>

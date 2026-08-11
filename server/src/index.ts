@@ -12,6 +12,8 @@ async function bootstrap() {
   await migrateAuthUsers();
   await migrateCaseManagement();
   await migrateCorporateHierarchy();
+  const { seedSettingsData } = await import('./features/settings/settings.service');
+  await seedSettingsData();
 
   const app = createApp();
   app.listen(env.port, () => {

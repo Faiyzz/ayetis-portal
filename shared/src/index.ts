@@ -10,6 +10,7 @@ export * from './cases';
 export * from './treatment';
 export * from './commercial';
 export * from './cancellations';
+export * from './settings';
 export * from './geo';
 export * from './clarifications';
 export * from './notifications';

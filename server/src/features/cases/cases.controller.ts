@@ -285,7 +285,9 @@ export async function addNote(req: AuthenticatedRequest, res: Response, next: Ne
 
 export async function uploadFiles(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
+    const { assertUploadWithinLimit } = await import('../../middleware/uploads');
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+    await assertUploadWithinLimit(files);
     const data = await casesService.uploadCaseFiles(
       await actor(req),
       req.params.caseId,

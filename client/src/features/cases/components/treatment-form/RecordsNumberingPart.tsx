@@ -16,6 +16,7 @@ import {
   COUNTRIES,
   EMPTY_RECORDS_NUMBERING,
   GENDER_OPTIONS,
+  MASTER_LIST_TYPES,
   IMPRESSION_METHOD_LABELS,
   TOOTH_NUMBERING_LABELS,
   TRIMLINE_HEIGHT_LABELS,
@@ -29,11 +30,21 @@ import {
   type FieldErrors,
   type RecordsNumbering,
 } from '@ayetis/shared';
+import { useEffect, useMemo, useState } from 'react';
 import { SearchableSelect } from '@/components/SearchableSelect';
 import { TextField } from '@/features/auth/components/AuthUI';
+import { fetchCountries, fetchMasterListItems } from '@/features/settings/api';
 import { FieldError, SectionCard, fieldClassName } from './FieldError';
 
-const COUNTRY_OPTIONS = COUNTRIES.map((name) => ({ value: name, label: name }));
+const FALLBACK_COUNTRY_OPTIONS: Array<{ value: string; label: string }> = COUNTRIES.map(
+  (name) => ({ value: name, label: name }),
+);
+const FALLBACK_GENDER_OPTIONS: Array<{ value: string; label: string }> = GENDER_OPTIONS.map(
+  (g) => ({
+    value: g.value,
+    label: g.label,
+  }),
+);
 
 export type RecordsFormSlice = Pick<
   CreateCaseInput,
@@ -68,9 +79,36 @@ export function RecordsNumberingPart({
   onFormChange: <K extends keyof RecordsFormSlice>(key: K, value: RecordsFormSlice[K]) => void;
   onRecordsChange: (patch: Partial<RecordsNumbering>) => void;
 }) {
+  const [countryOptions, setCountryOptions] = useState(FALLBACK_COUNTRY_OPTIONS);
+  const [genderOptions, setGenderOptions] = useState(FALLBACK_GENDER_OPTIONS);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [countries, genders] = await Promise.all([
+          fetchCountries(true),
+          fetchMasterListItems(MASTER_LIST_TYPES.GENDER, true),
+        ]);
+        if (countries.length) {
+          setCountryOptions(
+            countries
+              .filter((c) => !c.isOther)
+              .map((c) => ({ value: c.name, label: c.name })),
+          );
+        }
+        if (genders.length) {
+          setGenderOptions(genders.map((g) => ({ value: g.code || g.label, label: g.label })));
+        }
+      } catch {
+        /* keep fallbacks */
+      }
+    })();
+  }, []);
+
   const category = (form.caseCategory || ALL_CASE_CATEGORIES[0]) as CaseCategory;
   const typeOptions = CASE_TYPES_BY_CATEGORY[category];
   const recordsMerged = { ...EMPTY_RECORDS_NUMBERING, ...records };
+  const genderSelectOptions = useMemo(() => genderOptions, [genderOptions]);
 
   function toggleImpressionTaken(arch: (typeof ARCH_OPTIONS)[keyof typeof ARCH_OPTIONS]) {
     const current = recordsMerged.impressionsTaken ?? [];
@@ -158,7 +196,7 @@ export function RecordsNumberingPart({
               className={fieldClassName(errors, 'patientGender')}
             >
               <option value="">—</option>
-              {GENDER_OPTIONS.map((g) => (
+              {genderSelectOptions.map((g) => (
                 <option key={g.value} value={g.value}>
                   {g.label}
                 </option>
@@ -197,7 +235,7 @@ export function RecordsNumberingPart({
 
         <SearchableSelect
           label="Country"
-          options={COUNTRY_OPTIONS}
+          options={countryOptions}
           value={form.country || ''}
           onChange={(value) => onFormChange('country', value)}
         />

@@ -17,6 +17,7 @@ import cancellationsRoutes from './features/cancellations/cancellations.routes';
 import commercialRoutes, {
   stripeWebhookHandler,
 } from './features/commercial/commercial.routes';
+import settingsRoutes from './features/settings/settings.routes';
 import corporateRoutes from './features/corporate/corporate.routes';
 import reportsRoutes from './features/reports/reports.routes';
 import supervisorRoutes from './features/supervisor/supervisor.routes';
@@ -58,6 +59,7 @@ export function createApp() {
   app.use('/api/registrations', registrationsRoutes);
   app.use('/api/cancellations', cancellationsRoutes);
   app.use('/api/commercial', commercialRoutes);
+  app.use('/api/settings', settingsRoutes);
   app.use('/api/corporate', corporateRoutes);
   app.use('/api/activity', auditRoutes);
   app.use('/api/notifications', notificationsRoutes);

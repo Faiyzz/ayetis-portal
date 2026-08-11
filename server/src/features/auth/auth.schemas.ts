@@ -39,6 +39,19 @@ export const registerSchema = z
         postalCode: z.string().trim().max(40).optional(),
       })
       .optional(),
+    countryId: z.string().optional(),
+    countryName: z.string().trim().max(120).optional(),
+    otherCountryName: z.string().trim().max(120).optional(),
+    mobileCountryCode: z.string().trim().max(12).optional(),
+    mobileNumber: z.string().trim().max(40).optional(),
+    gender: z.string().trim().max(80).optional(),
+    language: z.string().trim().max(80).optional(),
+    profession: z.string().trim().max(120).optional(),
+    professionSpecialization: z.string().trim().max(160).optional(),
+    academicTitle: z.string().trim().max(80).optional(),
+    academicTitleOther: z.string().trim().max(120).optional(),
+    privacyPolicyVersionAccepted: z.string().trim().max(40).optional(),
+    preferredCurrency: z.string().trim().max(8).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.accountType === ACCOUNT_TYPES.CORPORATE) {
@@ -62,6 +75,20 @@ export const registerSchema = z
         code: z.ZodIssueCode.custom,
         message: 'Clinic name cannot be empty',
         path: ['clinicName'],
+      });
+    }
+    if (value.countryName === 'Other' && !value.otherCountryName?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Enter your country name',
+        path: ['otherCountryName'],
+      });
+    }
+    if (!value.privacyPolicyVersionAccepted?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'You must accept the Privacy Notice',
+        path: ['privacyPolicyVersionAccepted'],
       });
     }
   });

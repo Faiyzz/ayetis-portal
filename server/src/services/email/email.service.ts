@@ -24,6 +24,34 @@ const BRAND = {
   white: '#FFFFFF',
 };
 
+type EmailBrandCache = {
+  companyName: string;
+  logoUrl: string | null;
+  at: number;
+};
+
+let emailBrandCache: EmailBrandCache | null = null;
+const EMAIL_BRAND_TTL_MS = 60_000;
+
+async function resolveEmailBrand(): Promise<{ companyName: string; logoUrl: string | null }> {
+  const now = Date.now();
+  if (emailBrandCache && now - emailBrandCache.at < EMAIL_BRAND_TTL_MS) {
+    return emailBrandCache;
+  }
+  try {
+    const { getBranding } = await import('../../features/settings/settings.service');
+    const branding = await getBranding();
+    emailBrandCache = {
+      companyName: branding.companyName || BRAND.name,
+      logoUrl: branding.emailLogoUrl || branding.headerLogoUrl || null,
+      at: now,
+    };
+  } catch {
+    emailBrandCache = { companyName: BRAND.name, logoUrl: null, at: now };
+  }
+  return emailBrandCache;
+}
+
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -39,6 +67,8 @@ export function renderEmailLayout(input: {
   bodyHtml: string;
   cta?: { label: string; url: string };
   footerNote?: string;
+  companyName?: string;
+  logoUrl?: string | null;
 }): string {
   const preheader = input.preheader
     ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(input.preheader)}</div>`
@@ -56,6 +86,17 @@ export function renderEmailLayout(input: {
       </p>`
     : '';
 
+  const companyName = (input.companyName || emailBrandCache?.companyName || BRAND.name).replace(
+    /\s*Portal$/i,
+    '',
+  );
+  const logoUrl = input.logoUrl !== undefined ? input.logoUrl : emailBrandCache?.logoUrl;
+  const brandHeader = logoUrl
+    ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(companyName)}" style="max-height:40px;max-width:180px;display:block;" />`
+    : `<div style="font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:700;color:${BRAND.ink};letter-spacing:-0.02em;">
+                ${escapeHtml(companyName)}<span style="color:${BRAND.primary};">.</span>
+              </div>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -71,9 +112,7 @@ export function renderEmailLayout(input: {
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:${BRAND.white};border:1px solid ${BRAND.line};border-radius:16px;overflow:hidden;">
           <tr>
             <td style="padding:24px 28px;border-bottom:1px solid ${BRAND.line};">
-              <div style="font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:700;color:${BRAND.ink};letter-spacing:-0.02em;">
-                ${BRAND.name}<span style="color:${BRAND.primary};">.</span>
-              </div>
+              ${brandHeader}
               <div style="margin-top:4px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:${BRAND.muted};">
                 Digital Workflow Portal
               </div>
@@ -90,7 +129,7 @@ export function renderEmailLayout(input: {
           </tr>
           <tr>
             <td style="padding:18px 28px;background:${BRAND.surface};border-top:1px solid ${BRAND.line};font-family:Arial,Helvetica,sans-serif;font-size:12px;color:${BRAND.muted};line-height:1.5;">
-              ${input.footerNote ? escapeHtml(input.footerNote) : 'This message was sent by the Ayetis portal. Please do not reply to this email unless instructed.'}
+              ${input.footerNote ? escapeHtml(input.footerNote) : `This message was sent by the ${companyName} portal. Please do not reply to this email unless instructed.`}
             </td>
           </tr>
         </table>
@@ -172,6 +211,7 @@ export async function sendTemplatedEmail(
   rendered: RenderedEmail,
   options?: { replyTo?: string },
 ) {
+  await resolveEmailBrand();
   return sendEmail({
     to,
     subject: rendered.subject,
@@ -179,6 +219,43 @@ export async function sendTemplatedEmail(
     text: rendered.text,
     replyTo: options?.replyTo,
   });
+}
+
+/**
+ * Prefer DB email template CMS when present; otherwise use code-rendered email.
+ */
+export async function sendCmsOrFallback(
+  to: string | string[],
+  templateKey: string,
+  vars: Record<string, string>,
+  fallback: RenderedEmail,
+  options?: { replyTo?: string },
+) {
+  const brand = await resolveEmailBrand();
+  try {
+    const { renderEmailTemplate } = await import('../../features/settings/settings.service');
+    const cms = await renderEmailTemplate(templateKey, vars);
+    if (cms) {
+      const html = cms.html.includes('<!DOCTYPE html')
+        ? cms.html
+        : renderEmailLayout({
+            title: cms.subject,
+            bodyHtml: cms.html,
+            companyName: brand.companyName,
+            logoUrl: brand.logoUrl,
+          });
+      return sendEmail({
+        to,
+        subject: cms.subject,
+        html,
+        text: fallback.text,
+        replyTo: options?.replyTo,
+      });
+    }
+  } catch (err) {
+    console.warn('[email] CMS template lookup failed', err);
+  }
+  return sendTemplatedEmail(to, fallback, options);
 }
 
 export { env };

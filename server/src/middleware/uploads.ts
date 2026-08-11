@@ -62,7 +62,8 @@ function fileFilter(
 export const caseFileUpload = multer({
   storage: diskStorage,
   limits: {
-    fileSize: env.maxUploadBytes,
+    /** Absolute ceiling; effective limit enforced in assertUploadWithinLimit. */
+    fileSize: Math.max(env.maxUploadBytes, 2 * 1024 * 1024 * 1024),
     files: 20,
   },
   fileFilter,
@@ -71,7 +72,7 @@ export const caseFileUpload = multer({
 export const deliveryVideoUpload = multer({
   storage: diskStorage,
   limits: {
-    fileSize: env.maxUploadBytes,
+    fileSize: Math.max(env.maxUploadBytes, 2 * 1024 * 1024 * 1024),
     files: 1,
   },
   fileFilter: (_req, file, cb) => {
@@ -83,3 +84,16 @@ export const deliveryVideoUpload = multer({
     cb(new Error('Delivery upload must be a video file'));
   },
 });
+
+export async function assertUploadWithinLimit(files: Express.Multer.File | Express.Multer.File[] | undefined) {
+  const { resolveMaxUploadBytes } = await import('../features/settings/settings.service');
+  const max = await resolveMaxUploadBytes();
+  const list = !files ? [] : Array.isArray(files) ? files : [files];
+  for (const file of list) {
+    if (file.size > max) {
+      throw new Error(
+        `File ${file.originalname} exceeds configured maximum of ${Math.round(max / (1024 * 1024))} MB`,
+      );
+    }
+  }
+}

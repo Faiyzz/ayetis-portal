@@ -1,9 +1,13 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import toothBackground from '@/assets/tooth-login-background.jpg';
+import { BrandMark } from '@/features/auth/components/AuthUI';
+import { useBranding } from '@/features/settings/useBranding';
 
 export function AuthLayout() {
   const { pathname } = useLocation();
   const isLogin = pathname === '/login';
+  const branding = useBranding();
+  const companyName = branding?.companyName || 'Ayetis Portal';
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-100">
@@ -39,8 +43,13 @@ export function AuthLayout() {
 
       <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-5 py-6 sm:px-8 lg:px-12">
         <header className="flex items-center justify-between">
-          <Link to="/login" className="sr-only">
-            Ayetis Portal
+          <Link to="/login" className="inline-flex items-center">
+            <BrandMark
+              tone={isLogin ? 'brand' : 'dark'}
+              companyName={companyName.replace(/\s*Portal$/i, '') || 'Ayetis'}
+              logoUrl={branding?.loginLogoUrl || branding?.headerLogoUrl}
+            />
+            <span className="sr-only">{companyName}</span>
           </Link>
           <span className={isLogin ? 'text-sm font-medium text-slate-600' : 'text-sm text-muted'}>
             Digital Workflow Portal
@@ -62,7 +71,8 @@ export function AuthLayout() {
             isLogin ? 'text-left text-slate-600' : 'text-center text-muted/80',
           ].join(' ')}
         >
-          © {new Date().getFullYear()} Ayetis. Secure orthodontic case management.
+          © {new Date().getFullYear()} {companyName.replace(/\s*Portal$/i, '') || 'Ayetis'}. Secure
+          orthodontic case management.
         </footer>
       </div>
     </div>

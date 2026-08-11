@@ -17,6 +17,7 @@ import {
   emailVerificationTemplate,
   passwordResetTemplate,
   registrationPendingTemplate,
+  sendCmsOrFallback,
   sendTemplatedEmail,
   temporaryPasswordTemplate,
 } from '../../services/email';
@@ -138,20 +139,48 @@ export async function register(input: RegisterInput, ctx: RequestAuditContext = 
             street: input.companyAddress.street?.trim() || '',
             city: input.companyAddress.city?.trim() || '',
             state: input.companyAddress.state?.trim() || '',
-            country: input.companyAddress.country?.trim() || '',
+            country: input.companyAddress.country?.trim() || input.countryName || '',
             postalCode: input.companyAddress.postalCode?.trim() || '',
           }
         : undefined,
+    countryId: input.countryId || undefined,
+    countryName: input.countryName || input.companyAddress?.country || undefined,
+    otherCountryName: input.otherCountryName || undefined,
+    mobileCountryCode: input.mobileCountryCode || undefined,
+    mobileNumber: input.mobileNumber || undefined,
+    gender: input.gender || undefined,
+    language: input.language || undefined,
+    profession: input.profession || undefined,
+    professionSpecialization: input.professionSpecialization || undefined,
+    academicTitle: input.academicTitle || undefined,
+    academicTitleOther: input.academicTitleOther || undefined,
+    privacyPolicyVersionAccepted: input.privacyPolicyVersionAccepted || undefined,
+    preferredCurrency: input.preferredCurrency?.toUpperCase() || undefined,
     status: REGISTRATION_STATUSES.PENDING_EMAIL_VERIFICATION,
     verificationTokenHash: hashToken(rawToken),
     verificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
   });
 
+  if (input.otherCountryName?.trim() || input.countryName === 'Other') {
+    const { createCountryRequest } = await import('../settings/settings.service');
+    await createCountryRequest({
+      proposedName: (input.otherCountryName || input.countryName || '').trim(),
+      registrationId: request.id,
+      requesterEmail: email,
+    });
+  }
+
   const verifyUrl = `${env.clientUrl}/verify-email?token=${rawToken}`;
   const name = `${input.firstName} ${input.lastName}`.trim();
 
   try {
-    await sendTemplatedEmail(email, emailVerificationTemplate({ name, verifyUrl }));
+    const fallback = emailVerificationTemplate({ name, verifyUrl });
+    await sendCmsOrFallback(
+      email,
+      'email_verification',
+      { firstName: input.firstName, verifyUrl, name },
+      fallback,
+    );
   } catch (error) {
     console.error('[email] verification failed', error);
     if (env.isDev) {
@@ -386,12 +415,19 @@ export async function forgotPassword(input: ForgotPasswordInput, ctx: RequestAud
   const confirmUrl = `${env.clientUrl}/confirm-password-reset?token=${rawToken}`;
 
   try {
-    await sendTemplatedEmail(
+    const fallback = passwordResetTemplate({
+      name: `${user.firstName} ${user.lastName}`.trim(),
+      resetUrl: confirmUrl,
+    });
+    await sendCmsOrFallback(
       user.email,
-      passwordResetTemplate({
-        name: `${user.firstName} ${user.lastName}`.trim(),
+      'password_reset',
+      {
+        firstName: user.firstName,
         resetUrl: confirmUrl,
-      }),
+        name: `${user.firstName} ${user.lastName}`.trim(),
+      },
+      fallback,
     );
   } catch (error) {
     console.error('[email] password-reset-confirm failed', error);

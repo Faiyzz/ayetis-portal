@@ -79,6 +79,14 @@ export const PERMISSIONS = {
   INVOICE_VIEW: 'invoice:view',
   INVOICE_MANAGE: 'invoice:manage',
 
+  // Settings / master data (URD §5.11 / §5.19)
+  SETTINGS_MANAGE: 'settings:manage',
+  MASTER_DATA_MANAGE: 'master_data:manage',
+  REGION_MANAGE: 'region:manage',
+  BRANDING_MANAGE: 'branding:manage',
+  EMAIL_TEMPLATE_MANAGE: 'email_template:manage',
+  PRIVACY_MANAGE: 'privacy:manage',
+
   // Corporate hierarchy
   ORG_MANAGE_SELF: 'org:manage_self',
   FACILITY_MANAGE: 'facility:manage',
@@ -150,6 +158,12 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.PAYMENT_PROVIDER_MANAGE]: 'Manage payment providers',
   [PERMISSIONS.INVOICE_VIEW]: 'View invoices and receipts',
   [PERMISSIONS.INVOICE_MANAGE]: 'Manage invoices and receipts',
+  [PERMISSIONS.SETTINGS_MANAGE]: 'Manage business settings',
+  [PERMISSIONS.MASTER_DATA_MANAGE]: 'Manage master data lists',
+  [PERMISSIONS.REGION_MANAGE]: 'Manage regions and countries',
+  [PERMISSIONS.BRANDING_MANAGE]: 'Manage branding and logos',
+  [PERMISSIONS.EMAIL_TEMPLATE_MANAGE]: 'Manage email templates',
+  [PERMISSIONS.PRIVACY_MANAGE]: 'Manage privacy policy',
   [PERMISSIONS.ORG_MANAGE_SELF]: 'Manage own organization profile',
   [PERMISSIONS.FACILITY_MANAGE]: 'Manage facilities',
   [PERMISSIONS.EMPLOYEE_MANAGE]: 'Manage corporate employees',
@@ -172,6 +186,7 @@ export type PermissionGroup =
   | 'Departments'
   | 'Complaints'
   | 'Commercial'
+  | 'Settings'
   | 'Corporate'
   | 'Audit';
 
@@ -228,6 +243,12 @@ export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
   [PERMISSIONS.PAYMENT_PROVIDER_MANAGE]: 'Commercial',
   [PERMISSIONS.INVOICE_VIEW]: 'Commercial',
   [PERMISSIONS.INVOICE_MANAGE]: 'Commercial',
+  [PERMISSIONS.SETTINGS_MANAGE]: 'Settings',
+  [PERMISSIONS.MASTER_DATA_MANAGE]: 'Settings',
+  [PERMISSIONS.REGION_MANAGE]: 'Settings',
+  [PERMISSIONS.BRANDING_MANAGE]: 'Settings',
+  [PERMISSIONS.EMAIL_TEMPLATE_MANAGE]: 'Settings',
+  [PERMISSIONS.PRIVACY_MANAGE]: 'Settings',
   [PERMISSIONS.ORG_MANAGE_SELF]: 'Corporate',
   [PERMISSIONS.FACILITY_MANAGE]: 'Corporate',
   [PERMISSIONS.EMPLOYEE_MANAGE]: 'Corporate',

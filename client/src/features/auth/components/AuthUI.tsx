@@ -104,24 +104,38 @@ export function AuthCard({
   );
 }
 
-export function BrandMark({ tone = 'brand' }: { tone?: 'brand' | 'dark' }) {
+export function BrandMark({
+  tone = 'brand',
+  companyName,
+  logoUrl,
+}: {
+  tone?: 'brand' | 'dark';
+  companyName?: string | null;
+  logoUrl?: string | null;
+}) {
   const dark = tone === 'dark';
+  const name = companyName?.trim() || 'Ayetis';
   return (
     <div className="inline-flex items-center gap-2.5">
-      <span
-        className={[
-          'flex h-9 w-9 items-center justify-center rounded-xl text-white',
-          dark
-            ? 'bg-slate-900 shadow-[0_6px_18px_rgba(15,23,42,0.25)]'
-            : 'bg-brand-500 shadow-[0_6px_18px_rgba(15,23,42,0.22)]',
-        ].join(' ')}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path d="M5 19L12 5L19 19H15.2L12 12.5L8.8 19H5Z" fill="currentColor" />
-        </svg>
-      </span>
+      {logoUrl ? (
+        <img src={logoUrl} alt="" className="h-9 w-9 rounded-xl object-contain" />
+      ) : (
+        <span
+          className={[
+            'flex h-9 w-9 items-center justify-center rounded-xl text-white',
+            dark
+              ? 'bg-slate-900 shadow-[0_6px_18px_rgba(15,23,42,0.25)]'
+              : 'bg-brand-500 shadow-[0_6px_18px_rgba(15,23,42,0.22)]',
+          ].join(' ')}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M5 19L12 5L19 19H15.2L12 12.5L8.8 19H5Z" fill="currentColor" />
+          </svg>
+        </span>
+      )}
       <span className="text-xl font-bold tracking-tight text-ink">
-        Ayetis<span className={dark ? 'text-slate-500' : 'text-brand-500'}>.</span>
+        {name}
+        <span className={dark ? 'text-slate-500' : 'text-brand-500'}>.</span>
       </span>
     </div>
   );

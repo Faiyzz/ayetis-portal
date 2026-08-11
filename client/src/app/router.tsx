@@ -25,6 +25,7 @@ import { CommercialAdminPage } from '@/features/commercial/pages/CommercialAdmin
 import { PaySessionPage } from '@/features/commercial/pages/PaySessionPage';
 import { ComplaintsPage } from '@/features/complaints/pages/ComplaintsPage';
 import { NotificationCenterPage } from '@/features/notifications/pages/NotificationCenterPage';
+import { SettingsAdminPage } from '@/features/settings/pages/SettingsAdminPage';
 import { CreateUserPage } from '@/features/users/pages/CreateUserPage';
 import { RolePermissionsPage } from '@/features/users/pages/RolePermissionsPage';
 import { UserPermissionsPage } from '@/features/users/pages/UserPermissionsPage';
@@ -177,6 +178,23 @@ export function AppRouter() {
             }
           >
             <Route path="commercial" element={<CommercialAdminPage />} />
+          </Route>
+
+          <Route
+            element={
+              <RequireAnyPermission
+                permissions={[
+                  PERMISSIONS.SETTINGS_MANAGE,
+                  PERMISSIONS.MASTER_DATA_MANAGE,
+                  PERMISSIONS.REGION_MANAGE,
+                  PERMISSIONS.BRANDING_MANAGE,
+                  PERMISSIONS.EMAIL_TEMPLATE_MANAGE,
+                  PERMISSIONS.PRIVACY_MANAGE,
+                ]}
+              />
+            }
+          >
+            <Route path="settings" element={<SettingsAdminPage />} />
           </Route>
         </Route>
       </Route>

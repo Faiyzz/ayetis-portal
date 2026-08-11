@@ -23,9 +23,8 @@ import {
 } from '../../models/SystemConfig';
 import { User } from '../../models/User';
 import {
-  accountCreationTemplate,
   registrationRejectedTemplate,
-  sendTemplatedEmail,
+  sendCmsOrFallback,
 } from '../../services/email';
 import { AppError } from '../../utils/AppError';
 import {
@@ -152,6 +151,8 @@ export async function approveRegistration(
     companyName: request.companyName,
     companyAddress: isCorporate ? address : undefined,
     corporateCustomerId,
+    preferredCurrency: request.preferredCurrency || 'USD',
+    assignedCountry: request.countryName || address.country || undefined,
     permissionGrants: [],
     permissionDenies: [],
     mustChangePassword: false,
@@ -163,6 +164,7 @@ export async function approveRegistration(
       companyName: request.companyName || `${request.firstName} ${request.lastName}`.trim(),
       address,
       country: address.country || '',
+      preferredCurrency: request.preferredCurrency || 'USD',
       status: ORGANIZATION_STATUSES.ACTIVE,
       ownerUserId: user._id,
       subAccountSeq: 0,
@@ -182,15 +184,24 @@ export async function approveRegistration(
   const idLabel = isCorporate ? corporateCustomerId! : doctorId!;
 
   try {
-    await sendTemplatedEmail(
+    const { sendCmsOrFallback, accountCreationTemplate } = await import('../../services/email');
+    const fallback = accountCreationTemplate({
+      name,
+      email: user.email,
+      doctorId: idLabel,
+      loginUrl,
+      accountType: ACCOUNT_TYPE_LABELS[user.accountType],
+    });
+    await sendCmsOrFallback(
       user.email,
-      accountCreationTemplate({
-        name,
+      'account_approved',
+      {
+        firstName: user.firstName,
+        portalUrl: loginUrl,
         email: user.email,
-        doctorId: idLabel,
-        loginUrl,
-        accountType: ACCOUNT_TYPE_LABELS[user.accountType],
-      }),
+        name,
+      },
+      fallback,
     );
   } catch (error) {
     console.error('[email] account-creation failed', error);
@@ -263,9 +274,12 @@ export async function rejectRegistration(
 
   const name = `${request.firstName} ${request.lastName}`.trim();
   try {
-    await sendTemplatedEmail(
+    const fallback = registrationRejectedTemplate({ name, reason: trimmed });
+    await sendCmsOrFallback(
       request.email,
-      registrationRejectedTemplate({ name, reason: trimmed }),
+      'account_rejected',
+      { firstName: request.firstName, reason: trimmed, name },
+      fallback,
     );
   } catch (error) {
     console.error('[email] registration-rejected failed', error);

@@ -1,6 +1,7 @@
 export {
   sendEmail,
   sendTemplatedEmail,
+  sendCmsOrFallback,
   renderEmailLayout,
   escapeHtml,
   detailsTable,

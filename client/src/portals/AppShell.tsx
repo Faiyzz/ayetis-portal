@@ -19,6 +19,7 @@ import { BrandMark } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import { useAuthStore } from '@/features/auth/store';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
+import { useBranding } from '@/features/settings/useBranding';
 
 export function RequireAuth() {
   const user = useAuthStore((s) => s.user);
@@ -315,6 +316,21 @@ function buildNavItems(
       isActive: (pathname) => pathname.startsWith('/app/commercial'),
     },
     {
+      id: 'settings',
+      label: 'Settings',
+      to: '/app/settings',
+      icon: <IconShield />,
+      anyOf: [
+        PERMISSIONS.SETTINGS_MANAGE,
+        PERMISSIONS.MASTER_DATA_MANAGE,
+        PERMISSIONS.REGION_MANAGE,
+        PERMISSIONS.BRANDING_MANAGE,
+        PERMISSIONS.EMAIL_TEMPLATE_MANAGE,
+        PERMISSIONS.PRIVACY_MANAGE,
+      ],
+      isActive: (pathname) => pathname.startsWith('/app/settings'),
+    },
+    {
       id: 'password',
       label: 'Password',
       to: '/app/change-password',
@@ -502,6 +518,7 @@ export function AppShell() {
   const user = useAuthStore((s) => s.user)!;
   const logout = useAuthStore((s) => s.logout);
   const { can, canAny } = usePermissions();
+  const branding = useBranding();
   const [mobileOpen, setMobileOpen] = useState(false);
   const titleSlotRef = useRef<HTMLDivElement>(null);
   const actionsSlotRef = useRef<HTMLDivElement>(null);
@@ -583,7 +600,11 @@ export function AppShell() {
           ].join(' ')}
         >
           <div className="border-b border-line px-4 py-4">
-            <BrandMark tone="dark" />
+            <BrandMark
+              tone="dark"
+              companyName={branding?.companyName?.replace(/\s*Portal$/i, '') || 'Ayetis'}
+              logoUrl={branding?.headerLogoUrl || branding?.loginLogoUrl}
+            />
             <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
               {ROLE_LABELS[user.role as Role]} portal
             </p>
