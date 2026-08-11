@@ -16,20 +16,16 @@ import {
   resolveEffectivePermissions,
   type AccountStatus,
   type AccountType,
+  type ExperienceLevel,
+  type ManagedUserDto,
   type Permission,
   type PublicUser,
   type Role,
 } from '@ayetis/shared';
 import { env } from '../../config/env';
-import {
-  RolePermissionConfig,
-  buildRolePermissionDto,
-  isRoleLocked,
-  toRoleOverride,
-} from '../../models/RolePermissionConfig';
 import { generateDoctorId } from '../../models/DoctorCounter';
 import { getSystemMessages } from '../../models/SystemConfig';
-import { User, type IUser, resolveUserPermissions } from '../../models/User';
+import { User, type IUser } from '../../models/User';
 import { AppError } from '../../utils/AppError';
 import { Types } from 'mongoose';
 import {
@@ -41,6 +37,14 @@ import {
   recordActivity,
   type RequestAuditContext,
 } from '../audit/audit.service';
+import {
+  getLegacyRolePermissionConfig,
+  listLegacyRolePermissionConfigs,
+  patchRolePermissions,
+  resolvePermissionsForUser,
+  resolveUserQcScope,
+  resolveUserRoleKeys,
+} from '../rbac/rbac.service';
 
 export type ActorAuditContext = RequestAuditContext & {
   actorId: string;
@@ -78,37 +82,56 @@ function assertNoOverlap(grants: Permission[], denies: Permission[]): void {
   }
 }
 
-export async function getRoleOverridesMap(): Promise<
-  Map<Role, { grants: Permission[]; denies: Permission[] }>
-> {
-  const configs = await RolePermissionConfig.find();
-  const map = new Map<Role, { grants: Permission[]; denies: Permission[] }>();
-
-  for (const config of configs) {
-    map.set(config.role, toRoleOverride(config));
-  }
-
-  return map;
+export async function listRolePermissionConfigs() {
+  return listLegacyRolePermissionConfigs();
 }
 
-export async function getRoleOverride(role: Role) {
-  if (isRoleLocked(role)) {
-    return { grants: [] as Permission[], denies: [] as Permission[] };
-  }
-
-  const config = await RolePermissionConfig.findOne({ role });
-  return toRoleOverride(config);
+export async function getRolePermissionConfig(role: Role) {
+  return getLegacyRolePermissionConfig(role);
 }
 
-export function toPublicUser(
+export async function updateRolePermissionConfig(
+  role: Role,
+  input: { grants: string[]; denies: string[] },
+  audit?: ActorAuditContext,
+) {
+  if (role === ROLES.ADMIN) {
+    throw new AppError('Admin role permissions cannot be modified', 400);
+  }
+
+  const actorUser = audit ? await User.findById(audit.actorId) : null;
+  const actor = actorUser
+    ? { id: actorUser.id, email: actorUser.email, role: actorUser.role }
+    : { id: '', email: 'system', role: ROLES.ADMIN };
+
+  await patchRolePermissions(role, input.grants, input.denies, actor, audit);
+  return getLegacyRolePermissionConfig(role);
+}
+
+function syncUserRoleFields(user: IUser): void {
+  if (!user.roles?.length && user.role) {
+    user.roles = [user.role];
+  }
+  if (!user.primaryRole) {
+    user.primaryRole = user.roles?.[0] ?? user.role;
+  }
+  if (user.primaryRole) {
+    user.role = user.primaryRole;
+  }
+}
+
+function baseUserFields(
   user: IUser,
-  roleOverrides?: { grants: Permission[]; denies: Permission[] },
-): PublicUser {
+  permissions: Permission[],
+  qcScope: Awaited<ReturnType<typeof resolveUserQcScope>>,
+) {
   const changedAt = user.passwordChangedAt ?? user.createdAt;
   const expiresAt = passwordExpiresAt(changedAt, env.passwordExpiryDays);
   const expired = isPasswordExpired(changedAt, env.passwordExpiryDays);
   const accountStatus = user.accountStatus ?? ACCOUNT_STATUSES.ACTIVE;
   const accountType = user.accountType ?? ACCOUNT_TYPES.INDIVIDUAL;
+  const roles = resolveUserRoleKeys(user);
+  const primaryRole = user.primaryRole ?? user.role;
 
   return {
     id: user.id,
@@ -116,6 +139,8 @@ export function toPublicUser(
     firstName: user.firstName,
     lastName: user.lastName,
     role: user.role,
+    roles,
+    primaryRole,
     accountType,
     accountStatus,
     doctorId: user.doctorId ?? null,
@@ -141,9 +166,14 @@ export function toPublicUser(
     isActive: accountStatus === ACCOUNT_STATUSES.ACTIVE,
     departmentId: user.departmentId ? String(user.departmentId) : null,
     departmentName: user.departmentName ?? null,
+    teamIds: (user.teamIds ?? []).map(String),
+    experienceLevel: (user.experienceLevel as ExperienceLevel | undefined) ?? null,
+    softwareExpertise: [...(user.softwareExpertise ?? [])],
+    isAvailable: user.isAvailable !== false,
+    qcScope,
     permissionGrants: user.role === ROLES.ADMIN ? [] : [...(user.permissionGrants ?? [])],
     permissionDenies: user.role === ROLES.ADMIN ? [] : [...(user.permissionDenies ?? [])],
-    permissions: resolveUserPermissions(user, roleOverrides),
+    permissions,
     mustChangePassword: Boolean(user.mustChangePassword) || expired,
     passwordExpired: expired,
     passwordChangedAt: changedAt ? changedAt.toISOString() : null,
@@ -153,70 +183,37 @@ export function toPublicUser(
   };
 }
 
+export function toPublicUser(user: IUser, permissions: Permission[], qcScope: Awaited<ReturnType<typeof resolveUserQcScope>>): PublicUser {
+  return baseUserFields(user, permissions, qcScope);
+}
+
+export function toManagedUser(user: IUser, permissions: Permission[], qcScope: Awaited<ReturnType<typeof resolveUserQcScope>>): ManagedUserDto {
+  return baseUserFields(user, permissions, qcScope);
+}
+
 export async function toPublicUserAsync(user: IUser): Promise<PublicUser> {
-  const roleOverrides = await getRoleOverride(user.role);
-  return toPublicUser(user, roleOverrides);
+  const [permissions, qcScope] = await Promise.all([
+    resolvePermissionsForUser(user),
+    resolveUserQcScope(user),
+  ]);
+  return toPublicUser(user, permissions, qcScope);
+}
+
+export async function toManagedUserAsync(user: IUser): Promise<ManagedUserDto> {
+  const [permissions, qcScope] = await Promise.all([
+    resolvePermissionsForUser(user),
+    resolveUserQcScope(user),
+  ]);
+  return toManagedUser(user, permissions, qcScope);
 }
 
 export async function listPermissionCatalog() {
   return getPermissionCatalog();
 }
 
-export async function listRolePermissionConfigs() {
-  const configs = await RolePermissionConfig.find();
-  const byRole = new Map(configs.map((config) => [config.role, config]));
-
-  return Object.keys(ROLE_LABELS).map((role) =>
-    buildRolePermissionDto(role as Role, byRole.get(role as Role)),
-  );
-}
-
-export async function getRolePermissionConfig(role: Role) {
-  const config = await RolePermissionConfig.findOne({ role });
-  return buildRolePermissionDto(role, config);
-}
-
-export async function updateRolePermissionConfig(
-  role: Role,
-  input: { grants: string[]; denies: string[] },
-  audit?: ActorAuditContext,
-) {
-  if (isRoleLocked(role)) {
-    throw new AppError('Admin role permissions cannot be modified', 400);
-  }
-
-  const grants = assertValidPermissions(input.grants);
-  const denies = assertValidPermissions(input.denies);
-  assertNoOverlap(grants, denies);
-
-  const config = await RolePermissionConfig.findOneAndUpdate(
-    { role },
-    { grants, denies },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
-  );
-
-  if (audit) {
-    const actor = await resolveActor(audit.actorId);
-    await recordActivity({
-      action: AUDIT_ACTIONS.ROLE_PERMISSIONS_UPDATE,
-      summary: `${actor?.actorEmail ?? 'Admin'} updated ${ROLE_LABELS[role]} role permissions`,
-      ...(actor ?? {}),
-      targetType: 'role',
-      targetId: role,
-      metadata: { grants, denies },
-      ipAddress: audit.ipAddress,
-      userAgent: audit.userAgent,
-    });
-  }
-
-  return buildRolePermissionDto(role, config);
-}
-
 export async function listUsers() {
   const users = await User.find().sort({ createdAt: -1 });
-  const roleMap = await getRoleOverridesMap();
-
-  return users.map((user) => toPublicUser(user, roleMap.get(user.role)));
+  return Promise.all(users.map((user) => toPublicUserAsync(user)));
 }
 
 export async function getUserById(userId: string) {
@@ -235,10 +232,16 @@ export async function createUser(
     firstName: string;
     lastName: string;
     role: Role;
+    roles?: Role[];
+    primaryRole?: Role;
     accountType?: AccountType;
     clinicName?: string | null;
     companyName?: string | null;
     departmentId?: string | null;
+    teamIds?: string[];
+    experienceLevel?: ExperienceLevel | null;
+    softwareExpertise?: string[];
+    isAvailable?: boolean;
     permissionGrants?: string[];
     permissionDenies?: string[];
   },
@@ -273,12 +276,17 @@ export async function createUser(
     doctorId = await generateDoctorId();
   }
 
+  const primaryRole = input.primaryRole ?? input.role;
+  const roles = input.roles?.length ? input.roles : [input.role];
+
   const user = await User.create({
     email: input.email,
     password: input.password,
     firstName: input.firstName,
     lastName: input.lastName,
-    role: input.role,
+    role: primaryRole,
+    primaryRole,
+    roles: Array.from(new Set([primaryRole, ...roles])),
     accountType,
     accountStatus: ACCOUNT_STATUSES.ACTIVE,
     doctorId,
@@ -286,6 +294,10 @@ export async function createUser(
     companyName: input.companyName ?? undefined,
     departmentId,
     departmentName,
+    teamIds: (input.teamIds ?? []).map((id) => new Types.ObjectId(id)),
+    experienceLevel: input.experienceLevel ?? undefined,
+    softwareExpertise: input.softwareExpertise ?? [],
+    isAvailable: input.isAvailable ?? true,
     permissionGrants: grants,
     permissionDenies: denies,
     mustChangePassword: true,
@@ -316,11 +328,17 @@ export async function updateUser(
     firstName?: string;
     lastName?: string;
     role?: Role;
+    roles?: Role[];
+    primaryRole?: Role;
     isActive?: boolean;
     accountStatus?: AccountStatus;
     clinicName?: string | null;
     companyName?: string | null;
     departmentId?: string | null;
+    teamIds?: string[];
+    experienceLevel?: ExperienceLevel | null;
+    softwareExpertise?: string[];
+    isAvailable?: boolean;
   },
   audit?: RequestAuditContext,
 ) {
@@ -354,12 +372,24 @@ export async function updateUser(
     departmentId: user.departmentId ? String(user.departmentId) : null,
   };
 
+  if (input.roles !== undefined) {
+    user.roles = input.roles;
+  }
+
+  if (input.primaryRole !== undefined) {
+    user.primaryRole = input.primaryRole;
+  }
+
   if (input.role && input.role !== user.role) {
     if (user.role === ROLES.ADMIN && user.id === actorId) {
       throw new AppError('You cannot change your own admin role', 400);
     }
 
     user.role = input.role;
+    user.primaryRole = input.role;
+    if (!user.roles.includes(input.role)) {
+      user.roles = Array.from(new Set([input.role, ...user.roles]));
+    }
 
     if (input.role === ROLES.ADMIN) {
       user.permissionGrants = [];
@@ -369,7 +399,18 @@ export async function updateUser(
     if (input.role === ROLES.DOCTOR && !user.doctorId) {
       user.doctorId = await generateDoctorId();
     }
+  } else if (input.primaryRole && input.primaryRole !== user.role) {
+    if (user.role === ROLES.ADMIN && user.id === actorId) {
+      throw new AppError('You cannot change your own admin role', 400);
+    }
+    user.primaryRole = input.primaryRole;
+    user.role = input.primaryRole;
+    if (!user.roles.includes(input.primaryRole)) {
+      user.roles = Array.from(new Set([input.primaryRole, ...user.roles]));
+    }
   }
+
+  syncUserRoleFields(user);
 
   if (input.firstName !== undefined) user.firstName = input.firstName;
   if (input.lastName !== undefined) user.lastName = input.lastName;
@@ -396,6 +437,19 @@ export async function updateUser(
       user.departmentId = dept._id as Types.ObjectId;
       user.departmentName = dept.name;
     }
+  }
+
+  if (input.teamIds !== undefined) {
+    user.teamIds = input.teamIds.map((id) => new Types.ObjectId(id));
+  }
+  if (input.experienceLevel !== undefined) {
+    user.experienceLevel = input.experienceLevel ?? undefined;
+  }
+  if (input.softwareExpertise !== undefined) {
+    user.softwareExpertise = input.softwareExpertise;
+  }
+  if (input.isAvailable !== undefined) {
+    user.isAvailable = input.isAvailable;
   }
 
   await user.save();
@@ -544,8 +598,7 @@ export async function resolvePermissionsForUserId(userId: string): Promise<Permi
     throw new AppError('User not found or inactive', 401);
   }
 
-  const roleOverrides = await getRoleOverride(user.role);
-  return resolveUserPermissions(user, roleOverrides);
+  return resolvePermissionsForUser(user);
 }
 
 export function describeRolePermissions(role: Role) {

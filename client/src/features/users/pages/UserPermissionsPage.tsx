@@ -1,37 +1,75 @@
-import { ROLE_LABELS, ROLES, type Permission, type PublicUser } from '@ayetis/shared';
-import { useEffect, useState } from 'react';
+import {
+  getRoleLabel,
+  ROLES,
+  toRbacMatrixGroup,
+  type Permission,
+  type PermissionCatalogItem,
+  type PublicUser,
+  type RoleDefinitionDto,
+} from '@ayetis/shared';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton } from '@/features/auth/components/AuthUI';
+import { usePermissions } from '@/features/auth/permissions';
 import { toast } from '@/features/notifications/toastStore';
+import { fetchRoleDefinitions } from '@/features/rbac/api';
 import { PermissionEditor } from '@/features/users/components/PermissionEditor';
 import * as usersApi from '@/features/users/api';
-import { roleDefaultsFor } from '@/features/users/permissionState';
 import { getErrorMessage } from '@/lib/api';
+
+function combinedRoleDefaults(
+  userRoles: string[],
+  definitions: RoleDefinitionDto[],
+): Permission[] {
+  const set = new Set<Permission>();
+  for (const roleKey of userRoles) {
+    const def = definitions.find((item) => item.key === roleKey);
+    if (def) {
+      for (const perm of def.defaults) set.add(perm);
+    }
+  }
+  return [...set];
+}
 
 export function UserPermissionsPage() {
   const { userId = '' } = useParams();
+  const { can, PERMISSIONS } = usePermissions();
+  const canEditRoles = can(PERMISSIONS.USER_UPDATE);
   const [user, setUser] = useState<PublicUser | null>(null);
-  const [catalog, setCatalog] = useState<usersApi.PermissionCatalogItem[]>([]);
+  const [catalog, setCatalog] = useState<PermissionCatalogItem[]>([]);
+  const [roleDefinitions, setRoleDefinitions] = useState<RoleDefinitionDto[]>([]);
   const [grants, setGrants] = useState<Permission[]>([]);
   const [denies, setDenies] = useState<Permission[]>([]);
+  const [primaryRole, setPrimaryRole] = useState('');
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingRoles, setSavingRoles] = useState(false);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       setError('');
       try {
-        const [nextUser, nextCatalog] = await Promise.all([
+        const [nextUser, nextCatalog, definitions] = await Promise.all([
           usersApi.fetchUser(userId),
           usersApi.fetchPermissionCatalog(),
+          fetchRoleDefinitions().catch(() => [] as RoleDefinitionDto[]),
         ]);
         setUser(nextUser);
-        setCatalog(nextCatalog);
+        setCatalog(
+          nextCatalog.map((item) => ({
+            ...item,
+            group: toRbacMatrixGroup(item.group),
+          })),
+        );
+        setRoleDefinitions(definitions);
         setGrants(nextUser.permissionGrants);
         setDenies(nextUser.permissionDenies);
+        setPrimaryRole(nextUser.primaryRole ?? nextUser.role);
+        setSelectedRoles(nextUser.roles?.length ? nextUser.roles : [nextUser.role]);
       } catch (err) {
         const message = getErrorMessage(err, 'Unable to load user permissions');
         setError(message);
@@ -43,6 +81,16 @@ export function UserPermissionsPage() {
 
     void load();
   }, [userId]);
+
+  const roleDefaults = useMemo(() => {
+    if (!user) return [];
+    if (roleDefinitions.length) {
+      return combinedRoleDefaults(user.roles?.length ? user.roles : [user.role], roleDefinitions);
+    }
+    return user.permissions.filter(
+      (perm) => !user.permissionGrants.includes(perm) && !user.permissionDenies.includes(perm),
+    );
+  }, [user, roleDefinitions]);
 
   async function handleSave() {
     if (!user) return;
@@ -63,6 +111,41 @@ export function UserPermissionsPage() {
     }
   }
 
+  async function handleSaveRoles() {
+    if (!user || !canEditRoles) return;
+    if (selectedRoles.length === 0) {
+      toast().error('Select at least one role');
+      return;
+    }
+    const nextPrimary = selectedRoles.includes(primaryRole) ? primaryRole : selectedRoles[0];
+    setSavingRoles(true);
+    try {
+      const updated = await usersApi.updateUser(user.id, {
+        roles: selectedRoles,
+        primaryRole: nextPrimary,
+        role: nextPrimary,
+      });
+      setUser(updated);
+      setPrimaryRole(updated.primaryRole ?? updated.role);
+      setSelectedRoles(updated.roles?.length ? updated.roles : [updated.role]);
+      toast().success('User roles updated');
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to save roles'));
+    } finally {
+      setSavingRoles(false);
+    }
+  }
+
+  function toggleRole(roleKey: string) {
+    setSelectedRoles((prev) => {
+      if (prev.includes(roleKey)) {
+        const next = prev.filter((key) => key !== roleKey);
+        return next.length ? next : prev;
+      }
+      return [...prev, roleKey];
+    });
+  }
+
   if (loading) {
     return <p className="text-sm text-muted">Loading permissions…</p>;
   }
@@ -78,7 +161,8 @@ export function UserPermissionsPage() {
     );
   }
 
-  const locked = user.role === ROLES.ADMIN;
+  const locked = user.role === ROLES.ADMIN || user.roles?.includes(ROLES.ADMIN);
+  const assignableRoles = roleDefinitions.filter((role) => role.isActive && !role.isDisabled);
 
   return (
     <div className="space-y-6">
@@ -89,14 +173,60 @@ export function UserPermissionsPage() {
           </Link>
         }
         title={`${user.firstName} ${user.lastName}`}
-        subtitle={`${user.email} · ${ROLE_LABELS[user.role]} · ${user.permissions.length} effective permissions`}
+        subtitle={`${user.email} · ${(user.roles ?? [user.role]).map(getRoleLabel).join(', ')} · ${user.permissions.length} effective permissions`}
       />
 
       {error ? <Alert>{error}</Alert> : null}
 
+      <section className="space-y-3 rounded-2xl border border-line bg-white p-5">
+        <h2 className="text-sm font-semibold text-ink">Roles</h2>
+        <p className="text-sm text-muted">
+          Primary: <span className="font-medium text-ink">{getRoleLabel(primaryRole)}</span>
+        </p>
+        {canEditRoles && assignableRoles.length > 0 ? (
+          <>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-ink">Primary role</span>
+              <select
+                value={primaryRole}
+                onChange={(e) => setPrimaryRole(e.target.value)}
+                className="w-full max-w-sm rounded-xl border border-line bg-white px-3.5 py-3 text-[15px]"
+              >
+                {selectedRoles.map((roleKey) => (
+                  <option key={roleKey} value={roleKey}>
+                    {getRoleLabel(roleKey)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex flex-wrap gap-3">
+              {assignableRoles.map((role) => (
+                <label key={role.key} className="flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={selectedRoles.includes(role.key)}
+                    onChange={() => toggleRole(role.key)}
+                  />
+                  {role.name}
+                </label>
+              ))}
+            </div>
+            <div className="max-w-xs">
+              <AuthButton loading={savingRoles} type="button" onClick={() => void handleSaveRoles()}>
+                Save roles
+              </AuthButton>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-ink">
+            {(user.roles ?? [user.role]).map(getRoleLabel).join(' · ')}
+          </p>
+        )}
+      </section>
+
       <PermissionEditor
         catalog={catalog}
-        roleDefaults={roleDefaultsFor(user.role)}
+        roleDefaults={roleDefaults}
         grants={grants}
         denies={denies}
         locked={locked}

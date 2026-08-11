@@ -56,7 +56,7 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[
             ['Users', '/app/users', 'Add, remove, or transfer accounts'],
-            ['Permissions', '/app/roles', 'Assign role and user permissions'],
+            ['Permissions', '/app/roles', 'Roles matrix, teams, assignment rules'],
             ['Cases', '/app/cases', 'Reassign cases and set urgent priority'],
             ['Demo cases', '/app/cases?isDemo=true', 'Tracked demo case pipeline'],
             ['Commercial', '/app/commercial', 'Pricing, billing, providers, invoices'],

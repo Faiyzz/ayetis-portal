@@ -139,6 +139,7 @@ export interface IBusinessConfig extends Document {
   requiredFields: Record<string, boolean>;
   caseSubmissionTabs: Record<string, boolean>;
   reportVisibility: Record<string, boolean>;
+  autoAssignmentEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -164,6 +165,7 @@ const businessConfigSchema = new Schema<IBusinessConfig>(
       type: Schema.Types.Mixed,
       default: () => ({ ...DEFAULT_REPORT_VISIBILITY }),
     },
+    autoAssignmentEnabled: { type: Boolean, default: true },
   },
   { timestamps: true },
 );

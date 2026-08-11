@@ -3,13 +3,13 @@ import {
   ACCOUNT_TYPES,
   ALL_ACCOUNT_STATUSES,
   ALL_ACCOUNT_TYPES,
+  ALL_EXPERIENCE_LEVELS,
   ALL_PERMISSIONS,
-  ALL_ROLES,
   type AccountStatus,
   type AccountType,
+  type ExperienceLevel,
   type Permission,
   type Role,
-  resolveEffectivePermissions,
 } from '@ayetis/shared';
 import bcrypt from 'bcryptjs';
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
@@ -20,6 +20,9 @@ export interface IUser extends Document {
   firstName: string;
   lastName: string;
   role: Role;
+  /** All enabled role keys (includes primary). */
+  roles: Role[];
+  primaryRole?: Role;
   accountType: AccountType;
   accountStatus: AccountStatus;
   doctorId?: string;
@@ -48,6 +51,10 @@ export interface IUser extends Document {
   isActive: boolean;
   departmentId?: Types.ObjectId;
   departmentName?: string;
+  teamIds: Types.ObjectId[];
+  experienceLevel?: ExperienceLevel;
+  softwareExpertise: string[];
+  isAvailable: boolean;
   permissionGrants: Permission[];
   permissionDenies: Permission[];
   passwordResetToken?: string;
@@ -96,8 +103,17 @@ const userSchema = new Schema<IUser>(
     },
     role: {
       type: String,
-      enum: ALL_ROLES,
       required: true,
+      trim: true,
+      index: true,
+    },
+    roles: {
+      type: [String],
+      default: [],
+    },
+    primaryRole: {
+      type: String,
+      trim: true,
       index: true,
     },
     accountType: {
@@ -188,6 +204,13 @@ const userSchema = new Schema<IUser>(
       type: String,
       trim: true,
     },
+    teamIds: { type: [{ type: Schema.Types.ObjectId, ref: 'Team' }], default: [] },
+    experienceLevel: {
+      type: String,
+      enum: ALL_EXPERIENCE_LEVELS,
+    },
+    softwareExpertise: { type: [String], default: [] },
+    isAvailable: { type: Boolean, default: true, index: true },
     permissionGrants: {
       type: [String],
       enum: ALL_PERMISSIONS,
@@ -236,6 +259,25 @@ const userSchema = new Schema<IUser>(
   },
 );
 
+userSchema.pre('save', function syncRoles(next) {
+  if (!this.roles?.length && this.role) {
+    this.roles = [this.role];
+  }
+  if (this.primaryRole) {
+    this.role = this.primaryRole;
+    if (!this.roles.includes(this.primaryRole)) {
+      this.roles = Array.from(new Set([this.primaryRole, ...this.roles]));
+    }
+  } else if (this.roles?.length) {
+    this.primaryRole = this.roles[0];
+    this.role = this.primaryRole;
+  } else if (this.role) {
+    this.primaryRole = this.role;
+    this.roles = [this.role];
+  }
+  next();
+});
+
 userSchema.pre('save', async function syncStatusAndHash(next) {
   if (this.isModified('accountStatus')) {
     this.isActive = this.accountStatus === ACCOUNT_STATUSES.ACTIVE;
@@ -276,15 +318,4 @@ export function getUserOverrides(user: Pick<IUser, 'permissionGrants' | 'permiss
     grants: user.permissionGrants ?? [],
     denies: user.permissionDenies ?? [],
   };
-}
-
-export function resolveUserPermissions(
-  user: Pick<IUser, 'role' | 'permissionGrants' | 'permissionDenies'>,
-  roleOverrides?: { grants: Permission[]; denies: Permission[] },
-): Permission[] {
-  return resolveEffectivePermissions({
-    role: user.role,
-    roleOverrides,
-    userOverrides: getUserOverrides(user),
-  });
 }

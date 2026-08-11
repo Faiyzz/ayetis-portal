@@ -15,6 +15,14 @@ export const AUDIT_ACTIONS = {
   USER_PASSWORD_RESET_ADMIN: 'user.password.reset_admin',
   USER_STATUS_CHANGE: 'user.status.change',
   ROLE_PERMISSIONS_UPDATE: 'role.permissions.update',
+  ROLE_UPSERT: 'role.upsert',
+  ROLE_CLONE: 'role.clone',
+  ROLE_DELETE: 'role.delete',
+  ROLE_REORDER: 'role.reorder',
+  TEAM_UPSERT: 'team.upsert',
+  TEAM_DELETE: 'team.delete',
+  ASSIGNMENT_RULE_UPSERT: 'assignment_rule.upsert',
+  ASSIGNMENT_RULE_DELETE: 'assignment_rule.delete',
   REGISTRATION_APPROVE: 'registration.approve',
   REGISTRATION_REJECT: 'registration.reject',
   REGISTRATION_HOLD: 'registration.hold',
@@ -111,6 +119,14 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   [AUDIT_ACTIONS.USER_PASSWORD_RESET_ADMIN]: 'Admin reset user password',
   [AUDIT_ACTIONS.USER_STATUS_CHANGE]: 'User status changed',
   [AUDIT_ACTIONS.ROLE_PERMISSIONS_UPDATE]: 'Role permissions updated',
+  [AUDIT_ACTIONS.ROLE_UPSERT]: 'Role saved',
+  [AUDIT_ACTIONS.ROLE_CLONE]: 'Role cloned',
+  [AUDIT_ACTIONS.ROLE_DELETE]: 'Role deleted',
+  [AUDIT_ACTIONS.ROLE_REORDER]: 'Roles reordered',
+  [AUDIT_ACTIONS.TEAM_UPSERT]: 'Team saved',
+  [AUDIT_ACTIONS.TEAM_DELETE]: 'Team deleted',
+  [AUDIT_ACTIONS.ASSIGNMENT_RULE_UPSERT]: 'Assignment rule saved',
+  [AUDIT_ACTIONS.ASSIGNMENT_RULE_DELETE]: 'Assignment rule deleted',
   [AUDIT_ACTIONS.REGISTRATION_APPROVE]: 'Registration approved',
   [AUDIT_ACTIONS.REGISTRATION_REJECT]: 'Registration rejected',
   [AUDIT_ACTIONS.REGISTRATION_HOLD]: 'Registration held',
@@ -189,6 +205,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
 export type AuditTargetType =
   | 'user'
   | 'role'
+  | 'team'
+  | 'assignment_rule'
   | 'auth'
   | 'system'
   | 'case'

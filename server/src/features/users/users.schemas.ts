@@ -1,8 +1,8 @@
 import {
   ALL_ACCOUNT_STATUSES,
   ALL_ACCOUNT_TYPES,
-  ALL_ROLES,
   isPasswordComplex,
+  isRole,
   PASSWORD_POLICY_DESCRIPTION,
   type AccountStatus,
   type AccountType,
@@ -21,7 +21,7 @@ const passwordSchema = z
 const permissionListSchema = z.array(z.string()).default([]);
 
 const roleSchema = z.custom<Role>(
-  (value): value is Role => typeof value === 'string' && (ALL_ROLES as string[]).includes(value),
+  (value): value is Role => isRole(String(value)),
   { message: 'Invalid role' },
 );
 
@@ -43,10 +43,16 @@ export const createUserSchema = z.object({
   firstName: z.string().trim().min(1, 'First name is required').max(80),
   lastName: z.string().trim().min(1, 'Last name is required').max(80),
   role: roleSchema,
+  roles: z.array(roleSchema).optional(),
+  primaryRole: roleSchema.optional(),
   accountType: accountTypeSchema.optional(),
   clinicName: z.string().trim().max(160).nullable().optional(),
   companyName: z.string().trim().max(160).nullable().optional(),
   departmentId: z.string().trim().nullable().optional(),
+  teamIds: z.array(z.string()).optional(),
+  experienceLevel: z.string().nullable().optional(),
+  softwareExpertise: z.array(z.string()).optional(),
+  isAvailable: z.boolean().optional(),
   permissionGrants: permissionListSchema.optional(),
   permissionDenies: permissionListSchema.optional(),
 });
@@ -56,11 +62,17 @@ export const updateUserSchema = z
     firstName: z.string().trim().min(1).max(80).optional(),
     lastName: z.string().trim().min(1).max(80).optional(),
     role: roleSchema.optional(),
+    roles: z.array(roleSchema).optional(),
+    primaryRole: roleSchema.optional(),
     isActive: z.boolean().optional(),
     accountStatus: accountStatusSchema.optional(),
     clinicName: z.string().trim().max(160).nullable().optional(),
     companyName: z.string().trim().max(160).nullable().optional(),
     departmentId: z.string().trim().nullable().optional(),
+    teamIds: z.array(z.string()).optional(),
+    experienceLevel: z.string().nullable().optional(),
+    softwareExpertise: z.array(z.string()).optional(),
+    isAvailable: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',

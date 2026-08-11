@@ -21,6 +21,7 @@ import settingsRoutes from './features/settings/settings.routes';
 import corporateRoutes from './features/corporate/corporate.routes';
 import reportsRoutes from './features/reports/reports.routes';
 import supervisorRoutes from './features/supervisor/supervisor.routes';
+import rbacRoutes from './features/rbac/rbac.routes';
 import usersRoutes from './features/users/users.routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
@@ -56,6 +57,7 @@ export function createApp() {
 
   app.use('/api/auth', authRoutes);
   app.use('/api/users', usersRoutes);
+  app.use('/api/rbac', rbacRoutes);
   app.use('/api/registrations', registrationsRoutes);
   app.use('/api/cancellations', cancellationsRoutes);
   app.use('/api/commercial', commercialRoutes);

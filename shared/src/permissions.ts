@@ -27,6 +27,7 @@ export const PERMISSIONS = {
   // Role permission configuration
   ROLE_VIEW_PERMISSIONS: 'role:view_permissions',
   ROLE_ASSIGN_PERMISSIONS: 'role:assign_permissions',
+  ROLE_MANAGE: 'role:manage',
 
   // Cases (stubs for upcoming features — keep permissions centralized early)
   CASE_CREATE: 'case:create',
@@ -57,6 +58,7 @@ export const PERMISSIONS = {
   // Departments / teams
   DEPARTMENT_MANAGE: 'department:manage',
   TEAM_MANAGE: 'team:manage',
+  ASSIGNMENT_RULE_MANAGE: 'assignment_rule:manage',
 
   // Complaints / feedback
   COMPLAINT_CREATE: 'complaint:create',
@@ -121,7 +123,9 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.REGISTRATION_REJECT]: 'Reject registration requests',
   [PERMISSIONS.ROLE_VIEW_PERMISSIONS]: 'View role permissions',
   [PERMISSIONS.ROLE_ASSIGN_PERMISSIONS]: 'Assign role permissions',
+  [PERMISSIONS.ROLE_MANAGE]: 'Manage roles (create, clone, disable)',
   [PERMISSIONS.CASE_CREATE]: 'Create cases',
+
   [PERMISSIONS.CASE_VIEW_OWN]: 'View own cases',
   [PERMISSIONS.CASE_VIEW_ALL]: 'View all cases',
   [PERMISSIONS.CASE_VIEW_ASSIGNED]: 'View assigned cases',
@@ -142,7 +146,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.REPORT_VIEW_TEAM]: 'View team reports',
   [PERMISSIONS.REPORT_VIEW_ALL]: 'View all reports',
   [PERMISSIONS.DEPARTMENT_MANAGE]: 'Manage departments',
-  [PERMISSIONS.TEAM_MANAGE]: 'Manage team members',
+  [PERMISSIONS.TEAM_MANAGE]: 'Manage teams',
+  [PERMISSIONS.ASSIGNMENT_RULE_MANAGE]: 'Manage auto-assignment rules',
   [PERMISSIONS.COMPLAINT_CREATE]: 'Log complaints',
   [PERMISSIONS.COMPLAINT_VIEW]: 'View complaints and ratings',
   [PERMISSIONS.COMPLAINT_MANAGE]: 'Manage complaints',
@@ -206,6 +211,7 @@ export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
   [PERMISSIONS.REGISTRATION_REJECT]: 'Registrations',
   [PERMISSIONS.ROLE_VIEW_PERMISSIONS]: 'Roles',
   [PERMISSIONS.ROLE_ASSIGN_PERMISSIONS]: 'Roles',
+  [PERMISSIONS.ROLE_MANAGE]: 'Roles',
   [PERMISSIONS.CASE_CREATE]: 'Cases',
   [PERMISSIONS.CASE_VIEW_OWN]: 'Cases',
   [PERMISSIONS.CASE_VIEW_ALL]: 'Cases',
@@ -228,6 +234,7 @@ export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
   [PERMISSIONS.REPORT_VIEW_ALL]: 'Reports',
   [PERMISSIONS.DEPARTMENT_MANAGE]: 'Departments',
   [PERMISSIONS.TEAM_MANAGE]: 'Departments',
+  [PERMISSIONS.ASSIGNMENT_RULE_MANAGE]: 'Roles',
   [PERMISSIONS.COMPLAINT_CREATE]: 'Complaints',
   [PERMISSIONS.COMPLAINT_VIEW]: 'Complaints',
   [PERMISSIONS.COMPLAINT_MANAGE]: 'Complaints',
@@ -260,7 +267,7 @@ export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
   [PERMISSIONS.AUDIT_VIEW]: 'Audit',
 };
 
-const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
+const ROLE_PERMISSIONS: Record<string, readonly Permission[]> = {
   [ROLES.ADMIN]: ALL_PERMISSIONS,
 
   [ROLES.DOCTOR]: [
@@ -334,6 +341,19 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     PERMISSIONS.COMPLAINT_CREATE,
   ],
 
+  senior_designer: [
+    PERMISSIONS.USER_VIEW_OWN,
+    PERMISSIONS.USER_UPDATE_OWN,
+    PERMISSIONS.USER_CHANGE_PASSWORD,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_DESIGN,
+    PERMISSIONS.CASE_UPDATE,
+    PERMISSIONS.CLARIFICATION_CREATE,
+    PERMISSIONS.CLARIFICATION_REPLY,
+    PERMISSIONS.CLARIFICATION_RESOLVE,
+    PERMISSIONS.COMPLAINT_CREATE,
+  ],
+
   [ROLES.QC]: [
     PERMISSIONS.USER_VIEW_OWN,
     PERMISSIONS.USER_UPDATE_OWN,
@@ -345,6 +365,28 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     PERMISSIONS.CLARIFICATION_REPLY,
     PERMISSIONS.CLARIFICATION_RESOLVE,
     PERMISSIONS.COMPLAINT_CREATE,
+  ],
+
+  qc_self: [
+    PERMISSIONS.USER_VIEW_OWN,
+    PERMISSIONS.USER_UPDATE_OWN,
+    PERMISSIONS.USER_CHANGE_PASSWORD,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_QC_REVIEW,
+    PERMISSIONS.CASE_UPDATE,
+    PERMISSIONS.CLARIFICATION_CREATE,
+    PERMISSIONS.CLARIFICATION_REPLY,
+    PERMISSIONS.CLARIFICATION_RESOLVE,
+    PERMISSIONS.COMPLAINT_CREATE,
+  ],
+
+  cut_operator: [
+    PERMISSIONS.USER_VIEW_OWN,
+    PERMISSIONS.USER_UPDATE_OWN,
+    PERMISSIONS.USER_CHANGE_PASSWORD,
+    PERMISSIONS.CASE_VIEW_ASSIGNED,
+    PERMISSIONS.CASE_DESIGN,
+    PERMISSIONS.CASE_UPDATE,
   ],
 
   [ROLES.ORTHODONTIST]: [
@@ -377,6 +419,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     PERMISSIONS.USER_CREATE,
     PERMISSIONS.USER_UPDATE,
     PERMISSIONS.TEAM_MANAGE,
+    PERMISSIONS.ROLE_VIEW_PERMISSIONS,
     PERMISSIONS.COMPLAINT_CREATE,
     PERMISSIONS.COMPLAINT_VIEW,
     PERMISSIONS.CANCELLATION_REPORT_VIEW,
@@ -401,22 +444,40 @@ export interface PermissionOverrides {
 
 export interface EffectivePermissionInput {
   role: Role;
+  roles?: readonly Role[];
   roleOverrides?: PermissionOverrides;
+  /** Per-role overrides keyed by role key (union applied). */
+  roleOverridesByKey?: Record<string, PermissionOverrides>;
   userOverrides?: PermissionOverrides;
 }
 
 /**
  * Resolve effective permissions:
- * (role defaults ∪ role grants ∪ user grants) − role denies − user denies
+ * Union of (role defaults ∪ role grants) across roles − role denies − user denies ∪ user grants
  * Admin always retains the full permission set.
  */
 export function resolveEffectivePermissions(input: EffectivePermissionInput): Permission[] {
-  if (input.role === ROLES.ADMIN) {
+  const roles = Array.from(
+    new Set(
+      (input.roles?.length ? input.roles : [input.role]).filter(Boolean) as Role[],
+    ),
+  );
+  if (roles.includes(ROLES.ADMIN) || input.role === ROLES.ADMIN) {
     return [...ALL_PERMISSIONS];
   }
 
-  const base = new Set<Permission>(ROLE_PERMISSIONS[input.role] ?? []);
+  const base = new Set<Permission>();
+  for (const role of roles) {
+    for (const permission of ROLE_PERMISSIONS[role] ?? []) {
+      base.add(permission);
+    }
+    const ov = input.roleOverridesByKey?.[role] ?? (role === input.role ? input.roleOverrides : undefined);
+    for (const permission of ov?.grants ?? []) {
+      base.add(permission);
+    }
+  }
 
+  /* legacy single roleOverrides still applied */
   for (const permission of input.roleOverrides?.grants ?? []) {
     base.add(permission);
   }
@@ -424,6 +485,12 @@ export function resolveEffectivePermissions(input: EffectivePermissionInput): Pe
     base.add(permission);
   }
 
+  for (const role of roles) {
+    const ov = input.roleOverridesByKey?.[role] ?? (role === input.role ? input.roleOverrides : undefined);
+    for (const permission of ov?.denies ?? []) {
+      base.delete(permission);
+    }
+  }
   for (const permission of input.roleOverrides?.denies ?? []) {
     base.delete(permission);
   }

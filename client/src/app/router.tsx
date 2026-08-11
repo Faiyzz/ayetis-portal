@@ -108,7 +108,17 @@ export function AppRouter() {
             <Route path="users/:userId/permissions" element={<UserPermissionsPage />} />
           </Route>
 
-          <Route element={<RequirePermission permission={PERMISSIONS.ROLE_VIEW_PERMISSIONS} />}>
+          <Route
+            element={
+              <RequireAnyPermission
+                permissions={[
+                  PERMISSIONS.ROLE_VIEW_PERMISSIONS,
+                  PERMISSIONS.TEAM_MANAGE,
+                  PERMISSIONS.ASSIGNMENT_RULE_MANAGE,
+                ]}
+              />
+            }
+          >
             <Route path="roles" element={<RolePermissionsPage />} />
           </Route>
 

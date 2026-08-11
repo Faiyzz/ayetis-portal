@@ -14,6 +14,8 @@ async function bootstrap() {
   await migrateCorporateHierarchy();
   const { seedSettingsData } = await import('./features/settings/settings.service');
   await seedSettingsData();
+  const { seedRoleDefinitions } = await import('./features/rbac/rbac.service');
+  await seedRoleDefinitions();
 
   const app = createApp();
   app.listen(env.port, () => {

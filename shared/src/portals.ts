@@ -1,4 +1,5 @@
-import { ROLES, ROLE_LABELS, type Role } from './roles';
+import { ROLES, ROLE_LABELS, getRoleLabel, type Role } from './roles';
+import { PORTAL_TEMPLATES, SYSTEM_ROLE_SEEDS, type PortalTemplate } from './rbac';
 
 export interface DashboardShortcut {
   label: string;
@@ -19,8 +20,9 @@ export interface RoleDashboardConfig {
 
 /**
  * Thin portal metadata — dashboards compose shared features; they do not own domain logic.
+ * Keyed by portal template (built-in dashboards), not arbitrary custom role keys.
  */
-export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
+export const ROLE_DASHBOARDS: Record<PortalTemplate, RoleDashboardConfig> = {
   [ROLES.ADMIN]: {
     role: ROLES.ADMIN,
     title: 'Admin portal',
@@ -323,17 +325,34 @@ export const ROLE_DASHBOARDS: Record<Role, RoleDashboardConfig> = {
   },
 };
 
-export function getDashboardPath(role: Role): string {
-  return ROLE_DASHBOARDS[role].path;
+const ROLE_TO_PORTAL: Record<string, PortalTemplate> = Object.fromEntries(
+  SYSTEM_ROLE_SEEDS.map((s) => [s.key, s.portalTemplate]),
+);
+
+export function resolvePortalTemplate(
+  role: Role,
+  explicit?: PortalTemplate | null,
+): PortalTemplate {
+  if (explicit && ROLE_DASHBOARDS[explicit]) return explicit;
+  if (ROLE_TO_PORTAL[role]) return ROLE_TO_PORTAL[role];
+  if (ROLE_DASHBOARDS[role as PortalTemplate]) return role as PortalTemplate;
+  return PORTAL_TEMPLATES.DESIGNER;
 }
 
-export function getDashboardConfig(role: Role): RoleDashboardConfig {
-  return ROLE_DASHBOARDS[role];
+export function getDashboardPath(role: Role, portalTemplate?: PortalTemplate | null): string {
+  return ROLE_DASHBOARDS[resolvePortalTemplate(role, portalTemplate)].path;
+}
+
+export function getDashboardConfig(
+  role: Role,
+  portalTemplate?: PortalTemplate | null,
+): RoleDashboardConfig {
+  return ROLE_DASHBOARDS[resolvePortalTemplate(role, portalTemplate)];
 }
 
 export function getRoleOptions(): Array<{ value: Role; label: string }> {
-  return (Object.keys(ROLE_LABELS) as Role[]).map((role) => ({
+  return Object.keys(ROLE_LABELS).map((role) => ({
     value: role,
-    label: ROLE_LABELS[role],
+    label: getRoleLabel(role),
   }));
 }

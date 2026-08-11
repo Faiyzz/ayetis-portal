@@ -22,6 +22,9 @@ export interface PublicUser {
   firstName: string;
   lastName: string;
   role: Role;
+  /** All enabled role keys (includes primary). */
+  roles: Role[];
+  primaryRole: Role;
   accountType: AccountType;
   accountStatus: AccountStatus;
   doctorId: string | null;
@@ -41,6 +44,11 @@ export interface PublicUser {
   isActive: boolean;
   departmentId: string | null;
   departmentName: string | null;
+  teamIds: string[];
+  experienceLevel: import('./rbac').ExperienceLevel | null;
+  softwareExpertise: string[];
+  isAvailable: boolean;
+  qcScope: import('./rbac').QcScope;
   permissionGrants: Permission[];
   permissionDenies: Permission[];
   permissions: Permission[];
@@ -77,6 +85,8 @@ export interface ManagedUserDto {
   firstName: string;
   lastName: string;
   role: Role;
+  roles: Role[];
+  primaryRole: Role;
   accountType: AccountType;
   accountStatus: AccountStatus;
   doctorId: string | null;
@@ -93,6 +103,11 @@ export interface ManagedUserDto {
   isActive: boolean;
   departmentId: string | null;
   departmentName: string | null;
+  teamIds: string[];
+  experienceLevel: import('./rbac').ExperienceLevel | null;
+  softwareExpertise: string[];
+  isAvailable: boolean;
+  qcScope: import('./rbac').QcScope;
   permissionGrants: Permission[];
   permissionDenies: Permission[];
   permissions: Permission[];
@@ -110,10 +125,16 @@ export interface CreateUserInput {
   firstName: string;
   lastName: string;
   role: Role;
+  roles?: Role[];
+  primaryRole?: Role;
   accountType?: AccountType;
   clinicName?: string | null;
   companyName?: string | null;
   departmentId?: string | null;
+  teamIds?: string[];
+  experienceLevel?: import('./rbac').ExperienceLevel | null;
+  softwareExpertise?: string[];
+  isAvailable?: boolean;
   permissionGrants?: Permission[];
   permissionDenies?: Permission[];
 }
@@ -122,12 +143,18 @@ export interface UpdateUserInput {
   firstName?: string;
   lastName?: string;
   role?: Role;
+  roles?: Role[];
+  primaryRole?: Role;
   accountStatus?: AccountStatus;
   /** @deprecated Prefer accountStatus */
   isActive?: boolean;
   clinicName?: string | null;
   companyName?: string | null;
   departmentId?: string | null;
+  teamIds?: string[];
+  experienceLevel?: import('./rbac').ExperienceLevel | null;
+  softwareExpertise?: string[];
+  isAvailable?: boolean;
 }
 
 export interface AssignPermissionsInput {

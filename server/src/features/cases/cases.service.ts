@@ -34,7 +34,11 @@ import {
   QC_ERROR_CODE_LABELS,
   QC_ESCALATION_REJECTION_THRESHOLD,
   QC_REVIEW_OUTCOMES,
+  QC_SCOPES,
   ROLES,
+  ASSIGNMENT_QUEUES,
+  canQcCase,
+  type QcScope,
   ALL_COORDINATOR_QUEUES,
   ALL_DELAY_LEVELS,
   ALL_QC_ERROR_CODES,
@@ -142,7 +146,9 @@ export interface CaseActor {
   firstName: string;
   lastName: string;
   role: string;
+  roles?: string[];
   permissions: Permission[];
+  qcScope: QcScope;
   organizationId?: string | null;
   facilityId?: string | null;
   corporateCustomerId?: string | null;
@@ -2467,9 +2473,20 @@ export async function submitCaseToQc(
   return await toDetail(caseDoc, actor);
 }
 
-function assertCanQcReview(actor: CaseActor) {
+function assertCanQcReview(actor: CaseActor, caseDoc?: ICase) {
   if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_QC_REVIEW)) {
     throw new AppError('You do not have permission to perform QC review', 403);
+  }
+  if (!caseDoc) return;
+  const designerId = caseDoc.assignedDesignerId
+    ? String(caseDoc.assignedDesignerId)
+    : null;
+  const check = canQcCase(actor.qcScope ?? QC_SCOPES.NONE, {
+    actorId: actor.id,
+    designerId,
+  });
+  if (!check.allowed) {
+    throw new AppError(check.reason || 'QC not allowed for this case', 403);
   }
 }
 
@@ -2620,6 +2637,7 @@ export async function addQcComment(
   assertCanQcReview(actor);
   const caseDoc = await findCase(caseIdOrMongoId);
   assertCanViewCase(actor, caseDoc);
+  assertCanQcReview(actor, caseDoc);
 
   if (caseDoc.isDeleted) throw new AppError('Cannot review a deleted case', 400);
   if (caseDoc.status !== CASE_STATUSES.IN_PROCESS || !caseDoc.submittedToQcAt) {
@@ -2681,6 +2699,7 @@ export async function approveQcCase(
   assertCanQcReview(actor);
   const caseDoc = await findCase(caseIdOrMongoId);
   assertCanViewCase(actor, caseDoc);
+  assertCanQcReview(actor, caseDoc);
 
   if (caseDoc.isDeleted) throw new AppError('Cannot approve a deleted case', 400);
   if (caseDoc.status !== CASE_STATUSES.IN_PROCESS || !caseDoc.submittedToQcAt) {
@@ -2802,6 +2821,7 @@ export async function rejectQcCase(
   assertCanQcReview(actor);
   const caseDoc = await findCase(caseIdOrMongoId);
   assertCanViewCase(actor, caseDoc);
+  assertCanQcReview(actor, caseDoc);
 
   if (caseDoc.isDeleted) throw new AppError('Cannot reject a deleted case', 400);
   if (caseDoc.status !== CASE_STATUSES.IN_PROCESS || !caseDoc.submittedToQcAt) {
@@ -3310,7 +3330,15 @@ export async function assignCase(
       throw new AppError('designerId is required when assigning to a designer', 400);
     }
     const designer = await User.findById(input.designerId);
-    if (!designer || !designer.isActive || designer.role !== ROLES.DESIGNER) {
+    const designerRoles = [
+      designer?.primaryRole || designer?.role,
+      ...(designer?.roles ?? []),
+    ].filter(Boolean) as string[];
+    const isDesignerLike =
+      designerRoles.includes(ROLES.DESIGNER) ||
+      designerRoles.includes('senior_designer') ||
+      designerRoles.includes('cut_operator');
+    if (!designer || !designer.isActive || !isDesignerLike) {
       throw new AppError('Active designer not found', 404);
     }
 
@@ -3326,17 +3354,50 @@ export async function assignCase(
       metadata: { designerId: designer.id, note: input.note?.trim() || undefined },
     });
   } else if (input.mode === 'auto_queue') {
-    caseDoc.assignmentMode = ASSIGNMENT_MODES.AUTO_QUEUE;
-    caseDoc.assignedDesignerId = undefined;
-    caseDoc.assignedDesignerName = undefined;
-    caseDoc.status = CASE_STATUSES.IN_PROCESS;
+    const { assignCaseByRules } = await import('../rbac/rbac.service');
+    const matchedId = await assignCaseByRules(
+      { country: caseDoc.country || '' },
+      ASSIGNMENT_QUEUES.DESIGNER,
+    );
 
-    pushHistory(caseDoc, {
-      action: 'assigned',
-      summary: 'Sent to auto case-pick queue',
-      actor,
-      metadata: { mode: 'auto_queue', note: input.note?.trim() || undefined },
-    });
+    if (matchedId) {
+      const designer = await User.findById(matchedId);
+      if (designer) {
+        caseDoc.assignmentMode = ASSIGNMENT_MODES.DESIGNER;
+        caseDoc.assignedDesignerId = designer._id as Types.ObjectId;
+        caseDoc.assignedDesignerName = `${designer.firstName} ${designer.lastName}`.trim();
+        caseDoc.status = CASE_STATUSES.IN_PROCESS;
+        pushHistory(caseDoc, {
+          action: 'assigned',
+          summary: `Auto-assigned to ${caseDoc.assignedDesignerName} by rules`,
+          actor,
+          metadata: { mode: 'auto_rules', designerId: designer.id, note: input.note?.trim() || undefined },
+        });
+      } else {
+        caseDoc.assignmentMode = ASSIGNMENT_MODES.AUTO_QUEUE;
+        caseDoc.assignedDesignerId = undefined;
+        caseDoc.assignedDesignerName = undefined;
+        caseDoc.status = CASE_STATUSES.IN_PROCESS;
+        pushHistory(caseDoc, {
+          action: 'assigned',
+          summary: 'Sent to auto case-pick queue',
+          actor,
+          metadata: { mode: 'auto_queue', note: input.note?.trim() || undefined },
+        });
+      }
+    } else {
+      caseDoc.assignmentMode = ASSIGNMENT_MODES.AUTO_QUEUE;
+      caseDoc.assignedDesignerId = undefined;
+      caseDoc.assignedDesignerName = undefined;
+      caseDoc.status = CASE_STATUSES.IN_PROCESS;
+
+      pushHistory(caseDoc, {
+        action: 'assigned',
+        summary: 'Sent to auto case-pick queue',
+        actor,
+        metadata: { mode: 'auto_queue', note: input.note?.trim() || undefined },
+      });
+    }
   } else {
     throw new AppError('Invalid assignment mode', 400);
   }
@@ -3557,14 +3618,19 @@ export async function resolveCaseActor(userId: string): Promise<CaseActor> {
   }
 
   const permissions = await resolvePermissionsForUserId(userId);
+  const { resolveUserQcScope, resolveUserRoleKeys } = await import('../rbac/rbac.service');
+  const qcScope = await resolveUserQcScope(user);
+  const roles = resolveUserRoleKeys(user);
 
   return {
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
-    role: user.role,
+    role: user.primaryRole || user.role,
+    roles,
     permissions,
+    qcScope,
     organizationId: user.organizationId ? String(user.organizationId) : null,
     facilityId: user.facilityId ? String(user.facilityId) : null,
     corporateCustomerId: user.corporateCustomerId ?? null,

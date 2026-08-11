@@ -1,15 +1,18 @@
 import {
-  ALL_ROLES,
-  ROLE_LABELS,
+  ALL_EXPERIENCE_LEVELS,
+  EXPERIENCE_LEVEL_LABELS,
   ROLES,
+  getRoleLabel,
   type CreateUserInput,
-  type Role,
+  type ExperienceLevel,
+  type RoleDefinitionDto,
 } from '@ayetis/shared';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { toast } from '@/features/notifications/toastStore';
+import { fetchRoleDefinitions } from '@/features/rbac/api';
 import * as usersApi from '@/features/users/api';
 import { getErrorMessage } from '@/lib/api';
 
@@ -19,16 +22,53 @@ const INITIAL_FORM: CreateUserInput = {
   email: '',
   password: '',
   role: ROLES.DESIGNER,
+  primaryRole: ROLES.DESIGNER,
+  roles: [ROLES.DESIGNER],
+  isAvailable: true,
+  softwareExpertise: [],
 };
 
 export function CreateUserPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState<CreateUserInput>(INITIAL_FORM);
+  const [roleDefinitions, setRoleDefinitions] = useState<RoleDefinitionDto[]>([]);
+  const [softwareText, setSoftwareText] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    void fetchRoleDefinitions()
+      .then((roles) => setRoleDefinitions(roles.filter((role) => role.isActive && !role.isDisabled)))
+      .catch(() => {
+        /* roles API may be unavailable; fall back to primary role only */
+      });
+  }, []);
+
   function update<K extends keyof CreateUserInput>(key: K, value: CreateUserInput[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function toggleRole(roleKey: string) {
+    const current = form.roles ?? [form.primaryRole ?? form.role];
+    const next = current.includes(roleKey)
+      ? current.filter((key) => key !== roleKey)
+      : [...current, roleKey];
+    if (next.length === 0) return;
+    const primaryRole = form.primaryRole ?? form.role;
+    update('roles', next);
+    update('role', primaryRole);
+    if (!next.includes(primaryRole)) {
+      update('primaryRole', next[0]);
+      update('role', next[0]);
+    }
+  }
+
+  function setPrimaryRole(roleKey: string) {
+    const current = form.roles ?? [form.role];
+    const roles = current.includes(roleKey) ? current : [...current, roleKey];
+    update('primaryRole', roleKey);
+    update('role', roleKey);
+    update('roles', roles);
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -36,7 +76,18 @@ export function CreateUserPage() {
     setError('');
     setLoading(true);
     try {
-      const created = await usersApi.createUser(form);
+      const roles = form.roles?.length ? form.roles : [form.primaryRole ?? form.role];
+      const primaryRole = form.primaryRole ?? roles[0] ?? form.role;
+      const created = await usersApi.createUser({
+        ...form,
+        role: primaryRole,
+        primaryRole,
+        roles,
+        softwareExpertise: softwareText
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean),
+      });
       toast().success(`${created.email} created`, 'User created');
       navigate(`/app/users/${created.id}/permissions`, {
         replace: true,
@@ -51,6 +102,11 @@ export function CreateUserPage() {
     }
   }
 
+  const activeRoles = roleDefinitions.length
+    ? roleDefinitions
+    : [{ key: form.role, name: getRoleLabel(form.role) } as RoleDefinitionDto];
+  const selectedRoles = form.roles ?? [form.primaryRole ?? form.role];
+
   return (
     <div className="w-full max-w-xl space-y-5">
       <PageHeader
@@ -60,7 +116,7 @@ export function CreateUserPage() {
           </Link>
         }
         title="Create user"
-        subtitle="Register a team member for one of the fixed system roles. Permissions can be refined after creation."
+        subtitle="Register a team member with one primary role and optional additional roles."
       />
 
       <form
@@ -110,26 +166,75 @@ export function CreateUserPage() {
           placeholder="Min. 8 chars, mixed case + number"
         />
 
-        <label className="block space-y-1.5" htmlFor="role">
-          <span className="text-sm font-medium text-ink">Role</span>
+        <label className="block space-y-1.5" htmlFor="primaryRole">
+          <span className="text-sm font-medium text-ink">Primary role</span>
           <select
-            id="role"
-            name="role"
+            id="primaryRole"
+            name="primaryRole"
             required
-            value={form.role}
-            onChange={(e) => update('role', e.target.value as Role)}
+            value={form.primaryRole ?? form.role}
+            onChange={(e) => setPrimaryRole(e.target.value)}
             className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] text-ink outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
           >
-            {ALL_ROLES.map((role) => (
-              <option key={role} value={role}>
-                {ROLE_LABELS[role]}
+            {activeRoles.map((role) => (
+              <option key={role.key} value={role.key}>
+                {role.name}
               </option>
             ))}
           </select>
-          <span className="text-xs text-muted">
-            System roles only — new roles cannot be created. Default permissions come from the
-            selected role; you can grant or deny extras next.
-          </span>
+        </label>
+
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium text-ink">Additional roles</legend>
+          <div className="flex flex-wrap gap-3">
+            {activeRoles.map((role) => (
+              <label key={role.key} className="flex items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={selectedRoles.includes(role.key)}
+                  onChange={() => toggleRole(role.key)}
+                />
+                {role.name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <label className="block space-y-1.5" htmlFor="experienceLevel">
+          <span className="text-sm font-medium text-ink">Experience level</span>
+          <select
+            id="experienceLevel"
+            name="experienceLevel"
+            value={form.experienceLevel ?? ''}
+            onChange={(e) =>
+              update('experienceLevel', (e.target.value || null) as ExperienceLevel | null)
+            }
+            className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] text-ink"
+          >
+            <option value="">Not set</option>
+            {ALL_EXPERIENCE_LEVELS.map((level) => (
+              <option key={level} value={level}>
+                {EXPERIENCE_LEVEL_LABELS[level]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <TextField
+          label="Software expertise (comma-separated)"
+          name="softwareExpertise"
+          value={softwareText}
+          onChange={(e) => setSoftwareText(e.target.value)}
+          placeholder="exocad, 3shape"
+        />
+
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={form.isAvailable ?? true}
+            onChange={(e) => update('isAvailable', e.target.checked)}
+          />
+          Available for assignment
         </label>
 
         <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:max-w-md">
