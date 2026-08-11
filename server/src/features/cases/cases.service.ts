@@ -131,6 +131,7 @@ import {
 } from '../audit/audit.service';
 import {
   countOpenClarifications,
+  getClarificationButtonStateForCase,
   listClarificationDtosForCase,
 } from '../clarifications/clarifications.service';
 import {
@@ -341,6 +342,9 @@ async function toListItem(
   viewer?: { id: string; role: string },
 ): Promise<CaseListItemDto> {
   const openClarificationCount = await countOpenClarifications(caseDoc._id as Types.ObjectId);
+  const clarificationButtonState = await getClarificationButtonStateForCase(
+    caseDoc._id as Types.ObjectId,
+  );
   const assignmentMode = (caseDoc.assignmentMode ?? ASSIGNMENT_MODES.NONE) as AssignmentMode;
   const queue = caseDoc.isDeleted
     ? null
@@ -388,6 +392,7 @@ async function toListItem(
         ? remainingCancelWindowSeconds(caseDoc.submittedAt ?? caseDoc.createdAt)
         : null,
     openClarificationCount,
+    clarificationButtonState,
     assignedDesignerId: caseDoc.assignedDesignerId
       ? String(caseDoc.assignedDesignerId)
       : null,
@@ -511,7 +516,7 @@ async function toDetail(
 ): Promise<CaseDetailDto> {
   const [listItem, clarifications, validation] = await Promise.all([
     toListItem(caseDoc, viewer),
-    listClarificationDtosForCase(caseDoc._id as Types.ObjectId),
+    listClarificationDtosForCase(caseDoc._id as Types.ObjectId, viewer?.id),
     buildValidationSummary(caseDoc),
   ]);
 

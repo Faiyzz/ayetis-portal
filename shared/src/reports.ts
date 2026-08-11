@@ -106,4 +106,5 @@ export interface AnalyticsDashboardDto {
   consultant: ConsultantDeptReportDto;
   supervisor: SupervisorTeamReportDto;
   comparison: DepartmentComparisonReportDto;
+  clarifications: import('./clarifications').ClarificationReportDto;
 }

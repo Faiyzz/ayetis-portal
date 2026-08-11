@@ -30,7 +30,7 @@ export async function create(req: AuthenticatedRequest, res: Response, next: Nex
     res.status(201).json({
       success: true,
       data,
-      message: 'Clarification request created',
+      message: req.body.asDraft ? 'Clarification draft saved' : 'Clarification request created',
     });
   } catch (error) {
     next(error);
@@ -79,6 +79,88 @@ export async function resolve(req: AuthenticatedRequest, res: Response, next: Ne
       data,
       message: 'Clarification resolved',
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateDraft(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await clarificationsService.updateClarificationDraft(
+      await actor(req),
+      req.params.clarificationId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Draft saved' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function publishDraft(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await clarificationsService.publishClarificationDraft(
+      await actor(req),
+      req.params.clarificationId,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Clarification published' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function markRead(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await clarificationsService.markClarificationRead(
+      await actor(req),
+      req.params.clarificationId,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function escalate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await clarificationsService.escalateClarification(
+      await actor(req),
+      req.params.clarificationId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function uploadAttachment(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ success: false, message: 'File is required' });
+      return;
+    }
+    const data = await clarificationsService.uploadClarificationAttachment(
+      await actor(req),
+      req.params.clarificationId,
+      {
+        buffer: file.buffer,
+        mimetype: file.mimetype,
+        originalname: file.originalname,
+        size: file.size,
+      },
+      getRequestAuditContext(req),
+    );
+    res.status(201).json({ success: true, data });
   } catch (error) {
     next(error);
   }

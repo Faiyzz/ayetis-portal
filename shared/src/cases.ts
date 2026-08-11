@@ -342,6 +342,7 @@ export interface CaseListItemDto {
   slaProgressColor: import('./caseTaxonomy').SlaProgressColor | null;
   cancelWindowRemainingSeconds: number | null;
   openClarificationCount: number;
+  clarificationButtonState: import('./clarifications').ClarificationButtonState;
   assignedDesignerId: string | null;
   assignedDesignerName: string | null;
   assignmentMode: AssignmentMode;

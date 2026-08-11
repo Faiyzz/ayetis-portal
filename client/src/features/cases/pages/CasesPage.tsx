@@ -12,6 +12,7 @@ import {
   type CaseListItemDto,
   type CasePriority,
   type CaseStatus,
+  type ClarificationButtonState,
 } from '@ayetis/shared';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -44,6 +45,31 @@ function SlaBar({ item }: { item: CaseListItemDto }) {
       progressColor={item.slaProgressColor}
       emptyLabel="—"
     />
+  );
+}
+
+function ClarificationButton({
+  state,
+  caseId,
+}: {
+  state: ClarificationButtonState;
+  caseId: string;
+}) {
+  if (state === 'none') {
+    return <span className="text-xs text-muted">—</span>;
+  }
+  const classes =
+    state === 'green'
+      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+      : 'bg-sky-600 text-white hover:bg-sky-700';
+  const label = state === 'green' ? 'Responded' : 'Clarification';
+  return (
+    <Link
+      to={`/app/cases/${caseId}?tab=clarifications`}
+      className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${classes}`}
+    >
+      {label}
+    </Link>
   );
 }
 
@@ -262,6 +288,7 @@ export function CasesPage() {
                 {!isDoctorView ? <th className="px-4 py-3 font-medium">Assignee</th> : null}
                 <th className="px-4 py-3 font-medium">Category</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Clarification</th>
                 <th className="px-4 py-3 font-medium">SLA</th>
                 <th className="px-4 py-3 font-medium">Priority</th>
                 <th className="px-4 py-3 font-medium">Payment</th>
@@ -323,6 +350,12 @@ export function CasesPage() {
                     </td>
                     <td className="px-4 py-3">
                       <StatusPill status={item.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <ClarificationButton
+                        state={item.clarificationButtonState}
+                        caseId={item.caseId}
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <SlaBar item={item} />

@@ -533,14 +533,17 @@ export async function getAnalyticsDashboard(
   query: { month?: string; view?: 'month' | 'quarter' } = {},
 ): Promise<AnalyticsDashboardDto> {
   assertCanReport(actor);
-  const [pipeline, designer, qc, consultant, supervisor, comparison] = await Promise.all([
-    getPipelineReport(actor, query),
-    getDesignerDeptReport(actor, query),
-    getQcDeptReport(actor, query),
-    getConsultantDeptReport(actor, query),
-    getSupervisorTeamReport(actor, query),
-    getDepartmentComparison(actor, query),
-  ]);
+  const { getClarificationReport } = await import('../clarifications/clarifications.service');
+  const [pipeline, designer, qc, consultant, supervisor, comparison, clarifications] =
+    await Promise.all([
+      getPipelineReport(actor, query),
+      getDesignerDeptReport(actor, query),
+      getQcDeptReport(actor, query),
+      getConsultantDeptReport(actor, query),
+      getSupervisorTeamReport(actor, query),
+      getDepartmentComparison(actor, query),
+      getClarificationReport(),
+    ]);
 
   return {
     period: {
@@ -555,6 +558,7 @@ export async function getAnalyticsDashboard(
     consultant,
     supervisor,
     comparison,
+    clarifications,
   };
 }
 
@@ -691,6 +695,30 @@ export async function exportReportCsv(
             consultantReviewed: team.consultantReviewed,
           })),
         ),
+      ),
+    };
+  }
+
+  if (report === 'clarifications') {
+    const { getClarificationReport } = await import('../clarifications/clarifications.service');
+    const data = await getClarificationReport();
+    return {
+      filename: `clarifications-${suffix}.csv`,
+      csv: toCsv(
+        data.items.map((row) => ({
+          caseId: row.caseId,
+          subject: row.subject,
+          senderRole: row.senderRole,
+          type: row.clarificationType,
+          priority: row.priority,
+          status: row.status,
+          escalation: row.escalationStatus,
+          doctorRead: row.doctorRead ? 'yes' : 'no',
+          teamRead: row.teamRead ? 'yes' : 'no',
+          createdBy: row.createdByName,
+          createdAt: row.createdAt,
+          resolvedAt: row.resolvedAt,
+        })),
       ),
     };
   }

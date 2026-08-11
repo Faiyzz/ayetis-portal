@@ -21,7 +21,13 @@ export function AnalyticsDashboard({ firstName }: { firstName: string }) {
   const [view, setView] = useState<'month' | 'quarter'>('month');
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<
-    'pipeline' | 'designer' | 'qc' | 'consultant' | 'supervisor' | 'comparison'
+    | 'pipeline'
+    | 'designer'
+    | 'qc'
+    | 'consultant'
+    | 'supervisor'
+    | 'comparison'
+    | 'clarifications'
   >('pipeline');
 
   async function load(nextMonth = month, nextView = view) {
@@ -132,6 +138,7 @@ export function AnalyticsDashboard({ firstName }: { firstName: string }) {
             ['consultant', 'Consultants'],
             ['supervisor', 'Supervisors'],
             ['comparison', 'Comparison'],
+            ['clarifications', 'Clarifications'],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -343,6 +350,71 @@ export function AnalyticsDashboard({ firstName }: { firstName: string }) {
               ))}
             </tbody>
           </table>
+        </section>
+      ) : null}
+
+      {data && tab === 'clarifications' ? (
+        <section className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ['Total', data.clarifications.total],
+              ['Open', data.clarifications.openCount],
+              ['Awaiting doctor', data.clarifications.awaitingDoctor],
+              ['Escalated', data.clarifications.escalatedCount],
+              ['Awaiting team', data.clarifications.awaitingTeam],
+              ['Unread by doctor', data.clarifications.unreadByDoctor],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-line bg-white px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
+                <p className="mt-1 text-2xl font-bold text-ink">{value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-xl border border-line bg-white p-5">
+            <h2 className="text-sm font-semibold text-ink">By sender role</h2>
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              {data.clarifications.bySenderRole.map((row) => (
+                <li key={row.role} className="rounded-lg bg-surface/60 px-3 py-2 text-sm">
+                  <p className="text-muted">{row.label}</p>
+                  <p className="text-lg font-bold text-ink">{row.count}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-xl border border-line bg-white p-5 overflow-x-auto">
+            <h2 className="text-sm font-semibold text-ink">Clarification audit trail</h2>
+            <p className="mt-1 text-sm text-muted">
+              Read and escalation status for exportable audit (use Export CSV on this tab).
+            </p>
+            <table className="mt-4 w-full min-w-[760px] text-left text-sm">
+              <thead className="text-xs uppercase text-muted">
+                <tr>
+                  <th className="pb-2">Case</th>
+                  <th className="pb-2">Subject</th>
+                  <th className="pb-2">Role</th>
+                  <th className="pb-2">Status</th>
+                  <th className="pb-2">Escalation</th>
+                  <th className="pb-2">Doctor read</th>
+                  <th className="pb-2">Created</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {data.clarifications.items.slice(0, 100).map((row) => (
+                  <tr key={row.id}>
+                    <td className="py-2 font-medium">{row.caseId}</td>
+                    <td className="py-2">{row.subject}</td>
+                    <td className="py-2">{row.senderRole}</td>
+                    <td className="py-2">{row.status}</td>
+                    <td className="py-2">{row.escalationStatus}</td>
+                    <td className="py-2">{row.doctorRead ? 'Yes' : 'No'}</td>
+                    <td className="py-2 text-xs text-muted">
+                      {new Date(row.createdAt).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ) : null}
     </div>
