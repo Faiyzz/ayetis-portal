@@ -1540,18 +1540,39 @@ export async function cancelCase(
   await caseDoc.save();
 
   const { CancellationAudit } = await import('../../models/CancellationAudit');
+  const { summarizeDevice } = await import('../cancellations/cancellations.service');
+  let paymentTransactionReference: string | undefined;
+  if (caseDoc.paymentSessionId) {
+    const { PaymentSession } = await import('../../models/Commercial');
+    const session = await PaymentSession.findById(caseDoc.paymentSessionId);
+    paymentTransactionReference =
+      session?.stripeSessionId ||
+      session?.stripePaymentIntentId ||
+      session?.bankReference ||
+      undefined;
+  }
+  if (!paymentTransactionReference && caseDoc.payment?.notes) {
+    paymentTransactionReference = caseDoc.payment.notes.slice(0, 200);
+  }
+
   await CancellationAudit.create({
     caseMongoId: caseDoc._id,
     caseId: caseDoc.caseId,
+    patientId: caseDoc.caseId,
     patientName: caseDoc.patientName,
     doctorUserId: caseDoc.doctorId,
     doctorName: caseDoc.doctorName,
     doctorDisplayId: caseDoc.doctorDisplayId,
+    coordinatorId: caseDoc.validatedById,
+    coordinatorName: caseDoc.validatedByName,
+    organizationId: caseDoc.organizationId,
     companyName: caseDoc.practiceName || caseDoc.clinicName,
+    facilityId: caseDoc.facilityId,
     caseCategory: caseDoc.caseCategory,
     caseType: caseDoc.caseType,
     treatmentPlanName: caseDoc.commercial?.treatmentPlanName,
     caseValue: refundAmount,
+    currency: caseDoc.payment?.currency || caseDoc.commercial?.currency || 'USD',
     invoiceNumber: caseDoc.payment?.invoiceNumber,
     paymentStatus: caseDoc.payment?.status,
     refundAmount,
@@ -1565,8 +1586,11 @@ export async function cancelCase(
     cancelledById: actor.id,
     cancelledByName: actorName(actor),
     cancelledByEmail: actor.email,
+    cancelledByRole: actor.role,
     ipAddress: audit?.ipAddress,
     userAgent: audit?.userAgent,
+    deviceSummary: summarizeDevice(audit?.userAgent) || undefined,
+    paymentTransactionReference,
   });
 
   await recordActivity({
@@ -3915,18 +3939,35 @@ export async function submitDoctorDecision(
       0;
     const refundAmount = Number(caseValue) > 0 ? Number(caseValue) : 0;
     const { CancellationAudit } = await import('../../models/CancellationAudit');
+    const { summarizeDevice } = await import('../cancellations/cancellations.service');
+    let paymentTransactionReference: string | undefined;
+    if (caseDoc.paymentSessionId) {
+      const { PaymentSession } = await import('../../models/Commercial');
+      const session = await PaymentSession.findById(caseDoc.paymentSessionId);
+      paymentTransactionReference =
+        session?.stripeSessionId ||
+        session?.stripePaymentIntentId ||
+        session?.bankReference ||
+        undefined;
+    }
     await CancellationAudit.create({
       caseMongoId: caseDoc._id,
       caseId: caseDoc.caseId,
+      patientId: caseDoc.caseId,
       patientName: caseDoc.patientName,
       doctorUserId: caseDoc.doctorId,
       doctorName: caseDoc.doctorName,
       doctorDisplayId: caseDoc.doctorDisplayId,
+      coordinatorId: caseDoc.validatedById,
+      coordinatorName: caseDoc.validatedByName,
+      organizationId: caseDoc.organizationId,
       companyName: caseDoc.practiceName || caseDoc.clinicName,
+      facilityId: caseDoc.facilityId,
       caseCategory: caseDoc.caseCategory,
       caseType: caseDoc.caseType,
       treatmentPlanName: caseDoc.commercial?.treatmentPlanName,
       caseValue: refundAmount,
+      currency: caseDoc.payment?.currency || caseDoc.commercial?.currency || 'USD',
       invoiceNumber: caseDoc.payment?.invoiceNumber,
       paymentStatus: caseDoc.payment?.status,
       refundAmount,
@@ -3940,8 +3981,11 @@ export async function submitDoctorDecision(
       cancelledById: actor.id,
       cancelledByName: actorName(actor),
       cancelledByEmail: actor.email,
+      cancelledByRole: actor.role,
       ipAddress: audit?.ipAddress,
       userAgent: audit?.userAgent,
+      deviceSummary: summarizeDevice(audit?.userAgent) || undefined,
+      paymentTransactionReference,
     });
   }
 

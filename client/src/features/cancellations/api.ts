@@ -1,94 +1,88 @@
-import type { RefundStatus } from '@ayetis/shared';
+import type {
+  CancellationAuditDto,
+  CancellationReportResult,
+  CancellationTrendGranularity,
+  RefundStatus,
+} from '@ayetis/shared';
 import api from '@/lib/api';
 
-export interface CancellationAuditDto {
-  id: string;
-  caseId: string;
-  patientName: string;
-  doctorName: string;
-  doctorDisplayId: string | null;
-  companyName: string | null;
-  accountType: string | null;
-  caseCategory: string | null;
-  caseType: string | null;
-  treatmentPlanName: string | null;
-  caseValue: number | null;
-  invoiceNumber: string | null;
-  paymentStatus: string | null;
-  refundAmount: number;
-  refundStatus: RefundStatus;
-  cancellationReason: string;
-  cancellationRemarks: string | null;
-  statusAtCancellation: string;
-  submittedAt: string | null;
-  cancelledAt: string;
-  remainingWindowSeconds: number;
-  cancelledByName: string;
-  cancelledByEmail: string | null;
-  paymentTransactionReference: string | null;
-  refundTransactionReference: string | null;
-  createdAt: string;
-}
+export type { CancellationAuditDto, CancellationReportResult };
 
-export interface CancellationReportResult {
-  items: CancellationAuditDto[];
-  total: number;
-  page: number;
-  pageSize: number;
-  summary: {
-    totalCancelled: number;
-    totalRefundAmount: number;
-    refundsPending: number;
-    refundsProcessed: number;
-    refundStatuses: RefundStatus[];
-  };
-}
-
-export async function fetchCancellationAudits(params: {
+export interface CancellationReportFilters {
   page?: number;
   pageSize?: number;
   from?: string;
   to?: string;
   caseId?: string;
   doctorId?: string;
+  coordinatorId?: string;
+  companyName?: string;
+  treatmentPlanName?: string;
+  cancellationReason?: string;
   caseCategory?: string;
   refundStatus?: string;
+  paymentStatus?: string;
+  trend?: CancellationTrendGranularity | string;
   q?: string;
-}): Promise<CancellationReportResult> {
-  const { data } = await api.get('/cancellations', {
-    params: {
-      page: params.page,
-      pageSize: params.pageSize,
-      from: params.from || undefined,
-      to: params.to || undefined,
-      caseId: params.caseId || undefined,
-      doctorId: params.doctorId || undefined,
-      caseCategory: params.caseCategory || undefined,
-      refundStatus: params.refundStatus || undefined,
-      q: params.q || undefined,
-    },
-  });
+}
+
+function toParams(params: CancellationReportFilters) {
+  return {
+    page: params.page,
+    pageSize: params.pageSize,
+    from: params.from || undefined,
+    to: params.to || undefined,
+    caseId: params.caseId || undefined,
+    doctorId: params.doctorId || undefined,
+    coordinatorId: params.coordinatorId || undefined,
+    companyName: params.companyName || undefined,
+    treatmentPlanName: params.treatmentPlanName || undefined,
+    cancellationReason: params.cancellationReason || undefined,
+    caseCategory: params.caseCategory || undefined,
+    refundStatus: params.refundStatus || undefined,
+    paymentStatus: params.paymentStatus || undefined,
+    trend: params.trend || undefined,
+    q: params.q || undefined,
+  };
+}
+
+export async function fetchCancellationAudits(
+  params: CancellationReportFilters,
+): Promise<CancellationReportResult> {
+  const { data } = await api.get('/cancellations', { params: toParams(params) });
   return data.data;
 }
 
-export async function exportCancellationCsv(params: {
-  from?: string;
-  to?: string;
-  caseCategory?: string;
-  refundStatus?: string;
-  q?: string;
-}): Promise<Blob> {
-  const { data } = await api.get('/cancellations/export.csv', {
-    params: {
-      from: params.from || undefined,
-      to: params.to || undefined,
-      caseCategory: params.caseCategory || undefined,
-      refundStatus: params.refundStatus || undefined,
-      q: params.q || undefined,
-    },
+async function downloadExport(path: string, params: CancellationReportFilters, filename: string) {
+  const { data } = await api.get(path, {
+    params: toParams(params),
     responseType: 'blob',
   });
-  return data as Blob;
+  const blob = data as Blob;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function exportCancellationCsv(params: CancellationReportFilters) {
+  await downloadExport('/cancellations/export.csv', params, 'cancellation-audit.csv');
+}
+
+export async function exportCancellationExcel(params: CancellationReportFilters) {
+  await downloadExport('/cancellations/export.xls', params, 'cancellation-audit.xls');
+}
+
+export async function openCancellationPrintHtml(params: CancellationReportFilters) {
+  const { data } = await api.get('/cancellations/export.html', {
+    params: toParams(params),
+    responseType: 'text',
+  });
+  const blob = new Blob([data as string], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 export async function updateCancellationRefund(

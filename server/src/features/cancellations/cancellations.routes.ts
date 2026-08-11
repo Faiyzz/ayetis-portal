@@ -15,8 +15,14 @@ const listQuerySchema = z.object({
   to: z.string().optional(),
   caseId: z.string().optional(),
   doctorId: z.string().optional(),
+  coordinatorId: z.string().optional(),
+  companyName: z.string().optional(),
+  treatmentPlanName: z.string().optional(),
+  cancellationReason: z.string().optional(),
   caseCategory: z.string().optional(),
   refundStatus: z.string().optional(),
+  paymentStatus: z.string().optional(),
+  trend: z.string().optional(),
   q: z.string().optional(),
 });
 
@@ -52,6 +58,38 @@ router.get(
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename="cancellation-audit.csv"');
       res.send(csv);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/export.xls',
+  requirePermission(PERMISSIONS.CANCELLATION_REPORT_VIEW),
+  validate(listQuerySchema, 'query'),
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const xml = await service.exportCancellationExcel(req.query as never);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="cancellation-audit.xls"');
+      res.send(xml);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/export.html',
+  requirePermission(PERMISSIONS.CANCELLATION_REPORT_VIEW),
+  validate(listQuerySchema, 'query'),
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const html = await service.exportCancellationHtml(req.query as never);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', 'inline; filename="cancellation-audit.html"');
+      res.send(html);
     } catch (error) {
       next(error);
     }
