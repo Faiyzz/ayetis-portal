@@ -4,6 +4,7 @@ import {
   CASE_CATEGORY_LABELS,
   CASE_PRIORITIES,
   CASE_TYPE_LABELS,
+  DEMO_CASE_MESSAGES,
   EMPTY_CASE_COMMERCIAL,
   EMPTY_CLINICAL_PREFERENCES,
   EMPTY_OCCLUSION_GOALS,
@@ -28,13 +29,22 @@ import { Link, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { useAuthStore } from '@/features/auth/store';
-import { createCase, fetchDoctorAssignees, uploadCaseFiles } from '@/features/cases/api';
+import {
+  createCase,
+  fetchDoctorAssignees,
+  uploadCaseFiles,
+} from '@/features/cases/api';
 import {
   ClinicalPreferencesPart,
   OcclusionCommercialPart,
   RecordsNumberingPart,
 } from '@/features/cases/components/treatment-form';
-import { fetchTreatmentPlans, validateDiscountCode } from '@/features/commercial/api';
+import {
+  checkCreateEligibility,
+  createPaymentSession,
+  fetchTreatmentPlans,
+  resolvePricing,
+} from '@/features/commercial/api';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
@@ -214,16 +224,20 @@ export function CreateCasePage() {
   }
 
   async function applyDiscount() {
-    if (!commercial.discountCode.trim()) return;
+    if (!commercial.discountCode.trim() || !commercial.treatmentPlanId) return;
     try {
-      const result = await validateDiscountCode(commercial.discountCode.trim());
-      const unit = commercial.unitPrice ?? 0;
-      let discountAmount = 0;
-      if (result.percentOff) discountAmount = (unit * result.percentOff) / 100;
-      else if (result.amountOff) discountAmount = result.amountOff;
+      const pricing = await resolvePricing({
+        treatmentPlanId: commercial.treatmentPlanId,
+        discountCode: commercial.discountCode.trim(),
+        caseCategory: category,
+      });
       updateCommercial({
-        discountAmount,
-        finalPayableAmount: Math.max(0, unit - discountAmount),
+        unitPrice: pricing.unitPrice,
+        discountAmount: pricing.discountAmount,
+        finalPayableAmount: pricing.finalPayableAmount,
+        currency: pricing.currency,
+        treatmentPlanName: pricing.treatmentPlanName,
+        discountCode: pricing.discountCode ?? commercial.discountCode,
       });
       toast().success('Discount applied');
     } catch (err) {
@@ -255,21 +269,67 @@ export function CreateCasePage() {
       form.chiefComplaint?.trim() ||
       `${CASE_CATEGORY_LABELS[category]} — ${CASE_TYPE_LABELS[form.caseType as CaseType]}`;
 
+    const payload: CreateCaseInput = {
+      ...form,
+      practiceName: form.practiceName || form.clinicName || '',
+      treatmentSummary: summary,
+      asDraft,
+    };
+
     setLoading(true);
     setError('');
     try {
-      const created = await createCase({
-        ...form,
-        practiceName: form.practiceName || form.clinicName || '',
-        treatmentSummary: summary,
-        asDraft,
-      });
+      if (!asDraft && commercial.treatmentPlanId) {
+        const eligibility = await checkCreateEligibility({
+          treatmentPlanId: commercial.treatmentPlanId,
+          discountCode: commercial.discountCode || null,
+          isDemo: Boolean(form.isDemo),
+          caseCategory: category,
+        });
+        updateCommercial({
+          unitPrice: eligibility.pricing.unitPrice,
+          discountAmount: eligibility.pricing.discountAmount,
+          finalPayableAmount: eligibility.pricing.finalPayableAmount,
+          currency: eligibility.pricing.currency,
+          treatmentPlanName: eligibility.pricing.treatmentPlanName,
+        });
+        if (eligibility.pricing.isFreeDemoPlan) {
+          payload.isDemo = true;
+        }
+        if (!eligibility.allowedWithoutPayment) {
+          const session = await createPaymentSession({
+            ...payload,
+            commercial: {
+              ...commercial,
+              unitPrice: eligibility.pricing.unitPrice,
+              discountAmount: eligibility.pricing.discountAmount,
+              finalPayableAmount: eligibility.pricing.finalPayableAmount,
+              currency: eligibility.pricing.currency,
+              treatmentPlanName: eligibility.pricing.treatmentPlanName,
+            },
+          });
+          toast().info(eligibility.message || 'Payment required');
+          navigate(`/app/pay/${session.id}`);
+          return;
+        }
+        if (eligibility.reason === 'demo' || payload.isDemo) {
+          toast().success(DEMO_CASE_MESSAGES.confirmation);
+        }
+      }
+
+      const created = await createCase(payload);
       if (pendingFiles.length > 0) {
         await uploadCaseFiles(created.caseId, pendingFiles, {
           category: fileCategory || undefined,
         });
       }
-      toast().success(asDraft ? 'Case saved for submission' : 'Case submitted');
+      toast().success(
+        asDraft
+          ? 'Case saved for submission'
+          : payload.isDemo
+            ? 'Demo case submitted'
+            : 'Case submitted',
+      );
       navigate(`/app/cases/${created.caseId}`);
     } catch (err) {
       const message = getErrorMessage(err, 'Unable to create case');
@@ -422,9 +482,24 @@ export function CreateCasePage() {
               value={form.initialNote || ''}
               onChange={(e) => update('initialNote', e.target.value)}
             />
+            <label className="flex items-start gap-2 rounded-lg border border-line px-3 py-3 text-sm text-ink">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={Boolean(form.isDemo)}
+                onChange={(e) => update('isDemo', e.target.checked)}
+              />
+              <span>
+                <span className="font-semibold">Demo Case</span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  We will contact you within 8 working hours. A demo plan is ready within 2 working
+                  days after successful submission.
+                </span>
+              </span>
+            </label>
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
               Submit starts the 15-minute cancel window and SLA clock. Save for Submission keeps the
-              case as a draft.
+              case as a draft. Payable cases without prepaid/invoice billing require payment first.
             </p>
           </div>
         ) : null}

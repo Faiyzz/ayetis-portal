@@ -223,6 +223,9 @@ export interface ICase extends Document {
   deletedById?: Types.ObjectId;
   deletedByName?: string;
   deleteReason?: string;
+  isDemo: boolean;
+  invoiceId?: Types.ObjectId;
+  paymentSessionId?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -509,6 +512,9 @@ const caseSchema = new Schema<ICase>(
     deletedById: { type: Schema.Types.ObjectId, ref: 'User' },
     deletedByName: { type: String },
     deleteReason: { type: String },
+    isDemo: { type: Boolean, default: false, index: true },
+    invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice', index: true },
+    paymentSessionId: { type: Schema.Types.ObjectId, ref: 'PaymentSession', index: true },
   },
   { timestamps: true },
 );

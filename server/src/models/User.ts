@@ -57,6 +57,8 @@ export interface IUser extends Document {
   mustChangePassword: boolean;
   /** SLA business hours for this doctor's cases (default 48). */
   slaBusinessHours: number;
+  billingArrangement?: import('@ayetis/shared').BillingArrangement;
+  prepaidCaseBalance: number;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
@@ -218,6 +220,8 @@ const userSchema = new Schema<IUser>(
       default: 48,
       min: 1,
     },
+    billingArrangement: { type: String, trim: true, index: true },
+    prepaidCaseBalance: { type: Number, default: 0, min: 0 },
   },
   {
     timestamps: true,

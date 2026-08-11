@@ -18,6 +18,8 @@ export interface IOrganization extends Document {
   subAccountSeq: number;
   /** Monotonic; never reset — drives Employee ID sequences. */
   employeeSeq: number;
+  billingArrangement?: import('@ayetis/shared').BillingArrangement;
+  prepaidCaseBalance: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -54,6 +56,8 @@ const organizationSchema = new Schema<IOrganization>(
     ownerUserId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     subAccountSeq: { type: Number, default: 0, min: 0 },
     employeeSeq: { type: Number, default: 0, min: 0 },
+    billingArrangement: { type: String, trim: true, index: true },
+    prepaidCaseBalance: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
 );

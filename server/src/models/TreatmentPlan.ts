@@ -12,6 +12,9 @@ export interface ITreatmentPlan extends Document {
   currency: string;
   estimatedDeliveryHours?: number;
   isActive: boolean;
+  isDefault: boolean;
+  isFreeDemo: boolean;
+  archivedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,6 +28,9 @@ const treatmentPlanSchema = new Schema<ITreatmentPlan>(
     currency: { type: String, default: 'USD', uppercase: true },
     estimatedDeliveryHours: { type: Number },
     isActive: { type: Boolean, default: true, index: true },
+    isDefault: { type: Boolean, default: false, index: true },
+    isFreeDemo: { type: Boolean, default: false, index: true },
+    archivedAt: { type: Date },
   },
   { timestamps: true },
 );

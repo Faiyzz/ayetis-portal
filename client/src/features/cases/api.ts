@@ -18,6 +18,7 @@ export async function fetchCases(params: {
   priority?: string;
   q?: string;
   includeDeleted?: boolean;
+  isDemo?: boolean;
 }) {
   const { data } = await api.get('/cases', {
     params: {
@@ -27,6 +28,7 @@ export async function fetchCases(params: {
       priority: params.priority || undefined,
       q: params.q || undefined,
       includeDeleted: params.includeDeleted || undefined,
+      isDemo: params.isDemo === undefined ? undefined : params.isDemo ? 'true' : 'false',
     },
   });
   return data.data;

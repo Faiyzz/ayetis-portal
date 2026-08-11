@@ -22,6 +22,7 @@ import { CreateCasePage } from '@/features/cases/pages/CreateCasePage';
 import { EditCasePage } from '@/features/cases/pages/EditCasePage';
 import { CancellationReportPage } from '@/features/cancellations/pages/CancellationReportPage';
 import { CommercialAdminPage } from '@/features/commercial/pages/CommercialAdminPage';
+import { PaySessionPage } from '@/features/commercial/pages/PaySessionPage';
 import { ComplaintsPage } from '@/features/complaints/pages/ComplaintsPage';
 import { NotificationCenterPage } from '@/features/notifications/pages/NotificationCenterPage';
 import { CreateUserPage } from '@/features/users/pages/CreateUserPage';
@@ -64,6 +65,7 @@ export function AppRouter() {
 
           <Route element={<RequirePermission permission={PERMISSIONS.CASE_CREATE} />}>
             <Route path="cases/new" element={<CreateCasePage />} />
+            <Route path="pay/:sessionId" element={<PaySessionPage />} />
           </Route>
 
           <Route
@@ -164,6 +166,12 @@ export function AppRouter() {
                 permissions={[
                   PERMISSIONS.TREATMENT_PLAN_MANAGE,
                   PERMISSIONS.DISCOUNT_CODE_MANAGE,
+                  PERMISSIONS.CUSTOMER_PRICE_MANAGE,
+                  PERMISSIONS.BILLING_ARRANGE_MANAGE,
+                  PERMISSIONS.PREPAID_MANAGE,
+                  PERMISSIONS.PAYMENT_PROVIDER_MANAGE,
+                  PERMISSIONS.INVOICE_VIEW,
+                  PERMISSIONS.INVOICE_MANAGE,
                 ]}
               />
             }

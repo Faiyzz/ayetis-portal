@@ -17,6 +17,10 @@ export async function listCases(req: AuthenticatedRequest, res: Response, next: 
       priority: req.query.priority ? (String(req.query.priority) as CasePriority) : undefined,
       q: req.query.q ? String(req.query.q) : undefined,
       includeDeleted: Boolean(req.query.includeDeleted),
+      isDemo:
+        req.query.isDemo === undefined
+          ? undefined
+          : String(req.query.isDemo) === 'true',
     });
     res.json({ success: true, data });
   } catch (error) {

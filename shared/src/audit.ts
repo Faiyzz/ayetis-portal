@@ -28,6 +28,16 @@ export const AUDIT_ACTIONS = {
   SLA_CONFIG_UPDATE: 'sla.config.update',
   TREATMENT_PLAN_UPSERT: 'treatment_plan.upsert',
   DISCOUNT_CODE_UPSERT: 'discount_code.upsert',
+  CUSTOMER_PRICE_UPSERT: 'customer_price.upsert',
+  BILLING_ARRANGE_UPDATE: 'billing_arrange.update',
+  PREPAID_CREDIT: 'prepaid.credit',
+  PREPAID_DEBIT: 'prepaid.debit',
+  PAYMENT_SESSION_CREATE: 'payment_session.create',
+  PAYMENT_SESSION_PAID: 'payment_session.paid',
+  PAYMENT_PROVIDER_UPSERT: 'payment_provider.upsert',
+  INVOICE_ISSUE: 'invoice.issue',
+  RECEIPT_ISSUE: 'receipt.issue',
+  DEMO_CASE_CREATE: 'demo_case.create',
   CASE_DELETE: 'case.delete',
   CASE_NOTE_ADD: 'case.note.add',
   CASE_PRIORITY_SET: 'case.priority.set',
@@ -105,6 +115,16 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   [AUDIT_ACTIONS.SLA_CONFIG_UPDATE]: 'SLA configuration updated',
   [AUDIT_ACTIONS.TREATMENT_PLAN_UPSERT]: 'Treatment plan saved',
   [AUDIT_ACTIONS.DISCOUNT_CODE_UPSERT]: 'Discount code saved',
+  [AUDIT_ACTIONS.CUSTOMER_PRICE_UPSERT]: 'Customer price override saved',
+  [AUDIT_ACTIONS.BILLING_ARRANGE_UPDATE]: 'Billing arrangement updated',
+  [AUDIT_ACTIONS.PREPAID_CREDIT]: 'Prepaid balance credited',
+  [AUDIT_ACTIONS.PREPAID_DEBIT]: 'Prepaid balance debited',
+  [AUDIT_ACTIONS.PAYMENT_SESSION_CREATE]: 'Payment session created',
+  [AUDIT_ACTIONS.PAYMENT_SESSION_PAID]: 'Payment session paid',
+  [AUDIT_ACTIONS.PAYMENT_PROVIDER_UPSERT]: 'Payment provider saved',
+  [AUDIT_ACTIONS.INVOICE_ISSUE]: 'Invoice issued',
+  [AUDIT_ACTIONS.RECEIPT_ISSUE]: 'Payment receipt issued',
+  [AUDIT_ACTIONS.DEMO_CASE_CREATE]: 'Demo case created',
   [AUDIT_ACTIONS.CASE_DELETE]: 'Case deleted',
   [AUDIT_ACTIONS.CASE_NOTE_ADD]: 'Case note added',
   [AUDIT_ACTIONS.CASE_PRIORITY_SET]: 'Case priority changed',
@@ -155,7 +175,9 @@ export type AuditTargetType =
   | 'system'
   | 'case'
   | 'clarification'
-  | 'registration';
+  | 'registration'
+  | 'invoice'
+  | 'payment';
 
 export interface ActivityLogDto {
   id: string;

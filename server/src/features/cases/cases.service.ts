@@ -363,6 +363,8 @@ async function toListItem(
     queue,
     delayLevel: caseDoc.isDeleted ? null : computeDelayLevel(ref),
     isDeleted: caseDoc.isDeleted,
+    isDemo: Boolean(caseDoc.isDemo),
+    invoiceId: caseDoc.invoiceId ? String(caseDoc.invoiceId) : null,
     createdAt: caseDoc.createdAt.toISOString(),
     updatedAt: caseDoc.updatedAt.toISOString(),
   };
@@ -831,6 +833,7 @@ export async function listCases(
     priority?: CasePriority;
     q?: string;
     includeDeleted?: boolean;
+    isDemo?: boolean;
   },
 ): Promise<CaseListResult> {
   const page = Math.max(1, query.page ?? 1);
@@ -844,6 +847,8 @@ export async function listCases(
 
   if (query.status) conditions.push({ status: query.status });
   if (query.priority) conditions.push({ priority: query.priority });
+  if (query.isDemo === true) conditions.push({ isDemo: true });
+  if (query.isDemo === false) conditions.push({ isDemo: { $ne: true } });
 
   if (query.q?.trim()) {
     const term = query.q.trim();
@@ -963,9 +968,70 @@ export async function createCase(
 
   const asDraft = Boolean(input.asDraft);
   const now = new Date();
-  const slaHours = doctor.slaBusinessHours ?? DEFAULT_SLA_BUSINESS_HOURS;
   const status = asDraft ? CASE_STATUSES.SAVED_FOR_SUBMISSION : CASE_STATUSES.NEW_CASE;
   const submittedAt = asDraft ? undefined : now;
+
+  const {
+    evaluateCreateEligibility,
+    resolveCasePricing,
+    debitPrepaidForCase,
+    redeemDiscountCode,
+  } = await import('../commercial/pricingBilling.service');
+  const { DEMO_CASE_MESSAGES } = await import('@ayetis/shared');
+
+  let isDemo = Boolean(input.isDemo);
+  let resolvedCommercial = { ...EMPTY_CASE_COMMERCIAL, ...(input.commercial ?? {}) };
+  let paymentStatus: string = PAYMENT_STATUSES.NOT_BILLED;
+  let eligibilityReason: string | null = null;
+
+  if (!asDraft && resolvedCommercial.treatmentPlanId) {
+    const pricing = await resolveCasePricing({
+      treatmentPlanId: resolvedCommercial.treatmentPlanId,
+      discountCode: resolvedCommercial.discountCode,
+      customerUserId: String(doctor._id),
+      organizationId: doctor.organizationId ? String(doctor.organizationId) : null,
+      caseCategory: input.caseCategory ?? CASE_CATEGORIES.DIGITAL_ALIGNER,
+    });
+    if (pricing.isFreeDemoPlan) isDemo = true;
+    resolvedCommercial = {
+      ...resolvedCommercial,
+      treatmentPlanId: pricing.treatmentPlanId,
+      treatmentPlanName: pricing.treatmentPlanName,
+      unitPrice: pricing.unitPrice,
+      discountCode: pricing.discountCode ?? '',
+      discountAmount: pricing.discountAmount,
+      finalPayableAmount: isDemo ? 0 : pricing.finalPayableAmount,
+      currency: pricing.currency,
+    };
+
+    if (!input.paymentSessionId) {
+      const eligibility = await evaluateCreateEligibility({
+        userId: String(doctor._id),
+        treatmentPlanId: pricing.treatmentPlanId,
+        discountCode: pricing.discountCode,
+        isDemo,
+        caseCategory: input.caseCategory ?? CASE_CATEGORIES.DIGITAL_ALIGNER,
+      });
+      eligibilityReason = eligibility.reason;
+      if (!eligibility.allowedWithoutPayment) {
+        throw new AppError(
+          'Payment is required before this case can be created. Create a payment session first.',
+          402,
+        );
+      }
+      if (eligibility.reason === 'invoice_schedule') {
+        paymentStatus = PAYMENT_STATUSES.PENDING;
+      } else if (eligibility.reason === 'prepaid' || eligibility.reason === 'zero_amount' || eligibility.reason === 'demo') {
+        paymentStatus = eligibility.reason === 'prepaid' ? PAYMENT_STATUSES.PAID : PAYMENT_STATUSES.WAIVED;
+      }
+    } else {
+      paymentStatus = PAYMENT_STATUSES.PAID;
+    }
+  }
+
+  const slaHours = isDemo
+    ? DEMO_CASE_MESSAGES.slaBusinessHours
+    : doctor.slaBusinessHours ?? DEFAULT_SLA_BUSINESS_HOURS;
 
   const caseId = await generateCaseId();
 
@@ -1019,14 +1085,20 @@ export async function createCase(
     recordsNumbering: { ...EMPTY_RECORDS_NUMBERING, ...(input.recordsNumbering ?? {}) },
     clinicalPreferences: { ...EMPTY_CLINICAL_PREFERENCES, ...(input.clinicalPreferences ?? {}) },
     occlusionGoals: { ...EMPTY_OCCLUSION_GOALS, ...(input.occlusionGoals ?? {}) },
-    commercial: { ...EMPTY_CASE_COMMERCIAL, ...(input.commercial ?? {}) },
+    commercial: resolvedCommercial,
     payment: {
-      status: PAYMENT_STATUSES.NOT_BILLED,
-      currency: input.commercial?.currency || 'USD',
-      amountDue: input.commercial?.finalPayableAmount ?? input.commercial?.unitPrice ?? null,
+      status: paymentStatus as never,
+      currency: resolvedCommercial.currency || 'USD',
+      amountDue: resolvedCommercial.finalPayableAmount ?? resolvedCommercial.unitPrice ?? null,
+      amountPaid:
+        paymentStatus === PAYMENT_STATUSES.PAID
+          ? (resolvedCommercial.finalPayableAmount ?? 0)
+          : null,
       invoiceNumber: '',
-      notes: '',
+      notes: eligibilityReason === 'invoice_schedule' ? `Billing: ${eligibilityReason}` : '',
     },
+    isDemo,
+    paymentSessionId: input.paymentSessionId || undefined,
     assignmentMode: ASSIGNMENT_MODES.NONE,
     status,
     priority,
@@ -1072,6 +1144,29 @@ export async function createCase(
 
   await caseDoc.save();
 
+  if (!asDraft && eligibilityReason === 'prepaid') {
+    await debitPrepaidForCase(String(doctor._id), caseDoc.id, actor.email);
+  }
+
+  if (!asDraft && resolvedCommercial.discountCode && !input.paymentSessionId) {
+    await redeemDiscountCode(resolvedCommercial.discountCode);
+  }
+
+  if (!asDraft && isDemo) {
+    await recordActivity({
+      action: AUDIT_ACTIONS.DEMO_CASE_CREATE,
+      summary: `${actor.email} created demo case ${caseId}`,
+      actorId: actor.id,
+      actorEmail: actor.email,
+      actorRole: actor.role,
+      targetType: 'case',
+      targetId: caseId,
+      metadata: { message: DEMO_CASE_MESSAGES.confirmation },
+      ipAddress: audit?.ipAddress,
+      userAgent: audit?.userAgent,
+    });
+  }
+
   await recordActivity({
     action: AUDIT_ACTIONS.CASE_CREATE,
     summary: `${actor.email} created case ${caseId}`,
@@ -1081,7 +1176,7 @@ export async function createCase(
     actorRole: actor.role,
     targetType: 'case',
     targetId: caseId,
-    metadata: { mongoId: caseDoc.id, patientName: caseDoc.patientName },
+    metadata: { mongoId: caseDoc.id, patientName: caseDoc.patientName, isDemo },
     ipAddress: audit?.ipAddress,
     userAgent: audit?.userAgent,
   });

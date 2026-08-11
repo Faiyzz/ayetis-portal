@@ -181,6 +181,12 @@ export const listCasesQuerySchema = z.object({
     .union([z.boolean(), z.literal('true'), z.literal('false')])
     .optional()
     .transform((value) => value === true || value === 'true'),
+  isDemo: z
+    .union([z.boolean(), z.literal('true'), z.literal('false')])
+    .optional()
+    .transform((value) =>
+      value === undefined ? undefined : value === true || value === 'true',
+    ),
 });
 
 export const createCaseSchema = z
@@ -216,6 +222,8 @@ export const createCaseSchema = z
       }),
     initialNote: z.string().trim().max(2000).optional(),
     asDraft: z.boolean().optional(),
+    isDemo: z.boolean().optional(),
+    paymentSessionId: z.string().trim().min(1).optional(),
     doctorId: z.string().trim().min(1).optional(),
     facilityId: z.string().trim().min(1).optional(),
   })

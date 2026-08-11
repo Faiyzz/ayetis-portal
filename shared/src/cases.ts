@@ -348,6 +348,8 @@ export interface CaseListItemDto {
   queue: CoordinatorQueue | null;
   delayLevel: DelayLevel | null;
   isDeleted: boolean;
+  isDemo: boolean;
+  invoiceId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -428,10 +430,14 @@ export interface CreateCaseInput {
   initialNote?: string;
   /** Save as draft without starting the 15-minute clock / SLA. */
   asDraft?: boolean;
+  /** Demo case — separate tracked pipeline, no pay gate. */
+  isDemo?: boolean;
   /** Treating doctor. Required when the creator is not a doctor. */
   doctorId?: string;
   /** Facility for corporate-originated cases when the treating doctor has no facility. */
   facilityId?: string;
+  /** Complete a pending PaymentSession after pay (server sets on webhook confirm). */
+  paymentSessionId?: string;
 }
 
 export interface UpdateCaseInput {

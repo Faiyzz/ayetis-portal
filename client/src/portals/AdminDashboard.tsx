@@ -58,6 +58,8 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
             ['Users', '/app/users', 'Add, remove, or transfer accounts'],
             ['Permissions', '/app/roles', 'Assign role and user permissions'],
             ['Cases', '/app/cases', 'Reassign cases and set urgent priority'],
+            ['Demo cases', '/app/cases?isDemo=true', 'Tracked demo case pipeline'],
+            ['Commercial', '/app/commercial', 'Pricing, billing, providers, invoices'],
             ['Departments', '/app/admin?tab=departments', 'Org structure and team transfers'],
             ['Complaints', '/app/admin?tab=complaints', 'Doctor complaints and ratings'],
             ['Delete log', '/app/admin?tab=deletions', 'Approve deletions and audit log'],

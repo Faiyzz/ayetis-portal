@@ -8,6 +8,7 @@ import {
 import { useState, type FormEvent } from 'react';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { PropertyTable } from '@/features/cases/components/detail/PropertyTable';
+import api from '@/lib/api';
 
 function money(amount: number | null, currency: string) {
   if (amount === null || amount === undefined) return '—';
@@ -16,11 +17,13 @@ function money(amount: number | null, currency: string) {
 
 export function CasePaymentPanel({
   payment,
+  invoiceId,
   canManage,
   saving,
   onSave,
 }: {
   payment: CasePaymentOverview;
+  invoiceId?: string | null;
   canManage: boolean;
   saving?: boolean;
   onSave: (payload: UpdateCasePaymentInput) => Promise<void>;
@@ -34,6 +37,20 @@ export function CasePaymentPanel({
     invoiceNumber: payment.invoiceNumber,
     notes: payment.notes,
   });
+
+  async function openInvoiceHtml() {
+    if (!invoiceId) return;
+    try {
+      const { data } = await api.get(`/commercial/invoices/${invoiceId}/html`, {
+        responseType: 'text',
+      });
+      const blob = new Blob([data], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch {
+      // ignore
+    }
+  }
 
   async function handleSave(event: FormEvent) {
     event.preventDefault();
@@ -162,6 +179,20 @@ export function CasePaymentPanel({
                   ),
                 },
                 { label: 'Invoice', value: payment.invoiceNumber || '—' },
+                {
+                  label: 'Documents',
+                  value: invoiceId ? (
+                    <button
+                      type="button"
+                      onClick={() => void openInvoiceHtml()}
+                      className="font-medium text-brand-600 hover:text-brand-700"
+                    >
+                      Print invoice HTML
+                    </button>
+                  ) : (
+                    '—'
+                  ),
+                },
                 {
                   label: 'Amount due',
                   value: money(payment.amountDue, payment.currency),

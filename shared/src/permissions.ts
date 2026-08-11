@@ -72,6 +72,12 @@ export const PERMISSIONS = {
   SLA_CONFIGURE: 'sla:configure',
   TREATMENT_PLAN_MANAGE: 'treatment_plan:manage',
   DISCOUNT_CODE_MANAGE: 'discount_code:manage',
+  CUSTOMER_PRICE_MANAGE: 'customer_price:manage',
+  BILLING_ARRANGE_MANAGE: 'billing_arrange:manage',
+  PREPAID_MANAGE: 'prepaid:manage',
+  PAYMENT_PROVIDER_MANAGE: 'payment_provider:manage',
+  INVOICE_VIEW: 'invoice:view',
+  INVOICE_MANAGE: 'invoice:manage',
 
   // Corporate hierarchy
   ORG_MANAGE_SELF: 'org:manage_self',
@@ -138,6 +144,12 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.SLA_CONFIGURE]: 'Configure doctor SLA hours',
   [PERMISSIONS.TREATMENT_PLAN_MANAGE]: 'Manage treatment plans',
   [PERMISSIONS.DISCOUNT_CODE_MANAGE]: 'Manage discount codes',
+  [PERMISSIONS.CUSTOMER_PRICE_MANAGE]: 'Manage customer-specific plan prices',
+  [PERMISSIONS.BILLING_ARRANGE_MANAGE]: 'Manage billing arrangements',
+  [PERMISSIONS.PREPAID_MANAGE]: 'Manage prepaid case balances',
+  [PERMISSIONS.PAYMENT_PROVIDER_MANAGE]: 'Manage payment providers',
+  [PERMISSIONS.INVOICE_VIEW]: 'View invoices and receipts',
+  [PERMISSIONS.INVOICE_MANAGE]: 'Manage invoices and receipts',
   [PERMISSIONS.ORG_MANAGE_SELF]: 'Manage own organization profile',
   [PERMISSIONS.FACILITY_MANAGE]: 'Manage facilities',
   [PERMISSIONS.EMPLOYEE_MANAGE]: 'Manage corporate employees',
@@ -210,6 +222,12 @@ export const PERMISSION_GROUPS: Record<Permission, PermissionGroup> = {
   [PERMISSIONS.SLA_CONFIGURE]: 'Commercial',
   [PERMISSIONS.TREATMENT_PLAN_MANAGE]: 'Commercial',
   [PERMISSIONS.DISCOUNT_CODE_MANAGE]: 'Commercial',
+  [PERMISSIONS.CUSTOMER_PRICE_MANAGE]: 'Commercial',
+  [PERMISSIONS.BILLING_ARRANGE_MANAGE]: 'Commercial',
+  [PERMISSIONS.PREPAID_MANAGE]: 'Commercial',
+  [PERMISSIONS.PAYMENT_PROVIDER_MANAGE]: 'Commercial',
+  [PERMISSIONS.INVOICE_VIEW]: 'Commercial',
+  [PERMISSIONS.INVOICE_MANAGE]: 'Commercial',
   [PERMISSIONS.ORG_MANAGE_SELF]: 'Corporate',
   [PERMISSIONS.FACILITY_MANAGE]: 'Corporate',
   [PERMISSIONS.EMPLOYEE_MANAGE]: 'Corporate',
@@ -233,6 +251,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     PERMISSIONS.CASE_VIEW_FACILITY,
     PERMISSIONS.CASE_APPROVE,
     PERMISSIONS.CLARIFICATION_REPLY,
+    PERMISSIONS.INVOICE_VIEW,
   ],
 
   [ROLES.CORPORATE_ADMIN]: [
@@ -250,6 +269,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     PERMISSIONS.CORPORATE_REPORT_VIEW,
     PERMISSIONS.CORPORATE_AUDIT_VIEW,
     PERMISSIONS.USER_RESET_PASSWORD,
+    PERMISSIONS.INVOICE_VIEW,
   ],
 
   [ROLES.FACILITY_ADMIN]: [
@@ -261,6 +281,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     PERMISSIONS.CASE_APPROVE,
     PERMISSIONS.CLARIFICATION_REPLY,
     PERMISSIONS.EMPLOYEE_MANAGE,
+    PERMISSIONS.INVOICE_VIEW,
   ],
 
   [ROLES.COORDINATOR]: [

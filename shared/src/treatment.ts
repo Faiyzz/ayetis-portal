@@ -709,6 +709,9 @@ export interface TreatmentPlanDto {
   currency: string;
   estimatedDeliveryHours: number | null;
   isActive: boolean;
+  isDefault: boolean;
+  isFreeDemo: boolean;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -724,6 +727,10 @@ export interface DiscountCodeDto {
   validFrom: string | null;
   validUntil: string | null;
   isActive: boolean;
+  maxUses: number | null;
+  usageCount: number;
+  applicableCaseCategories: import('./caseTaxonomy').CaseCategory[];
+  applicablePlanIds: string[];
   createdAt: string;
   updatedAt: string;
 }

@@ -8,6 +8,7 @@ export * from './audit';
 export * from './caseTaxonomy';
 export * from './cases';
 export * from './treatment';
+export * from './commercial';
 export * from './geo';
 export * from './clarifications';
 export * from './notifications';

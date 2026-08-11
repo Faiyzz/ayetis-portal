@@ -15,7 +15,7 @@ import {
   type SlaProgressColor,
 } from '@ayetis/shared';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
@@ -65,6 +65,7 @@ function SlaBar({ item }: { item: CaseListItemDto }) {
 
 export function CasesPage() {
   const { can, canAny } = usePermissions();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isDoctorView =
     can(PERMISSIONS.CASE_VIEW_OWN) &&
     !canAny(PERMISSIONS.CASE_VIEW_ALL, PERMISSIONS.CASE_VIEW_ASSIGNED);
@@ -88,6 +89,7 @@ export function CasesPage() {
   const [priority, setPriority] = useState<CasePriority | ''>('');
   const [categoryTab, setCategoryTab] = useState<CaseCategory | 'all'>('all');
   const [includeDeleted, setIncludeDeleted] = useState(false);
+  const [demoOnly, setDemoOnly] = useState(searchParams.get('isDemo') === 'true');
   const [loading, setLoading] = useState(true);
 
   const categoryCounts = useMemo(() => {
@@ -114,6 +116,7 @@ export function CasesPage() {
         status,
         priority,
         includeDeleted: can(PERMISSIONS.CASE_DELETE) ? includeDeleted : false,
+        isDemo: demoOnly ? true : undefined,
       });
       setItems(data.items);
       setTotal(data.total);
@@ -208,6 +211,18 @@ export function CasesPage() {
           </select>
         </label>
         <div className="flex flex-col justify-end gap-2">
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={demoOnly}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setDemoOnly(next);
+                setSearchParams(next ? { isDemo: 'true' } : {}, { replace: true });
+              }}
+            />
+            Demo cases only
+          </label>
           {can(PERMISSIONS.CASE_DELETE) ? (
             <label className="flex items-center gap-2 text-sm text-muted">
               <input
@@ -293,6 +308,11 @@ export function CasesPage() {
                         >
                           {item.caseId}
                         </Link>
+                        {item.isDemo ? (
+                          <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+                            Demo
+                          </span>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => void copyCaseId(item.caseId)}

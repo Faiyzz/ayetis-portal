@@ -388,7 +388,7 @@ export function OcclusionCommercialPart({
                 treatmentPlanName: plan?.name ?? '',
                 unitPrice: plan?.price ?? null,
                 currency: plan?.currency ?? 'USD',
-                finalPayableAmount: plan?.price ?? null,
+                finalPayableAmount: plan?.isFreeDemo ? 0 : (plan?.price ?? null),
                 discountAmount: null,
               });
             }}
@@ -422,17 +422,31 @@ export function OcclusionCommercialPart({
           </div>
         </div>
 
-        <p className="text-sm text-muted">
-          Payable:{' '}
-          <span className="font-semibold text-ink">
-            {com.currency} {(com.finalPayableAmount ?? com.unitPrice ?? 0).toFixed(2)}
-          </span>
-          {com.discountAmount ? (
-            <span className="ml-2 text-emerald-700">
-              (discount {com.currency} {com.discountAmount.toFixed(2)})
+        <div className="space-y-1 rounded-lg bg-surface px-3 py-2 text-sm text-muted">
+          <p>
+            Standard:{' '}
+            <span className="text-ink">
+              {com.currency}{' '}
+              {(plans.find((p) => p.id === com.treatmentPlanId)?.price ?? com.unitPrice ?? 0).toFixed(
+                2,
+              )}
             </span>
+          </p>
+          {com.discountAmount ? (
+            <p>
+              Discount:{' '}
+              <span className="text-emerald-700">
+                − {com.currency} {Number(com.discountAmount).toFixed(2)}
+              </span>
+            </p>
           ) : null}
-        </p>
+          <p>
+            Payable:{' '}
+            <span className="font-semibold text-ink">
+              {com.currency} {(com.finalPayableAmount ?? com.unitPrice ?? 0).toFixed(2)}
+            </span>
+          </p>
+        </div>
       </SectionCard>
     </div>
   );

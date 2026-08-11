@@ -15,7 +15,7 @@ import {
   type RequestAuditContext,
 } from '../audit/audit.service';
 
-function planDto(doc: InstanceType<typeof TreatmentPlan>): TreatmentPlanDto {
+export function planDto(doc: InstanceType<typeof TreatmentPlan>): TreatmentPlanDto {
   return {
     id: doc.id,
     name: doc.name,
@@ -25,12 +25,15 @@ function planDto(doc: InstanceType<typeof TreatmentPlan>): TreatmentPlanDto {
     currency: doc.currency,
     estimatedDeliveryHours: doc.estimatedDeliveryHours ?? null,
     isActive: doc.isActive,
+    isDefault: Boolean(doc.isDefault),
+    isFreeDemo: Boolean(doc.isFreeDemo),
+    archivedAt: doc.archivedAt ? doc.archivedAt.toISOString() : null,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
 }
 
-function discountDto(doc: InstanceType<typeof DiscountCode>): DiscountCodeDto {
+export function discountDto(doc: InstanceType<typeof DiscountCode>): DiscountCodeDto {
   return {
     id: doc.id,
     code: doc.code,
@@ -42,13 +45,22 @@ function discountDto(doc: InstanceType<typeof DiscountCode>): DiscountCodeDto {
     validFrom: doc.validFrom ? doc.validFrom.toISOString() : null,
     validUntil: doc.validUntil ? doc.validUntil.toISOString() : null,
     isActive: doc.isActive,
+    maxUses: doc.maxUses ?? null,
+    usageCount: doc.usageCount ?? 0,
+    applicableCaseCategories: doc.applicableCaseCategories ?? [],
+    applicablePlanIds: (doc.applicablePlanIds ?? []).map(String),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
 }
 
 export async function listTreatmentPlans(activeOnly = false) {
-  const filter = activeOnly ? { isActive: true } : {};
+  const filter: Record<string, unknown> = activeOnly
+    ? {
+        isActive: true,
+        $or: [{ archivedAt: null }, { archivedAt: { $exists: false } }],
+      }
+    : {};
   const items = await TreatmentPlan.find(filter).sort({ name: 1 });
   return items.map(planDto);
 }
@@ -63,6 +75,9 @@ export async function upsertTreatmentPlan(
     currency?: string;
     estimatedDeliveryHours?: number | null;
     isActive?: boolean;
+    isDefault?: boolean;
+    isFreeDemo?: boolean;
+    archived?: boolean;
   },
   actor: { id: string; email: string; role: string },
   audit: RequestAuditContext = {},
@@ -82,6 +97,10 @@ export async function upsertTreatmentPlan(
     doc.currency = (input.currency ?? 'USD').toUpperCase();
     doc.estimatedDeliveryHours = input.estimatedDeliveryHours ?? undefined;
     if (input.isActive !== undefined) doc.isActive = input.isActive;
+    if (input.isDefault !== undefined) doc.isDefault = input.isDefault;
+    if (input.isFreeDemo !== undefined) doc.isFreeDemo = input.isFreeDemo;
+    if (input.archived === true) doc.archivedAt = new Date();
+    if (input.archived === false) doc.archivedAt = undefined;
     await doc.save();
   } else {
     doc = await TreatmentPlan.create({
@@ -92,7 +111,16 @@ export async function upsertTreatmentPlan(
       currency: (input.currency ?? 'USD').toUpperCase(),
       estimatedDeliveryHours: input.estimatedDeliveryHours ?? undefined,
       isActive: input.isActive ?? true,
+      isDefault: input.isDefault ?? false,
+      isFreeDemo: input.isFreeDemo ?? false,
     });
+  }
+
+  if (doc.isDefault) {
+    await TreatmentPlan.updateMany(
+      { _id: { $ne: doc._id }, isDefault: true },
+      { $set: { isDefault: false } },
+    );
   }
 
   await recordActivity({
@@ -127,6 +155,9 @@ export async function upsertDiscountCode(
     validFrom?: string | null;
     validUntil?: string | null;
     isActive?: boolean;
+    maxUses?: number | null;
+    applicableCaseCategories?: CaseCategory[];
+    applicablePlanIds?: string[];
   },
   actor: { id: string; email: string; role: string },
   audit: RequestAuditContext = {},
@@ -149,6 +180,9 @@ export async function upsertDiscountCode(
   doc.validFrom = input.validFrom ? new Date(input.validFrom) : undefined;
   doc.validUntil = input.validUntil ? new Date(input.validUntil) : undefined;
   if (input.isActive !== undefined) doc.isActive = input.isActive;
+  doc.maxUses = input.maxUses ?? undefined;
+  doc.applicableCaseCategories = input.applicableCaseCategories ?? [];
+  doc.applicablePlanIds = (input.applicablePlanIds ?? []) as never;
   await doc.save();
 
   await recordActivity({
@@ -166,7 +200,11 @@ export async function upsertDiscountCode(
   return discountDto(doc);
 }
 
-export async function validateDiscountCode(code: string, customerUserId?: string) {
+export async function validateDiscountCode(
+  code: string,
+  customerUserId?: string,
+  opts?: { treatmentPlanId?: string; caseCategory?: string | null },
+) {
   const doc = await DiscountCode.findOne({
     code: code.trim().toUpperCase(),
     isActive: true,
@@ -178,6 +216,20 @@ export async function validateDiscountCode(code: string, customerUserId?: string
   if (doc.validUntil && doc.validUntil < now) throw new AppError('Discount code has expired', 400);
   if (doc.customerUserId && customerUserId && String(doc.customerUserId) !== customerUserId) {
     throw new AppError('Discount code is not assigned to this account', 400);
+  }
+  if (doc.maxUses != null && doc.usageCount >= doc.maxUses) {
+    throw new AppError('Discount code has reached its usage limit', 400);
+  }
+  if (opts?.caseCategory && doc.applicableCaseCategories?.length) {
+    if (!doc.applicableCaseCategories.includes(opts.caseCategory as CaseCategory)) {
+      throw new AppError('Discount code is not valid for this case category', 400);
+    }
+  }
+  if (opts?.treatmentPlanId && doc.applicablePlanIds?.length) {
+    const allowed = doc.applicablePlanIds.map(String);
+    if (!allowed.includes(opts.treatmentPlanId)) {
+      throw new AppError('Discount code is not valid for this treatment plan', 400);
+    }
   }
 
   return discountDto(doc);

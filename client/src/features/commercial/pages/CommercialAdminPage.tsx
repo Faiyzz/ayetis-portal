@@ -1,24 +1,50 @@
 import {
+  ALL_BILLING_ARRANGEMENTS,
   ALL_CASE_CATEGORIES,
+  ALL_PAYMENT_PROVIDERS,
+  BILLING_ARRANGEMENT_LABELS,
   CASE_CATEGORY_LABELS,
+  PAYMENT_PROVIDER_LABELS,
   PERMISSIONS,
+  PRICE_SUBJECT_TYPES,
+  type BillingArrangement,
+  type CustomerPriceOverrideDto,
   type DiscountCodeDto,
+  type InvoiceDto,
+  type PaymentProviderConfigDto,
+  type PrepaidLedgerEntryDto,
+  type PriceSubjectType,
   type TreatmentPlanDto,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import {
+  creditPrepaid,
+  fetchCustomerPrices,
   fetchDiscountCodes,
+  fetchInvoices,
+  fetchPaymentProviders,
+  fetchPrepaidLedger,
   fetchTreatmentPlans,
+  updateBillingArrangement,
+  upsertCustomerPrice,
   upsertDiscountCode,
+  upsertPaymentProvider,
   upsertTreatmentPlan,
 } from '@/features/commercial/api';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
-type Tab = 'plans' | 'discounts';
+type Tab =
+  | 'plans'
+  | 'prices'
+  | 'discounts'
+  | 'billing'
+  | 'providers'
+  | 'invoices';
 
 const EMPTY_PLAN = {
   name: '',
@@ -28,6 +54,8 @@ const EMPTY_PLAN = {
   currency: 'USD',
   estimatedDeliveryHours: '',
   isActive: true,
+  isDefault: false,
+  isFreeDemo: false,
 };
 
 const EMPTY_DISCOUNT = {
@@ -37,18 +65,62 @@ const EMPTY_DISCOUNT = {
   amountOff: '',
   currency: 'USD',
   isActive: true,
+  maxUses: '',
 };
 
 export function CommercialAdminPage() {
   const { can } = usePermissions();
   const canPlans = can(PERMISSIONS.TREATMENT_PLAN_MANAGE);
   const canDiscounts = can(PERMISSIONS.DISCOUNT_CODE_MANAGE);
-  const [tab, setTab] = useState<Tab>(canPlans ? 'plans' : 'discounts');
+  const canPrices = can(PERMISSIONS.CUSTOMER_PRICE_MANAGE);
+  const canBilling = can(PERMISSIONS.BILLING_ARRANGE_MANAGE);
+  const canPrepaid = can(PERMISSIONS.PREPAID_MANAGE);
+  const canProviders = can(PERMISSIONS.PAYMENT_PROVIDER_MANAGE);
+  const canInvoices = can(PERMISSIONS.INVOICE_VIEW);
 
+  const firstTab: Tab = canPlans
+    ? 'plans'
+    : canPrices
+      ? 'prices'
+      : canDiscounts
+        ? 'discounts'
+        : canBilling
+          ? 'billing'
+          : canProviders
+            ? 'providers'
+            : 'invoices';
+
+  const [tab, setTab] = useState<Tab>(firstTab);
   const [plans, setPlans] = useState<TreatmentPlanDto[]>([]);
   const [discounts, setDiscounts] = useState<DiscountCodeDto[]>([]);
+  const [prices, setPrices] = useState<CustomerPriceOverrideDto[]>([]);
+  const [providers, setProviders] = useState<PaymentProviderConfigDto[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceDto[]>([]);
+  const [ledger, setLedger] = useState<PrepaidLedgerEntryDto[]>([]);
   const [planForm, setPlanForm] = useState({ ...EMPTY_PLAN, id: '' as string });
   const [discountForm, setDiscountForm] = useState({ ...EMPTY_DISCOUNT, id: '' as string });
+  const [priceForm, setPriceForm] = useState({
+    id: '',
+    subjectType: PRICE_SUBJECT_TYPES.USER as PriceSubjectType,
+    subjectId: '',
+    treatmentPlanId: '',
+    price: '',
+    currency: 'USD',
+  });
+  const [billingForm, setBillingForm] = useState({
+    subjectType: PRICE_SUBJECT_TYPES.USER as PriceSubjectType,
+    subjectId: '',
+    billingArrangement: '' as string,
+    creditCases: '1',
+    reason: '',
+  });
+  const [providerForm, setProviderForm] = useState({
+    id: '',
+    provider: 'bank_transfer',
+    label: '',
+    enabled: true,
+    instructions: '',
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -57,12 +129,18 @@ export function CommercialAdminPage() {
     setLoading(true);
     setError('');
     try {
-      const [planList, discountList] = await Promise.all([
-        canPlans ? fetchTreatmentPlans(false) : Promise.resolve([]),
+      const [planList, discountList, priceList, providerList, invoiceList] = await Promise.all([
+        canPlans || canPrices ? fetchTreatmentPlans(false) : Promise.resolve([]),
         canDiscounts ? fetchDiscountCodes() : Promise.resolve([]),
+        canPrices ? fetchCustomerPrices() : Promise.resolve([]),
+        canProviders || canInvoices ? fetchPaymentProviders() : Promise.resolve([]),
+        canInvoices ? fetchInvoices() : Promise.resolve([]),
       ]);
       setPlans(planList);
       setDiscounts(discountList);
+      setPrices(priceList);
+      setProviders(providerList);
+      setInvoices(invoiceList);
     } catch (err) {
       const message = getErrorMessage(err, 'Unable to load commercial data');
       setError(message);
@@ -93,6 +171,8 @@ export function CommercialAdminPage() {
           ? Number(planForm.estimatedDeliveryHours)
           : null,
         isActive: planForm.isActive,
+        isDefault: planForm.isDefault,
+        isFreeDemo: planForm.isFreeDemo,
       });
       toast().success(planForm.id ? 'Treatment plan updated' : 'Treatment plan created');
       setPlanForm({ ...EMPTY_PLAN, id: '' });
@@ -117,6 +197,7 @@ export function CommercialAdminPage() {
         amountOff: discountForm.amountOff ? Number(discountForm.amountOff) : null,
         currency: discountForm.currency || 'USD',
         isActive: discountForm.isActive,
+        maxUses: discountForm.maxUses ? Number(discountForm.maxUses) : null,
       });
       toast().success(discountForm.id ? 'Discount updated' : 'Discount created');
       setDiscountForm({ ...EMPTY_DISCOUNT, id: '' });
@@ -128,41 +209,142 @@ export function CommercialAdminPage() {
     }
   }
 
+  async function savePrice(event: FormEvent) {
+    event.preventDefault();
+    if (!canPrices) return;
+    setSaving(true);
+    try {
+      await upsertCustomerPrice({
+        id: priceForm.id || undefined,
+        subjectType: priceForm.subjectType,
+        subjectId: priceForm.subjectId.trim(),
+        treatmentPlanId: priceForm.treatmentPlanId,
+        price: Number(priceForm.price),
+        currency: priceForm.currency || 'USD',
+      });
+      toast().success('Customer price saved');
+      setPriceForm({
+        id: '',
+        subjectType: PRICE_SUBJECT_TYPES.USER,
+        subjectId: '',
+        treatmentPlanId: '',
+        price: '',
+        currency: 'USD',
+      });
+      await load();
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to save price'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveBilling(event: FormEvent) {
+    event.preventDefault();
+    if (!canBilling) return;
+    setSaving(true);
+    try {
+      await updateBillingArrangement({
+        subjectType: billingForm.subjectType,
+        subjectId: billingForm.subjectId.trim(),
+        billingArrangement: (billingForm.billingArrangement || null) as BillingArrangement | null,
+      });
+      toast().success('Billing arrangement updated');
+      if (canPrepaid) {
+        setLedger(
+          await fetchPrepaidLedger(billingForm.subjectType, billingForm.subjectId.trim()),
+        );
+      }
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to update billing'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function doCredit(event: FormEvent) {
+    event.preventDefault();
+    if (!canPrepaid) return;
+    setSaving(true);
+    try {
+      await creditPrepaid({
+        subjectType: billingForm.subjectType,
+        subjectId: billingForm.subjectId.trim(),
+        cases: Number(billingForm.creditCases),
+        reason: billingForm.reason || undefined,
+      });
+      toast().success('Prepaid balance credited');
+      setLedger(await fetchPrepaidLedger(billingForm.subjectType, billingForm.subjectId.trim()));
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to credit prepaid'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveProvider(event: FormEvent) {
+    event.preventDefault();
+    if (!canProviders) return;
+    setSaving(true);
+    try {
+      await upsertPaymentProvider({
+        id: providerForm.id || undefined,
+        provider: providerForm.provider,
+        label: providerForm.label.trim(),
+        enabled: providerForm.enabled,
+        instructions: providerForm.instructions,
+      });
+      toast().success('Provider saved');
+      await load();
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to save provider'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const tabs: Array<{ id: Tab; label: string; show: boolean }> = [
+    { id: 'plans', label: 'Plans', show: canPlans },
+    { id: 'prices', label: 'Customer prices', show: canPrices },
+    { id: 'discounts', label: 'Discount codes', show: canDiscounts },
+    { id: 'billing', label: 'Billing & prepaid', show: canBilling || canPrepaid },
+    { id: 'providers', label: 'Payment providers', show: canProviders },
+    { id: 'invoices', label: 'Invoices', show: canInvoices },
+  ];
+
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Administration"
         title="Commercial"
-        subtitle="Treatment plans, pricing, and discount codes used in Create New Case."
-      />
+        subtitle="Pricing engine — plans, overrides, discounts, billing, payments, and invoices."
+      >
+        <Link
+          to="/app/cases?isDemo=true"
+          className="text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          Demo cases
+        </Link>
+      </PageHeader>
 
       {error ? <Alert tone="error">{error}</Alert> : null}
 
       <div className="flex flex-wrap gap-2">
-        {canPlans ? (
-          <button
-            type="button"
-            onClick={() => setTab('plans')}
-            className={[
-              'rounded-lg px-3.5 py-2 text-sm font-semibold',
-              tab === 'plans' ? 'bg-brand-500 text-white' : 'border border-line text-ink',
-            ].join(' ')}
-          >
-            Treatment plans
-          </button>
-        ) : null}
-        {canDiscounts ? (
-          <button
-            type="button"
-            onClick={() => setTab('discounts')}
-            className={[
-              'rounded-lg px-3.5 py-2 text-sm font-semibold',
-              tab === 'discounts' ? 'bg-brand-500 text-white' : 'border border-line text-ink',
-            ].join(' ')}
-          >
-            Discount codes
-          </button>
-        ) : null}
+        {tabs
+          .filter((t) => t.show)
+          .map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={[
+                'rounded-lg px-3.5 py-2 text-sm font-semibold',
+                tab === t.id ? 'bg-brand-500 text-white' : 'border border-line text-ink',
+              ].join(' ')}
+            >
+              {t.label}
+            </button>
+          ))}
       </div>
 
       {loading ? <p className="text-sm text-muted">Loading…</p> : null}
@@ -217,15 +399,6 @@ export function CommercialAdminPage() {
                 onChange={(e) => setPlanForm((p) => ({ ...p, currency: e.target.value }))}
               />
             </div>
-            <TextField
-              label="Est. delivery hours"
-              name="hours"
-              type="number"
-              value={planForm.estimatedDeliveryHours}
-              onChange={(e) =>
-                setPlanForm((p) => ({ ...p, estimatedDeliveryHours: e.target.value }))
-              }
-            />
             <label className="flex items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
@@ -234,18 +407,23 @@ export function CommercialAdminPage() {
               />
               Active
             </label>
-            <div className="flex gap-2">
-              <AuthButton loading={saving}>{planForm.id ? 'Update' : 'Create'}</AuthButton>
-              {planForm.id ? (
-                <button
-                  type="button"
-                  className="rounded-lg border border-line px-3 py-2 text-sm"
-                  onClick={() => setPlanForm({ ...EMPTY_PLAN, id: '' })}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={planForm.isDefault}
+                onChange={(e) => setPlanForm((p) => ({ ...p, isDefault: e.target.checked }))}
+              />
+              Default plan
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={planForm.isFreeDemo}
+                onChange={(e) => setPlanForm((p) => ({ ...p, isFreeDemo: e.target.checked }))}
+              />
+              Free demo plan
+            </label>
+            <AuthButton loading={saving}>{planForm.id ? 'Update' : 'Create'}</AuthButton>
           </form>
 
           <section className="overflow-hidden rounded-xl border border-line bg-white">
@@ -254,7 +432,7 @@ export function CommercialAdminPage() {
                 <tr>
                   <th className="px-4 py-3 font-medium">Plan</th>
                   <th className="px-4 py-3 font-medium">Price</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Flags</th>
                   <th className="px-4 py-3 font-medium" />
                 </tr>
               </thead>
@@ -272,7 +450,16 @@ export function CommercialAdminPage() {
                     <td className="px-4 py-3">
                       {plan.currency} {plan.price.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3">{plan.isActive ? 'Active' : 'Inactive'}</td>
+                    <td className="px-4 py-3 text-xs text-muted">
+                      {[
+                        plan.isActive ? 'Active' : 'Inactive',
+                        plan.isDefault ? 'Default' : null,
+                        plan.isFreeDemo ? 'Free demo' : null,
+                        plan.archivedAt ? 'Archived' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
@@ -290,11 +477,98 @@ export function CommercialAdminPage() {
                                 ? String(plan.estimatedDeliveryHours)
                                 : '',
                             isActive: plan.isActive,
+                            isDefault: plan.isDefault,
+                            isFreeDemo: plan.isFreeDemo,
                           })
                         }
                       >
                         Edit
                       </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        </div>
+      ) : null}
+
+      {tab === 'prices' && canPrices ? (
+        <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
+          <form onSubmit={savePrice} className="space-y-3 rounded-xl border border-line bg-white p-4">
+            <h2 className="text-sm font-semibold text-ink">Customer / org price override</h2>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-ink">Subject type</span>
+              <select
+                value={priceForm.subjectType}
+                onChange={(e) =>
+                  setPriceForm((p) => ({
+                    ...p,
+                    subjectType: e.target.value as PriceSubjectType,
+                  }))
+                }
+                className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px]"
+              >
+                <option value={PRICE_SUBJECT_TYPES.USER}>User</option>
+                <option value={PRICE_SUBJECT_TYPES.ORGANIZATION}>Organization</option>
+              </select>
+            </label>
+            <TextField
+              label="Subject ID"
+              name="subjectId"
+              value={priceForm.subjectId}
+              onChange={(e) => setPriceForm((p) => ({ ...p, subjectId: e.target.value }))}
+              required
+            />
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-ink">Treatment plan</span>
+              <select
+                value={priceForm.treatmentPlanId}
+                onChange={(e) =>
+                  setPriceForm((p) => ({ ...p, treatmentPlanId: e.target.value }))
+                }
+                className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px]"
+                required
+              >
+                <option value="">Select…</option>
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <TextField
+              label="Price"
+              name="price"
+              type="number"
+              value={priceForm.price}
+              onChange={(e) => setPriceForm((p) => ({ ...p, price: e.target.value }))}
+              required
+            />
+            <AuthButton loading={saving}>Save override</AuthButton>
+          </form>
+          <section className="overflow-hidden rounded-xl border border-line bg-white">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-surface text-muted">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Subject</th>
+                  <th className="px-4 py-3 font-medium">Plan</th>
+                  <th className="px-4 py-3 font-medium">Price</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {prices.map((row) => (
+                  <tr key={row.id}>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-ink">{row.subjectLabel}</p>
+                      <p className="text-xs text-muted">
+                        {row.subjectType} · {row.subjectId}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">{row.treatmentPlanName}</td>
+                    <td className="px-4 py-3">
+                      {row.currency} {row.price.toFixed(2)}
                     </td>
                   </tr>
                 ))}
@@ -342,6 +616,13 @@ export function CommercialAdminPage() {
                 onChange={(e) => setDiscountForm((p) => ({ ...p, amountOff: e.target.value }))}
               />
             </div>
+            <TextField
+              label="Max uses (optional)"
+              name="maxUses"
+              type="number"
+              value={discountForm.maxUses}
+              onChange={(e) => setDiscountForm((p) => ({ ...p, maxUses: e.target.value }))}
+            />
             <label className="flex items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
@@ -350,28 +631,15 @@ export function CommercialAdminPage() {
               />
               Active
             </label>
-            <div className="flex gap-2">
-              <AuthButton loading={saving}>{discountForm.id ? 'Update' : 'Create'}</AuthButton>
-              {discountForm.id ? (
-                <button
-                  type="button"
-                  className="rounded-lg border border-line px-3 py-2 text-sm"
-                  onClick={() => setDiscountForm({ ...EMPTY_DISCOUNT, id: '' })}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
+            <AuthButton loading={saving}>{discountForm.id ? 'Update' : 'Create'}</AuthButton>
           </form>
-
           <section className="overflow-hidden rounded-xl border border-line bg-white">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-surface text-muted">
                 <tr>
                   <th className="px-4 py-3 font-medium">Code</th>
                   <th className="px-4 py-3 font-medium">Offer</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium" />
+                  <th className="px-4 py-3 font-medium">Usage</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -385,20 +653,182 @@ export function CommercialAdminPage() {
                           ? `${code.currency} ${code.amountOff}`
                           : '—'}
                     </td>
-                    <td className="px-4 py-3">{code.isActive ? 'Active' : 'Inactive'}</td>
+                    <td className="px-4 py-3">
+                      {code.usageCount}
+                      {code.maxUses != null ? ` / ${code.maxUses}` : ''}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        </div>
+      ) : null}
+
+      {tab === 'billing' && (canBilling || canPrepaid) ? (
+        <div className="grid gap-5 lg:grid-cols-2">
+          {canBilling ? (
+            <form
+              onSubmit={saveBilling}
+              className="space-y-3 rounded-xl border border-line bg-white p-4"
+            >
+              <h2 className="text-sm font-semibold text-ink">Billing arrangement</h2>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-ink">Subject type</span>
+                <select
+                  value={billingForm.subjectType}
+                  onChange={(e) =>
+                    setBillingForm((p) => ({
+                      ...p,
+                      subjectType: e.target.value as PriceSubjectType,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px]"
+                >
+                  <option value={PRICE_SUBJECT_TYPES.USER}>User</option>
+                  <option value={PRICE_SUBJECT_TYPES.ORGANIZATION}>Organization</option>
+                </select>
+              </label>
+              <TextField
+                label="Subject ID"
+                name="billingSubjectId"
+                value={billingForm.subjectId}
+                onChange={(e) => setBillingForm((p) => ({ ...p, subjectId: e.target.value }))}
+                required
+              />
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-ink">Arrangement</span>
+                <select
+                  value={billingForm.billingArrangement}
+                  onChange={(e) =>
+                    setBillingForm((p) => ({ ...p, billingArrangement: e.target.value }))
+                  }
+                  className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px]"
+                >
+                  <option value="">None (pay before create)</option>
+                  {ALL_BILLING_ARRANGEMENTS.map((value) => (
+                    <option key={value} value={value}>
+                      {BILLING_ARRANGEMENT_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <AuthButton loading={saving}>Save arrangement</AuthButton>
+            </form>
+          ) : null}
+
+          {canPrepaid ? (
+            <form onSubmit={doCredit} className="space-y-3 rounded-xl border border-line bg-white p-4">
+              <h2 className="text-sm font-semibold text-ink">Credit prepaid cases</h2>
+              <p className="text-xs text-muted">
+                Uses the subject fields from Billing arrangement.
+              </p>
+              <TextField
+                label="Cases to credit"
+                name="creditCases"
+                type="number"
+                value={billingForm.creditCases}
+                onChange={(e) => setBillingForm((p) => ({ ...p, creditCases: e.target.value }))}
+                required
+              />
+              <TextField
+                label="Reason"
+                name="reason"
+                value={billingForm.reason}
+                onChange={(e) => setBillingForm((p) => ({ ...p, reason: e.target.value }))}
+              />
+              <AuthButton loading={saving}>Credit balance</AuthButton>
+              {ledger.length > 0 ? (
+                <ul className="mt-3 max-h-48 space-y-1 overflow-auto text-xs text-muted">
+                  {ledger.map((entry) => (
+                    <li key={entry.id}>
+                      {entry.kind} {entry.deltaCases} → bal {entry.balanceAfter} · {entry.reason}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </form>
+          ) : null}
+        </div>
+      ) : null}
+
+      {tab === 'providers' && canProviders ? (
+        <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
+          <form
+            onSubmit={saveProvider}
+            className="space-y-3 rounded-xl border border-line bg-white p-4"
+          >
+            <h2 className="text-sm font-semibold text-ink">Payment provider</h2>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-ink">Provider</span>
+              <select
+                value={providerForm.provider}
+                onChange={(e) => setProviderForm((p) => ({ ...p, provider: e.target.value }))}
+                className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px]"
+              >
+                {ALL_PAYMENT_PROVIDERS.map((value) => (
+                  <option key={value} value={value}>
+                    {PAYMENT_PROVIDER_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <TextField
+              label="Label"
+              name="label"
+              value={providerForm.label}
+              onChange={(e) => setProviderForm((p) => ({ ...p, label: e.target.value }))}
+              required
+            />
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-ink">Instructions</span>
+              <textarea
+                value={providerForm.instructions}
+                onChange={(e) =>
+                  setProviderForm((p) => ({ ...p, instructions: e.target.value }))
+                }
+                rows={4}
+                className="w-full rounded-xl border border-line px-3.5 py-3 text-[15px]"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={providerForm.enabled}
+                onChange={(e) => setProviderForm((p) => ({ ...p, enabled: e.target.checked }))}
+              />
+              Enabled
+            </label>
+            <AuthButton loading={saving}>Save provider</AuthButton>
+          </form>
+          <section className="overflow-hidden rounded-xl border border-line bg-white">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-surface text-muted">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Provider</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {providers.map((row) => (
+                  <tr key={row.id}>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-ink">{row.label}</p>
+                      <p className="text-xs text-muted">{row.provider}</p>
+                    </td>
+                    <td className="px-4 py-3">{row.enabled ? 'Enabled' : 'Disabled'}</td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
                         className="font-medium text-brand-600"
                         onClick={() =>
-                          setDiscountForm({
-                            id: code.id,
-                            code: code.code,
-                            description: code.description,
-                            percentOff: code.percentOff != null ? String(code.percentOff) : '',
-                            amountOff: code.amountOff != null ? String(code.amountOff) : '',
-                            currency: code.currency,
-                            isActive: code.isActive,
+                          setProviderForm({
+                            id: row.id,
+                            provider: row.provider,
+                            label: row.label,
+                            enabled: row.enabled,
+                            instructions: row.instructions,
                           })
                         }
                       >
@@ -411,6 +841,47 @@ export function CommercialAdminPage() {
             </table>
           </section>
         </div>
+      ) : null}
+
+      {tab === 'invoices' && canInvoices ? (
+        <section className="overflow-hidden rounded-xl border border-line bg-white">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-surface text-muted">
+              <tr>
+                <th className="px-4 py-3 font-medium">Invoice</th>
+                <th className="px-4 py-3 font-medium">Customer</th>
+                <th className="px-4 py-3 font-medium">Total</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {invoices.map((inv) => (
+                <tr key={inv.id}>
+                  <td className="px-4 py-3 font-mono">{inv.invoiceNumber}</td>
+                  <td className="px-4 py-3">
+                    <p>{inv.customerName}</p>
+                    <p className="text-xs text-muted">{inv.customerEmail}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    {inv.currency} {inv.total.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3">{inv.status}</td>
+                  <td className="px-4 py-3 text-right">
+                    <a
+                      className="font-medium text-brand-600"
+                      href={`/api/commercial/invoices/${inv.id}/html`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Print HTML
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
       ) : null}
     </div>
   );

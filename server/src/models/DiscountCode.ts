@@ -1,3 +1,4 @@
+import { ALL_CASE_CATEGORIES, type CaseCategory } from '@ayetis/shared';
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
 
 export interface IDiscountCode extends Document {
@@ -10,6 +11,10 @@ export interface IDiscountCode extends Document {
   validFrom?: Date;
   validUntil?: Date;
   isActive: boolean;
+  maxUses?: number;
+  usageCount: number;
+  applicableCaseCategories: CaseCategory[];
+  applicablePlanIds: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,6 +30,16 @@ const discountCodeSchema = new Schema<IDiscountCode>(
     validFrom: { type: Date },
     validUntil: { type: Date },
     isActive: { type: Boolean, default: true, index: true },
+    maxUses: { type: Number, min: 1 },
+    usageCount: { type: Number, default: 0, min: 0 },
+    applicableCaseCategories: {
+      type: [{ type: String, enum: ALL_CASE_CATEGORIES }],
+      default: [],
+    },
+    applicablePlanIds: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'TreatmentPlan' }],
+      default: [],
+    },
   },
   { timestamps: true },
 );

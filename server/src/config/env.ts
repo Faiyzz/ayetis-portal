@@ -63,4 +63,7 @@ export const env = {
   /** Auto-delete cold objects after this many days (0 = never). Reduces long-term storage cost. */
   fileColdDeleteAfterDays: Math.max(0, Number(process.env.FILE_COLD_DELETE_AFTER_DAYS ?? 365)),
   fileColdStorageCron: process.env.FILE_COLD_STORAGE_CRON ?? '0 * * * *',
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+  stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY ?? '',
 };

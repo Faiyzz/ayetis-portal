@@ -14,7 +14,9 @@ import filesRoutes from './features/files/files.routes';
 import notificationsRoutes from './features/notifications/notifications.routes';
 import registrationsRoutes from './features/registrations/registrations.routes';
 import cancellationsRoutes from './features/cancellations/cancellations.routes';
-import commercialRoutes from './features/commercial/commercial.routes';
+import commercialRoutes, {
+  stripeWebhookHandler,
+} from './features/commercial/commercial.routes';
 import corporateRoutes from './features/corporate/corporate.routes';
 import reportsRoutes from './features/reports/reports.routes';
 import supervisorRoutes from './features/supervisor/supervisor.routes';
@@ -31,6 +33,13 @@ export function createApp() {
       credentials: true,
     }),
   );
+
+  app.post(
+    '/api/commercial/webhooks/stripe',
+    express.raw({ type: 'application/json' }),
+    stripeWebhookHandler,
+  );
+
   app.use(express.json({ limit: '1mb' }));
   app.use(morgan(env.isDev ? 'dev' : 'combined'));
 

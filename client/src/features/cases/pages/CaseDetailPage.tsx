@@ -690,6 +690,7 @@ export function CaseDetailPage() {
                     <div className="max-w-3xl">
                       <CasePaymentPanel
                         payment={caseData.payment}
+                        invoiceId={caseData.invoiceId}
                         canManage={
                           can(PERMISSIONS.CASE_MANAGE_PAYMENT) && !editsLocked
                         }
