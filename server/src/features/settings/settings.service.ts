@@ -8,9 +8,13 @@ import {
   DEFAULT_REGIONS,
   DEFAULT_REPORT_VISIBILITY,
   DEFAULT_REQUIRED_FIELDS,
+  DEFAULT_SLA_HOURS_BY_SEGMENT,
+  DEFAULT_SLA_WARNING_PERCENT,
   GENDER_OPTIONS,
   MASTER_LIST_TYPES,
+  hoursForSlaSegment,
   mergeTemplatePlaceholders,
+  resolveSlaAccountSegment,
   type BrandingConfigDto,
   type BusinessConfigDto,
   type CountryDto,
@@ -20,6 +24,7 @@ import {
   type MasterListType,
   type PrivacyPolicyDto,
   type RegionDto,
+  type SlaConfigDto,
 } from '@ayetis/shared';
 import { env } from '../../config/env';
 import path from 'path';
@@ -327,6 +332,10 @@ export async function seedSettingsData(): Promise<void> {
         requiredFields: { ...DEFAULT_REQUIRED_FIELDS },
         caseSubmissionTabs: { ...DEFAULT_CASE_SUBMISSION_TABS },
         reportVisibility: { ...DEFAULT_REPORT_VISIBILITY },
+        sla: {
+          hoursBySegment: { ...DEFAULT_SLA_HOURS_BY_SEGMENT },
+          warningPercent: DEFAULT_SLA_WARNING_PERCENT,
+        },
       },
     },
     { upsert: true },
@@ -346,6 +355,10 @@ async function getBusinessConfigDoc(): Promise<IBusinessConfig> {
         requiredFields: { ...DEFAULT_REQUIRED_FIELDS },
         caseSubmissionTabs: { ...DEFAULT_CASE_SUBMISSION_TABS },
         reportVisibility: { ...DEFAULT_REPORT_VISIBILITY },
+        sla: {
+          hoursBySegment: { ...DEFAULT_SLA_HOURS_BY_SEGMENT },
+          warningPercent: DEFAULT_SLA_WARNING_PERCENT,
+        },
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
@@ -472,6 +485,92 @@ export async function updateBusinessConfig(
     userAgent: audit.userAgent,
   });
   return getBusinessConfig();
+}
+
+export async function getSlaConfig(): Promise<SlaConfigDto> {
+  const doc = await getBusinessConfigDoc();
+  const hours = {
+    ...DEFAULT_SLA_HOURS_BY_SEGMENT,
+    ...(doc.sla?.hoursBySegment ?? {}),
+  };
+  return {
+    hoursBySegment: {
+      individual: hoursForSlaSegment('individual', hours),
+      company: hoursForSlaSegment('company', hours),
+      sub_account: hoursForSlaSegment('sub_account', hours),
+    },
+    warningPercent:
+      doc.sla?.warningPercent != null && Number.isFinite(doc.sla.warningPercent)
+        ? Math.min(100, Math.max(1, Math.floor(doc.sla.warningPercent)))
+        : DEFAULT_SLA_WARNING_PERCENT,
+    updatedAt: doc.updatedAt?.toISOString() ?? null,
+  };
+}
+
+export async function updateSlaConfig(
+  input: {
+    hoursBySegment?: Partial<SlaConfigDto['hoursBySegment']>;
+    warningPercent?: number;
+  },
+  actor: { id: string; email: string; role: string },
+  audit: RequestAuditContext = {},
+): Promise<SlaConfigDto> {
+  const doc = await getBusinessConfigDoc();
+  const current = await getSlaConfig();
+  const nextHours = { ...current.hoursBySegment };
+  if (input.hoursBySegment) {
+    for (const key of ['individual', 'company', 'sub_account'] as const) {
+      const value = input.hoursBySegment[key];
+      if (value != null && Number.isFinite(value) && value >= 1 && value <= 24 * 30) {
+        nextHours[key] = Math.floor(value);
+      }
+    }
+  }
+  let warningPercent = current.warningPercent;
+  if (input.warningPercent != null && Number.isFinite(input.warningPercent)) {
+    warningPercent = Math.min(100, Math.max(1, Math.floor(input.warningPercent)));
+  }
+  doc.sla = {
+    hoursBySegment: nextHours,
+    warningPercent,
+  };
+  await doc.save();
+  await recordActivity({
+    action: AUDIT_ACTIONS.SLA_CONFIG_UPDATE,
+    summary: `${actor.email} updated SLA defaults (I:${nextHours.individual}h C:${nextHours.company}h S:${nextHours.sub_account}h warn@${warningPercent}%)`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorRole: actor.role,
+    targetType: 'system',
+    targetId: doc.id,
+    ipAddress: audit.ipAddress,
+    userAgent: audit.userAgent,
+    metadata: { hoursBySegment: nextHours, warningPercent },
+  });
+  return getSlaConfig();
+}
+
+/**
+ * Resolve SLA business hours for a doctor: per-user override → account-type default → 48h.
+ */
+export async function resolveSlaHoursForUser(user: {
+  slaBusinessHours?: number | null;
+  accountType?: string | null;
+  subAccountId?: string | null;
+}): Promise<number> {
+  if (
+    user.slaBusinessHours != null &&
+    Number.isFinite(user.slaBusinessHours) &&
+    user.slaBusinessHours >= 1
+  ) {
+    return Math.floor(user.slaBusinessHours);
+  }
+  const cfg = await getSlaConfig();
+  const segment = resolveSlaAccountSegment({
+    accountType: user.accountType,
+    subAccountId: user.subAccountId,
+  });
+  return hoursForSlaSegment(segment, cfg.hoursBySegment);
 }
 
 export async function uploadBrandingLogo(

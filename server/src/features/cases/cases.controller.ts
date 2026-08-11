@@ -16,6 +16,15 @@ export async function listCases(req: AuthenticatedRequest, res: Response, next: 
       status: req.query.status ? (String(req.query.status) as CaseStatus) : undefined,
       priority: req.query.priority ? (String(req.query.priority) as CasePriority) : undefined,
       q: req.query.q ? String(req.query.q) : undefined,
+      caseCategory: req.query.caseCategory ? String(req.query.caseCategory) : undefined,
+      caseType: req.query.caseType ? String(req.query.caseType) : undefined,
+      caseId: req.query.caseId ? String(req.query.caseId) : undefined,
+      patient: req.query.patient ? String(req.query.patient) : undefined,
+      sortBy: req.query.sortBy ? String(req.query.sortBy) : undefined,
+      sortDir:
+        req.query.sortDir === 'asc' || req.query.sortDir === 'desc'
+          ? req.query.sortDir
+          : undefined,
       includeDeleted: Boolean(req.query.includeDeleted),
       isDemo:
         req.query.isDemo === undefined
@@ -865,6 +874,36 @@ export async function doctorDeliveryQueue(
   try {
     const data = await casesService.getDoctorDeliveryQueue(await actor(req));
     res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function doctorCaseSummary(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.getDoctorCaseSummary(await actor(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function acknowledgeStatus(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.acknowledgeCaseStatus(
+      await actor(req),
+      req.params.caseId,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Status update acknowledged' });
   } catch (error) {
     next(error);
   }

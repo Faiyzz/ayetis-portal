@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { fetchCoordinatorDashboard } from '@/features/cases/api';
+import { SlaProgressBar } from '@/features/cases/components/SlaProgressBar';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
@@ -77,6 +78,11 @@ function CaseRow({ item }: { item: CoordinatorQueueCaseDto }) {
         <p className="mt-0.5 line-clamp-1 text-xs text-muted">{item.treatmentSummary}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs">
+        <SlaProgressBar
+          utilizationPercent={item.slaUtilizationPercent}
+          progressColor={item.slaProgressColor}
+          className="min-w-[88px]"
+        />
         <span className={`rounded-md px-2 py-1 font-medium ${DELAY_PILL[item.delayLevel]}`}>
           {DELAY_LEVEL_LABELS[item.delayLevel]} · {item.delayHours.toFixed(0)}h
         </span>

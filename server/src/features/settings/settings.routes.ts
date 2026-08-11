@@ -42,6 +42,14 @@ router.get('/business-config', async (_req, res, next) => {
   }
 });
 
+router.get('/sla', async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await service.getSlaConfig() });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/privacy/current', async (_req, res, next) => {
   try {
     res.json({ success: true, data: await service.getCurrentPrivacy() });
@@ -311,6 +319,35 @@ router.patch(
   async (req: AuthenticatedRequest, res, next) => {
     try {
       const data = await service.updateBusinessConfig(
+        req.body,
+        { id: req.user!.id, email: req.user!.email, role: req.user!.role },
+        getRequestAuditContext(req),
+      );
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.patch(
+  '/sla',
+  requireAnyPermission(PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.SLA_CONFIGURE),
+  validate(
+    z.object({
+      hoursBySegment: z
+        .object({
+          individual: z.number().min(1).max(24 * 30).optional(),
+          company: z.number().min(1).max(24 * 30).optional(),
+          sub_account: z.number().min(1).max(24 * 30).optional(),
+        })
+        .optional(),
+      warningPercent: z.number().min(1).max(100).optional(),
+    }),
+  ),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const data = await service.updateSlaConfig(
         req.body,
         { id: req.user!.id, email: req.user!.email, role: req.user!.role },
         getRequestAuditContext(req),

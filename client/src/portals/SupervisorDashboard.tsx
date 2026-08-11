@@ -14,6 +14,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { dialog } from '@/components/dialog';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { SlaProgressBar } from '@/features/cases/components/SlaProgressBar';
 import { toast } from '@/features/notifications/toastStore';
 import api, { getErrorMessage } from '@/lib/api';
 
@@ -38,7 +39,13 @@ function QueueCaseList({ items }: { items: SupervisorQueueCaseDto[] }) {
             </Link>
             <p className="text-sm text-ink">{item.patientName}</p>
           </div>
-          <div className="flex flex-wrap gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <SlaProgressBar
+              utilizationPercent={item.slaUtilizationPercent}
+              progressColor={item.slaProgressColor}
+              className="min-w-[72px]"
+              showLabel={false}
+            />
             <span className={`rounded-md px-2 py-1 font-medium ${DELAY_PILL[item.delayLevel]}`}>
               {DELAY_LEVEL_LABELS[item.delayLevel]}
             </span>

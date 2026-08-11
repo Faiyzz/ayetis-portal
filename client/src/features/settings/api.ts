@@ -10,6 +10,7 @@ import type {
   MasterListType,
   PrivacyPolicyDto,
   RegionDto,
+  SlaConfigDto,
   SystemMessages,
 } from '@ayetis/shared';
 import api from '@/lib/api';
@@ -33,6 +34,20 @@ export async function fetchBranding(): Promise<BrandingConfigDto> {
 
 export async function fetchBusinessConfig(): Promise<BusinessConfigDto> {
   const { data } = await api.get('/settings/business-config');
+  return data.data;
+}
+
+export async function fetchSlaConfig(): Promise<SlaConfigDto> {
+  const { data } = await api.get('/settings/sla');
+  return data.data;
+}
+
+export async function patchSlaConfig(
+  payload: Partial<Pick<SlaConfigDto, 'hoursBySegment' | 'warningPercent'>> & {
+    hoursBySegment?: Partial<SlaConfigDto['hoursBySegment']>;
+  },
+): Promise<SlaConfigDto> {
+  const { data } = await api.patch('/settings/sla', payload);
   return data.data;
 }
 

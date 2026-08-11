@@ -12,6 +12,7 @@ import {
   permissionsInclude,
   quarterRangeUtc,
   recentMonthOptions,
+  slaProgressColor,
   PERMISSIONS,
   type DelayLevel,
   type Role,
@@ -23,6 +24,7 @@ import {
 } from '@ayetis/shared';
 import { Types } from 'mongoose';
 import { AppError } from '../../utils/AppError';
+import { slaUtilizationPercent as computeSlaUtilization } from '../../utils/businessHours';
 import { Case, type ICase } from '../../models/Case';
 import { User } from '../../models/User';
 import { recordActivity, type RequestAuditContext } from '../audit/audit.service';
@@ -50,6 +52,26 @@ function emptyCounts(): SupervisorQueueCounts {
   return { pending: 0, active: 0, completed: 0, returned: 0 };
 }
 
+function slaFields(caseDoc: ICase) {
+  const slaHours = caseDoc.slaHours ?? null;
+  const slaDeadlineAt = caseDoc.slaDeadlineAt ? caseDoc.slaDeadlineAt.toISOString() : null;
+  if (!caseDoc.submittedAt || !caseDoc.slaDeadlineAt) {
+    return {
+      slaHours,
+      slaDeadlineAt,
+      slaUtilizationPercent: null as number | null,
+      slaProgressColor: null as ReturnType<typeof slaProgressColor> | null,
+    };
+  }
+  const pct = computeSlaUtilization(caseDoc.submittedAt, caseDoc.slaDeadlineAt);
+  return {
+    slaHours,
+    slaDeadlineAt,
+    slaUtilizationPercent: pct,
+    slaProgressColor: slaProgressColor(pct),
+  };
+}
+
 function toQueueItem(
   caseDoc: ICase,
   assigneeName: string | null,
@@ -74,6 +96,7 @@ function toQueueItem(
     assigneeName,
     delayLevel: computeDelayLevel(ref),
     delayHours: delayHoursSince(ref),
+    ...slaFields(caseDoc),
     updatedAt: caseDoc.updatedAt.toISOString(),
   };
 }

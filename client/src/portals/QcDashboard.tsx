@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { fetchQcDashboard, fetchQcPerformance } from '@/features/cases/api';
+import { SlaProgressBar } from '@/features/cases/components/SlaProgressBar';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
@@ -28,6 +29,11 @@ function QueueRow({ item }: { item: QcQueueCaseDto }) {
         <p className="mt-0.5 line-clamp-1 text-xs text-muted">{item.treatmentSummary}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs">
+        <SlaProgressBar
+          utilizationPercent={item.slaUtilizationPercent}
+          progressColor={item.slaProgressColor}
+          className="min-w-[88px]"
+        />
         <span className="rounded-md bg-brand-50 px-2 py-1 font-medium text-brand-700">
           {CASE_STATUS_LABELS[item.status as keyof typeof CASE_STATUS_LABELS] ?? item.status}
         </span>

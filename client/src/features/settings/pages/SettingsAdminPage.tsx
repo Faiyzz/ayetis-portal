@@ -1,14 +1,18 @@
 import {
   ALL_MASTER_LIST_TYPES,
+  ALL_SLA_ACCOUNT_SEGMENTS,
   BRANDING_LOGO_SLOTS,
   COUNTRY_REQUEST_STATUSES,
   DEFAULT_CASE_SUBMISSION_TABS,
   DEFAULT_MAX_UPLOAD_BYTES,
   DEFAULT_REPORT_VISIBILITY,
   DEFAULT_REQUIRED_FIELDS,
+  DEFAULT_SLA_HOURS_BY_SEGMENT,
+  DEFAULT_SLA_WARNING_PERCENT,
   MASTER_LIST_TYPES,
   MASTER_LIST_TYPE_LABELS,
   PERMISSIONS,
+  SLA_ACCOUNT_SEGMENT_LABELS,
   type BrandingConfigDto,
   type BusinessConfigDto,
   type CountryDto,
@@ -18,6 +22,7 @@ import {
   type MasterListType,
   type PrivacyPolicyDto,
   type RegionDto,
+  type SlaConfigDto,
   type SystemMessages,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -35,8 +40,10 @@ import {
   fetchMasterListItems,
   fetchPrivacyHistory,
   fetchRegions,
+  fetchSlaConfig,
   fetchSystemMessages,
   patchBusinessConfig,
+  patchSlaConfig,
   publishPrivacyPolicy,
   reviewCountryRequest,
   updateBranding,
@@ -55,6 +62,7 @@ type Tab =
   | 'regions'
   | 'branding'
   | 'business'
+  | 'sla'
   | 'messages'
   | 'email'
   | 'privacy'
@@ -120,6 +128,7 @@ export function SettingsAdminPage() {
   const canRegions = can(PERMISSIONS.REGION_MANAGE);
   const canBranding = can(PERMISSIONS.BRANDING_MANAGE);
   const canBusiness = can(PERMISSIONS.SETTINGS_MANAGE);
+  const canSla = can(PERMISSIONS.SETTINGS_MANAGE) || can(PERMISSIONS.SLA_CONFIGURE);
   const canMessages = can(PERMISSIONS.SETTINGS_MANAGE) || can(PERMISSIONS.REGISTRATION_APPROVE);
   const canEmail = can(PERMISSIONS.EMAIL_TEMPLATE_MANAGE);
   const canPrivacy = can(PERMISSIONS.PRIVACY_MANAGE);
@@ -133,13 +142,15 @@ export function SettingsAdminPage() {
         ? 'branding'
         : canBusiness
           ? 'business'
-          : canMessages
-            ? 'messages'
-            : canEmail
-              ? 'email'
-              : canPrivacy
-                ? 'privacy'
-                : 'scope';
+          : canSla
+            ? 'sla'
+            : canMessages
+              ? 'messages'
+              : canEmail
+                ? 'email'
+                : canPrivacy
+                  ? 'privacy'
+                  : 'scope';
 
   const [tab, setTab] = useState<Tab>(firstTab);
   const [loading, setLoading] = useState(true);
@@ -170,6 +181,14 @@ export function SettingsAdminPage() {
     requiredFields: { ...DEFAULT_REQUIRED_FIELDS },
     caseSubmissionTabs: { ...DEFAULT_CASE_SUBMISSION_TABS },
     reportVisibility: { ...DEFAULT_REPORT_VISIBILITY },
+  });
+
+  const [slaConfig, setSlaConfig] = useState<SlaConfigDto | null>(null);
+  const [slaForm, setSlaForm] = useState({
+    individual: String(DEFAULT_SLA_HOURS_BY_SEGMENT.individual),
+    company: String(DEFAULT_SLA_HOURS_BY_SEGMENT.company),
+    sub_account: String(DEFAULT_SLA_HOURS_BY_SEGMENT.sub_account),
+    warningPercent: String(DEFAULT_SLA_WARNING_PERCENT),
   });
 
   const [messages, setMessages] = useState<SystemMessages | null>(null);
@@ -254,6 +273,20 @@ export function SettingsAdminPage() {
                 data.caseSubmissionTabs,
               ),
               reportVisibility: mergeToggleKeys(DEFAULT_REPORT_VISIBILITY, data.reportVisibility),
+            });
+          })(),
+        );
+      }
+      if (canSla) {
+        tasks.push(
+          (async () => {
+            const data = await fetchSlaConfig();
+            setSlaConfig(data);
+            setSlaForm({
+              individual: String(data.hoursBySegment.individual),
+              company: String(data.hoursBySegment.company),
+              sub_account: String(data.hoursBySegment.sub_account),
+              warningPercent: String(data.warningPercent),
             });
           })(),
         );
@@ -453,6 +486,34 @@ export function SettingsAdminPage() {
     }
   }
 
+  async function saveSlaConfig(event: FormEvent) {
+    event.preventDefault();
+    if (!canSla) return;
+    setSaving(true);
+    try {
+      const updated = await patchSlaConfig({
+        hoursBySegment: {
+          individual: Number(slaForm.individual),
+          company: Number(slaForm.company),
+          sub_account: Number(slaForm.sub_account),
+        },
+        warningPercent: Number(slaForm.warningPercent),
+      });
+      setSlaConfig(updated);
+      setSlaForm({
+        individual: String(updated.hoursBySegment.individual),
+        company: String(updated.hoursBySegment.company),
+        sub_account: String(updated.hoursBySegment.sub_account),
+        warningPercent: String(updated.warningPercent),
+      });
+      toast().success('SLA configuration updated');
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to update SLA config'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveMessages(event: FormEvent) {
     event.preventDefault();
     if (!canMessages || !messages) return;
@@ -535,6 +596,7 @@ export function SettingsAdminPage() {
     { id: 'regions', label: 'Regions & countries', show: canRegions },
     { id: 'branding', label: 'Branding', show: canBranding },
     { id: 'business', label: 'Business config', show: canBusiness },
+    { id: 'sla', label: 'SLA', show: canSla },
     { id: 'messages', label: 'System messages', show: canMessages },
     { id: 'email', label: 'Email templates', show: canEmail },
     { id: 'privacy', label: 'Privacy policy', show: canPrivacy },
@@ -1087,6 +1149,54 @@ export function SettingsAdminPage() {
             })),
           )}
           <AuthButton loading={saving}>Save configuration</AuthButton>
+        </form>
+      ) : null}
+
+      {tab === 'sla' && canSla ? (
+        <form
+          onSubmit={saveSlaConfig}
+          className="max-w-2xl space-y-4 rounded-xl border border-line bg-white p-4"
+        >
+          <h2 className="text-sm font-semibold text-ink">SLA defaults by account type</h2>
+          <p className="text-sm text-muted">
+            Business-day hours (excludes Saturday and Sunday). Per-doctor overrides in Commercial /
+            Users still take priority when set.
+          </p>
+          {slaConfig?.updatedAt ? (
+            <p className="text-xs text-muted">
+              Last updated {new Date(slaConfig.updatedAt).toLocaleString()}
+            </p>
+          ) : null}
+          <div className="grid gap-3 sm:grid-cols-3">
+            {ALL_SLA_ACCOUNT_SEGMENTS.map((segment) => (
+              <TextField
+                key={segment}
+                label={`${SLA_ACCOUNT_SEGMENT_LABELS[segment]} (hours)`}
+                name={`sla-${segment}`}
+                type="number"
+                min={1}
+                max={720}
+                value={slaForm[segment]}
+                onChange={(e) => setSlaForm((p) => ({ ...p, [segment]: e.target.value }))}
+                required
+              />
+            ))}
+          </div>
+          <TextField
+            label="SLA Warning threshold (%)"
+            name="warningPercent"
+            type="number"
+            min={1}
+            max={100}
+            value={slaForm.warningPercent}
+            onChange={(e) => setSlaForm((p) => ({ ...p, warningPercent: e.target.value }))}
+            required
+          />
+          <p className="text-xs text-muted">
+            Progress colors: Green ≤25% → Yellow ≤50% → Blue ≤75% → Orange ≤90% → Red ≥100%. Warning
+            notifications fire at the threshold above; Breach at 100%.
+          </p>
+          <AuthButton loading={saving}>Save SLA configuration</AuthButton>
         </form>
       ) : null}
 

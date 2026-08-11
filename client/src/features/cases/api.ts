@@ -17,6 +17,12 @@ export async function fetchCases(params: {
   status?: string;
   priority?: string;
   q?: string;
+  caseCategory?: string;
+  caseType?: string;
+  caseId?: string;
+  patient?: string;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
   includeDeleted?: boolean;
   isDemo?: boolean;
 }) {
@@ -27,11 +33,22 @@ export async function fetchCases(params: {
       status: params.status || undefined,
       priority: params.priority || undefined,
       q: params.q || undefined,
+      caseCategory: params.caseCategory || undefined,
+      caseType: params.caseType || undefined,
+      caseId: params.caseId || undefined,
+      patient: params.patient || undefined,
+      sortBy: params.sortBy || undefined,
+      sortDir: params.sortDir || undefined,
       includeDeleted: params.includeDeleted || undefined,
-      isDemo: params.isDemo === undefined ? undefined : params.isDemo ? 'true' : 'false',
+      isDemo: params.isDemo === undefined ? undefined : params.isDemo,
     },
   });
-  return data.data;
+  return data.data as {
+    items: import('@ayetis/shared').CaseListItemDto[];
+    total: number;
+    page: number;
+    pageSize: number;
+  };
 }
 
 export async function fetchCase(caseId: string): Promise<CaseDetailDto> {
@@ -346,6 +363,16 @@ export async function addClinicalRemark(
 export async function fetchDoctorDeliveries() {
   const { data } = await api.get('/cases/dashboard/doctor-deliveries');
   return data.data as import('@ayetis/shared').DoctorDeliveryQueueItemDto[];
+}
+
+export async function fetchDoctorCaseSummary() {
+  const { data } = await api.get('/cases/dashboard/doctor-summary');
+  return data.data as import('@ayetis/shared').DoctorCaseSummaryDto;
+}
+
+export async function acknowledgeCaseStatus(caseId: string): Promise<CaseDetailDto> {
+  const { data } = await api.post(`/cases/${caseId}/doctor/acknowledge-status`);
+  return data.data;
 }
 
 export async function recordDoctorCaseView(caseId: string): Promise<CaseDetailDto> {

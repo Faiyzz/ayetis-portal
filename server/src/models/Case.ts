@@ -177,6 +177,10 @@ export interface ICase extends Document {
   submittedAt?: Date;
   slaHours?: number;
   slaDeadlineAt?: Date;
+  /** Set when SLA Warning notification was sent (once per case). */
+  slaWarningNotifiedAt?: Date;
+  /** Set when SLA Breach notification was sent (once per case). */
+  slaBreachNotifiedAt?: Date;
   patientName: string;
   patientAge?: number;
   patientGender: string;
@@ -245,6 +249,9 @@ export interface ICase extends Document {
   doctorDecisionNote?: string;
   doctorDecisionAt?: Date;
   doctorEngagement: IDoctorEngagement;
+  /** Status before the latest unacknowledged change (doctor dual Status/Updated-Status columns). */
+  previousStatusForAck?: CaseStatus;
+  statusPendingDoctorAck: boolean;
   cancelReason?: string;
   notes: ICaseNote[];
   files: ICaseFile[];
@@ -464,6 +471,8 @@ const caseSchema = new Schema<ICase>(
     submittedAt: { type: Date, index: true },
     slaHours: { type: Number },
     slaDeadlineAt: { type: Date, index: true },
+    slaWarningNotifiedAt: { type: Date },
+    slaBreachNotifiedAt: { type: Date },
     patientName: { type: String, required: true, trim: true, index: true },
     patientAge: { type: Number, min: 0, max: 120 },
     patientGender: { type: String, default: '', trim: true },
@@ -579,6 +588,8 @@ const caseSchema = new Schema<ICase>(
       type: doctorEngagementSchema,
       default: () => ({}),
     },
+    previousStatusForAck: { type: String, enum: ALL_CASE_STATUSES },
+    statusPendingDoctorAck: { type: Boolean, default: false, index: true },
     cancelReason: { type: String },
     notes: { type: [caseNoteSchema], default: [] },
     files: { type: [caseFileSchema], default: [] },
@@ -602,6 +613,61 @@ caseSchema.index({ escalatedForOversight: 1, updatedAt: -1 });
 caseSchema.index({ assignedConsultantId: 1, updatedAt: -1 });
 caseSchema.index({ consultantIndicator: 1, updatedAt: -1 });
 caseSchema.index({ cutPhase: 1, cutAssignmentMode: 1, assignedCutOperatorId: 1 });
+
+caseSchema.post('init', function trackStatusBaseline(doc) {
+  (doc as ICase & { _statusBaseline?: string })._statusBaseline = doc.status;
+});
+
+caseSchema.pre('save', function trackDoctorStatusAck(next) {
+  const self = this as ICase & {
+    _statusBaseline?: string;
+    $locals?: { statusNotify?: { from: string; to: string; caseId: string; doctorId: string } };
+  };
+  if (!self.isNew && self.isModified('status')) {
+    const from = self._statusBaseline;
+    const to = self.status;
+    if (from && from !== to) {
+      if (!self.statusPendingDoctorAck) {
+        self.previousStatusForAck = from as CaseStatus;
+      }
+      self.statusPendingDoctorAck = true;
+      self.$locals = self.$locals ?? {};
+      self.$locals.statusNotify = {
+        from: String(self.previousStatusForAck ?? from),
+        to: String(to),
+        caseId: self.caseId,
+        doctorId: String(self.doctorId),
+      };
+    }
+  }
+  next();
+});
+
+caseSchema.post('save', function resetStatusBaseline(doc) {
+  const typed = doc as ICase & {
+    _statusBaseline?: string;
+    $locals?: { statusNotify?: { from: string; to: string; caseId: string; doctorId: string } };
+  };
+  typed._statusBaseline = doc.status;
+  const notify = typed.$locals?.statusNotify;
+  if (notify?.doctorId) {
+    void import('../features/notifications/notifications.service')
+      .then(({ createNotification }) =>
+        import('@ayetis/shared').then(({ CASE_STATUS_LABELS, NOTIFICATION_TYPES }) =>
+          createNotification({
+            userId: notify.doctorId,
+            type: NOTIFICATION_TYPES.CASE_STATUS_CHANGED,
+            title: 'Case status updated',
+            body: `Case ${notify.caseId}: ${CASE_STATUS_LABELS[notify.from as keyof typeof CASE_STATUS_LABELS] ?? notify.from} → ${CASE_STATUS_LABELS[notify.to as keyof typeof CASE_STATUS_LABELS] ?? notify.to}`,
+            link: `/app/cases/${notify.caseId}`,
+            caseId: notify.caseId,
+          }),
+        ),
+      )
+      .catch((err) => console.error('[case] status notify failed', err));
+    delete typed.$locals?.statusNotify;
+  }
+});
 
 export const Case: Model<ICase> = mongoose.models.Case ?? mongoose.model<ICase>('Case', caseSchema);
 

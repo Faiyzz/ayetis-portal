@@ -172,6 +172,28 @@ export const listCasesQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
   status: statusSchema,
   priority: prioritySchema,
+  caseCategory: z
+    .string()
+    .optional()
+    .refine((value) => !value || isCaseCategory(value), { message: 'Invalid case category' }),
+  caseType: z
+    .string()
+    .optional()
+    .refine((value) => !value || isCaseType(value), { message: 'Invalid case type' }),
+  caseId: z.string().trim().max(80).optional(),
+  patient: z.string().trim().max(120).optional(),
+  sortBy: z
+    .enum([
+      'createdAt',
+      'updatedAt',
+      'caseId',
+      'patientName',
+      'status',
+      'caseCategory',
+      'caseType',
+    ])
+    .optional(),
+  sortDir: z.enum(['asc', 'desc']).optional(),
   q: z
     .string()
     .max(120)

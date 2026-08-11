@@ -76,6 +76,10 @@ export interface QcQueueCaseDto {
   escalatedForOversight: boolean;
   submittedToQcAt: string | null;
   fileCount: number;
+  slaHours: number | null;
+  slaDeadlineAt: string | null;
+  slaUtilizationPercent: number | null;
+  slaProgressColor: import('./caseTaxonomy').SlaProgressColor | null;
   createdAt: string;
   updatedAt: string;
 }

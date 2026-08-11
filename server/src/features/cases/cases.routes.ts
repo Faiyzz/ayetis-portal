@@ -133,6 +133,12 @@ router.get(
 );
 
 router.get(
+  '/dashboard/doctor-summary',
+  requirePermission(PERMISSIONS.CASE_VIEW_OWN),
+  casesController.doctorCaseSummary,
+);
+
+router.get(
   '/assignees/designers',
   requirePermission(PERMISSIONS.CASE_ASSIGN),
   casesController.listDesigners,
@@ -449,6 +455,12 @@ router.post(
   requirePermission(PERMISSIONS.CASE_VIEW_OWN),
   validate(doctorDecisionSchema),
   casesController.doctorDecision,
+);
+
+router.post(
+  '/:caseId/doctor/acknowledge-status',
+  requirePermission(PERMISSIONS.CASE_VIEW_OWN),
+  casesController.acknowledgeStatus,
 );
 
 router.use('/:caseId/clarifications', caseClarificationsRouter);

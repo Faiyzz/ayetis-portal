@@ -12,7 +12,6 @@ import {
   type CaseListItemDto,
   type CasePriority,
   type CaseStatus,
-  type SlaProgressColor,
 } from '@ayetis/shared';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -20,16 +19,9 @@ import { PageHeader } from '@/components/PageHeader';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import { fetchCases } from '@/features/cases/api';
+import { SlaProgressBar } from '@/features/cases/components/SlaProgressBar';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
-
-const SLA_BAR_CLASS: Record<SlaProgressColor, string> = {
-  green: 'bg-emerald-500',
-  yellow: 'bg-amber-400',
-  blue: 'bg-sky-500',
-  orange: 'bg-orange-500',
-  red: 'bg-red-500',
-};
 
 function StatusPill({ status }: { status: CaseStatus }) {
   const cancelled = status === 'cancelled';
@@ -46,20 +38,12 @@ function StatusPill({ status }: { status: CaseStatus }) {
 }
 
 function SlaBar({ item }: { item: CaseListItemDto }) {
-  if (item.slaUtilizationPercent == null || !item.slaProgressColor) {
-    return <span className="text-xs text-muted">—</span>;
-  }
-  const pct = Math.min(100, Math.max(0, item.slaUtilizationPercent));
   return (
-    <div className="min-w-[88px]">
-      <div className="h-2 overflow-hidden rounded-full bg-surface">
-        <div
-          className={`h-full rounded-full ${SLA_BAR_CLASS[item.slaProgressColor]}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <p className="mt-0.5 text-[10px] text-muted">{Math.round(pct)}%</p>
-    </div>
+    <SlaProgressBar
+      utilizationPercent={item.slaUtilizationPercent}
+      progressColor={item.slaProgressColor}
+      emptyLabel="—"
+    />
   );
 }
 

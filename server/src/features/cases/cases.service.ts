@@ -10,7 +10,6 @@ import {
   CLARIFICATION_STATUSES,
   CASE_TYPES,
   CASE_CANCEL_WINDOW_MINUTES,
-  DEFAULT_SLA_BUSINESS_HOURS,
   EMPTY_CASE_COMMERCIAL,
   EMPTY_CLINICAL_PREFERENCES,
   EMPTY_OCCLUSION_GOALS,
@@ -116,6 +115,7 @@ import fs from 'fs';
 import { env } from '../../config/env';
 import { AppError } from '../../utils/AppError';
 import { computeSlaDeadline, slaUtilizationPercent as computeSlaUtilization } from '../../utils/businessHours';
+import { resolveSlaHoursForUser } from '../settings/settings.service';
 import { Case, type ICase, type IClinicalRemark, type IQcReview } from '../../models/Case';
 import { generateCaseId } from '../../models/CaseCounter';
 import { User } from '../../models/User';
@@ -313,6 +313,29 @@ function queueReferenceDate(caseDoc: ICase): Date {
   return caseDoc.validatedAt ?? caseDoc.updatedAt ?? caseDoc.createdAt;
 }
 
+function slaSnapshot(caseDoc: ICase) {
+  const slaHours = caseDoc.slaHours ?? null;
+  const slaDeadlineAt = caseDoc.slaDeadlineAt ? caseDoc.slaDeadlineAt.toISOString() : null;
+  if (!caseDoc.submittedAt || !caseDoc.slaDeadlineAt) {
+    return {
+      slaHours,
+      slaDeadlineAt,
+      slaUtilizationPercent: null as number | null,
+      slaProgressColor: null as ReturnType<typeof slaProgressColor> | null,
+    };
+  }
+  const slaUtilizationPercent = computeSlaUtilization(
+    caseDoc.submittedAt,
+    caseDoc.slaDeadlineAt,
+  );
+  return {
+    slaHours,
+    slaDeadlineAt,
+    slaUtilizationPercent,
+    slaProgressColor: slaProgressColor(slaUtilizationPercent),
+  };
+}
+
 async function toListItem(
   caseDoc: ICase,
   viewer?: { id: string; role: string },
@@ -359,16 +382,7 @@ async function toListItem(
     treatmentSummary: caseDoc.treatmentSummary,
     paymentStatus: caseDoc.payment?.status ?? PAYMENT_STATUSES.NOT_BILLED,
     submittedAt: caseDoc.submittedAt ? caseDoc.submittedAt.toISOString() : null,
-    slaHours: caseDoc.slaHours ?? null,
-    slaDeadlineAt: caseDoc.slaDeadlineAt ? caseDoc.slaDeadlineAt.toISOString() : null,
-    slaUtilizationPercent:
-      caseDoc.submittedAt && caseDoc.slaDeadlineAt
-        ? computeSlaUtilization(caseDoc.submittedAt, caseDoc.slaDeadlineAt)
-        : null,
-    slaProgressColor:
-      caseDoc.submittedAt && caseDoc.slaDeadlineAt
-        ? slaProgressColor(computeSlaUtilization(caseDoc.submittedAt, caseDoc.slaDeadlineAt))
-        : null,
+    ...slaSnapshot(caseDoc),
     cancelWindowRemainingSeconds:
       caseDoc.status === CASE_STATUSES.NEW_CASE
         ? remainingCancelWindowSeconds(caseDoc.submittedAt ?? caseDoc.createdAt)
@@ -386,6 +400,10 @@ async function toListItem(
     isDeleted: caseDoc.isDeleted,
     isDemo: Boolean(caseDoc.isDemo),
     invoiceId: caseDoc.invoiceId ? String(caseDoc.invoiceId) : null,
+    previousStatus: caseDoc.statusPendingDoctorAck
+      ? (caseDoc.previousStatusForAck ?? null)
+      : null,
+    statusPendingDoctorAck: Boolean(caseDoc.statusPendingDoctorAck),
     createdAt: caseDoc.createdAt.toISOString(),
     cutRequired: Boolean(caseDoc.cutRequired),
     cutPhase: (caseDoc.cutPhase ?? CUT_PHASES.NONE) as CutPhase,
@@ -928,6 +946,12 @@ export async function listCases(
     status?: CaseStatus;
     priority?: CasePriority;
     q?: string;
+    caseCategory?: string;
+    caseType?: string;
+    caseId?: string;
+    patient?: string;
+    sortBy?: string;
+    sortDir?: 'asc' | 'desc';
     includeDeleted?: boolean;
     isDemo?: boolean;
   },
@@ -943,6 +967,20 @@ export async function listCases(
 
   if (query.status) conditions.push({ status: query.status });
   if (query.priority) conditions.push({ priority: query.priority });
+  if (query.caseCategory) conditions.push({ caseCategory: query.caseCategory });
+  if (query.caseType) conditions.push({ caseType: query.caseType });
+  if (query.caseId?.trim()) {
+    conditions.push({ caseId: { $regex: query.caseId.trim(), $options: 'i' } });
+  }
+  if (query.patient?.trim()) {
+    const patientTerm = query.patient.trim();
+    conditions.push({
+      $or: [
+        { patientName: { $regex: patientTerm, $options: 'i' } },
+        { caseId: { $regex: patientTerm, $options: 'i' } },
+      ],
+    });
+  }
   if (query.isDemo === true) conditions.push({ isDemo: true });
   if (query.isDemo === false) conditions.push({ isDemo: { $ne: true } });
 
@@ -963,9 +1001,21 @@ export async function listCases(
 
   const filter = conditions.length === 1 ? conditions[0]! : { $and: conditions };
 
+  const allowedSort = new Set([
+    'createdAt',
+    'updatedAt',
+    'caseId',
+    'patientName',
+    'status',
+    'caseCategory',
+    'caseType',
+  ]);
+  const sortField = query.sortBy && allowedSort.has(query.sortBy) ? query.sortBy : 'createdAt';
+  const sortDir = query.sortDir === 'asc' ? 1 : -1;
+
   const [items, total] = await Promise.all([
     Case.find(filter)
-      .sort({ createdAt: -1 })
+      .sort({ [sortField]: sortDir })
       .skip((page - 1) * pageSize)
       .limit(pageSize),
     Case.countDocuments(filter),
@@ -977,6 +1027,89 @@ export async function listCases(
     page,
     pageSize,
   };
+}
+
+export async function getDoctorCaseSummary(actor: CaseActor): Promise<{
+  generatedAt: string;
+  total: number;
+  byCategory: Record<string, number>;
+  byType: Record<string, number>;
+  pendingStatusAckCount: number;
+}> {
+  if (!permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_OWN)) {
+    throw new AppError('You do not have permission to view the doctor summary', 403);
+  }
+
+  const visibility = await resolveVisibilityFilter(actor);
+  const filter = { $and: [visibility, { isDeleted: false }] };
+
+  const [docs, pendingStatusAckCount] = await Promise.all([
+    Case.find(filter).select('caseCategory caseType').lean(),
+    Case.countDocuments({
+      $and: [visibility, { isDeleted: false, statusPendingDoctorAck: true }],
+    }),
+  ]);
+
+  const byCategory: Record<string, number> = {};
+  const byType: Record<string, number> = {};
+  for (const doc of docs) {
+    const cat = doc.caseCategory || 'unknown';
+    const typ = doc.caseType || 'unknown';
+    byCategory[cat] = (byCategory[cat] ?? 0) + 1;
+    byType[typ] = (byType[typ] ?? 0) + 1;
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    total: docs.length,
+    byCategory,
+    byType,
+    pendingStatusAckCount,
+  };
+}
+
+export async function acknowledgeCaseStatus(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  if (String(caseDoc.doctorId) !== actor.id && !permissionsInclude(actor.permissions, PERMISSIONS.CASE_VIEW_ALL)) {
+    throw new AppError('Only the case doctor can acknowledge status updates', 403);
+  }
+
+  if (!caseDoc.statusPendingDoctorAck) {
+    return await toDetail(caseDoc, actor);
+  }
+
+  caseDoc.statusPendingDoctorAck = false;
+  caseDoc.previousStatusForAck = undefined;
+  pushHistory(caseDoc, {
+    action: 'status_acknowledged',
+    summary: 'Doctor acknowledged updated case status',
+    actor,
+  });
+  await caseDoc.save();
+  await Case.updateOne(
+    { _id: caseDoc._id },
+    { $unset: { previousStatusForAck: 1 }, $set: { statusPendingDoctorAck: false } },
+  );
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_UPDATE,
+    summary: `${actor.email} acknowledged status for case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return await toDetail(caseDoc, actor);
 }
 
 export async function getCaseById(actor: CaseActor, caseIdOrMongoId: string) {
@@ -1127,7 +1260,7 @@ export async function createCase(
 
   const slaHours = isDemo
     ? DEMO_CASE_MESSAGES.slaBusinessHours
-    : doctor.slaBusinessHours ?? DEFAULT_SLA_BUSINESS_HOURS;
+    : await resolveSlaHoursForUser(doctor);
 
   const caseId = await generateCaseId();
 
@@ -2599,6 +2732,7 @@ function toQcQueueCaseDto(caseDoc: ICase): QcQueueCaseDto {
     escalatedForOversight: Boolean(caseDoc.escalatedForOversight),
     submittedToQcAt: caseDoc.submittedToQcAt ? caseDoc.submittedToQcAt.toISOString() : null,
     fileCount: caseDoc.files?.length ?? 0,
+    ...slaSnapshot(caseDoc),
     createdAt: caseDoc.createdAt.toISOString(),
     updatedAt: caseDoc.updatedAt.toISOString(),
   };
@@ -4279,6 +4413,7 @@ function toQueueCaseDto(
     queue,
     delayLevel: computeDelayLevel(ref),
     delayHours: Math.round(hours * 10) / 10,
+    ...slaSnapshot(caseDoc),
     fileCount: caseDoc.files.length,
     openClarificationCount,
     assignedDesignerName: caseDoc.assignedDesignerName ?? null,

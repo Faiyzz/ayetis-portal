@@ -1,7 +1,13 @@
-import type { NotificationDto } from '@ayetis/shared';
-import { NOTIFICATION_TYPE_LABELS } from '@ayetis/shared';
+import {
+  NOTIFICATION_CHANNELS,
+  NOTIFICATION_CHANNEL_LABELS,
+  NOTIFICATION_TYPE_LABELS,
+  type NotificationChannel,
+  type NotificationDto,
+  type NotificationUnreadByChannel,
+} from '@ayetis/shared';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { AuthButton } from '@/features/auth/components/AuthUI';
 import {
@@ -12,22 +18,39 @@ import {
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
+const EMPTY_UNREAD: NotificationUnreadByChannel = {
+  status_alerts: 0,
+  clarifications: 0,
+};
+
 export function NotificationCenterPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const channelParam = searchParams.get('channel');
+  const channel: NotificationChannel =
+    channelParam === NOTIFICATION_CHANNELS.CLARIFICATIONS
+      ? NOTIFICATION_CHANNELS.CLARIFICATIONS
+      : NOTIFICATION_CHANNELS.STATUS_ALERTS;
+
   const [items, setItems] = useState<NotificationDto[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadByChannel, setUnreadByChannel] =
+    useState<NotificationUnreadByChannel>(EMPTY_UNREAD);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  async function load(nextUnreadOnly = unreadOnly) {
+  async function load(
+    nextChannel = channel,
+    nextUnreadOnly = unreadOnly,
+  ) {
     setLoading(true);
     try {
       const data = await fetchNotifications({
         page: 1,
         pageSize: 50,
         unreadOnly: nextUnreadOnly,
+        channel: nextChannel,
       });
       setItems(data.items);
-      setUnreadCount(data.unreadCount);
+      setUnreadByChannel(data.unreadByChannel);
     } catch (err) {
       toast().error(getErrorMessage(err, 'Unable to load notifications'));
     } finally {
@@ -36,15 +59,24 @@ export function NotificationCenterPage() {
   }
 
   useEffect(() => {
-    void load();
+    void load(channel, unreadOnly);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [channel]);
+
+  function setChannel(next: NotificationChannel) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.set('channel', next);
+      return params;
+    });
+  }
 
   async function handleMarkAll() {
     try {
-      await markAllNotificationsRead();
-      toast().success('All notifications marked read');
-      await load();
+      const result = await markAllNotificationsRead(channel);
+      setUnreadByChannel(result.unreadByChannel);
+      toast().success(`${NOTIFICATION_CHANNEL_LABELS[channel]} marked read`);
+      await load(channel, unreadOnly);
     } catch (err) {
       toast().error(getErrorMessage(err, 'Unable to mark notifications read'));
     }
@@ -57,26 +89,56 @@ export function NotificationCenterPage() {
         setItems((prev) =>
           prev.map((entry) => (entry.id === item.id ? { ...entry, isRead: true } : entry)),
         );
-        setUnreadCount((count) => Math.max(0, count - 1));
+        setUnreadByChannel((prev) => ({
+          ...prev,
+          [item.channel]: Math.max(0, prev[item.channel] - 1),
+        }));
       } catch {
         // ignore
       }
     }
   }
 
+  const channelUnread = unreadByChannel[channel];
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Notification center"
-        subtitle={`${unreadCount} unread · portal alerts for case events also arrive by email when configured.`}
+        subtitle="Status Alerts and Clarifications keep separate unread counts and mark-read actions."
       />
+
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            NOTIFICATION_CHANNELS.STATUS_ALERTS,
+            NOTIFICATION_CHANNELS.CLARIFICATIONS,
+          ] as const
+        ).map((id) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setChannel(id)}
+            className={`rounded-xl px-3 py-2 text-sm font-semibold ${
+              channel === id ? 'bg-brand-600 text-white' : 'border border-line text-ink'
+            }`}
+          >
+            {NOTIFICATION_CHANNEL_LABELS[id]}
+            {unreadByChannel[id] > 0 ? (
+              <span className="ml-2 inline-flex min-w-[1.25rem] justify-center rounded-full bg-white/20 px-1.5 text-xs">
+                {unreadByChannel[id]}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => {
             setUnreadOnly(false);
-            void load(false);
+            void load(channel, false);
           }}
           className={`rounded-xl px-3 py-2 text-sm font-semibold ${
             !unreadOnly ? 'bg-brand-600 text-white' : 'border border-line text-ink'
@@ -88,17 +150,17 @@ export function NotificationCenterPage() {
           type="button"
           onClick={() => {
             setUnreadOnly(true);
-            void load(true);
+            void load(channel, true);
           }}
           className={`rounded-xl px-3 py-2 text-sm font-semibold ${
             unreadOnly ? 'bg-brand-600 text-white' : 'border border-line text-ink'
           }`}
         >
-          Unread
+          Unread ({channelUnread})
         </button>
         <div className="ml-auto">
           <AuthButton type="button" variant="ghost" onClick={() => void handleMarkAll()}>
-            Mark all read
+            Mark {NOTIFICATION_CHANNEL_LABELS[channel].toLowerCase()} read
           </AuthButton>
         </div>
       </div>
@@ -106,7 +168,7 @@ export function NotificationCenterPage() {
       <section className="rounded-xl border border-line bg-white p-5">
         {loading ? <p className="text-sm text-muted">Loading…</p> : null}
         {!loading && items.length === 0 ? (
-          <p className="text-sm text-muted">No notifications.</p>
+          <p className="text-sm text-muted">No notifications in this channel.</p>
         ) : null}
         <ul className="divide-y divide-line">
           {items.map((item) => (

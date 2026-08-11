@@ -6,6 +6,8 @@ import {
   DEFAULT_MAX_UPLOAD_BYTES,
   DEFAULT_REPORT_VISIBILITY,
   DEFAULT_REQUIRED_FIELDS,
+  DEFAULT_SLA_HOURS_BY_SEGMENT,
+  DEFAULT_SLA_WARNING_PERCENT,
   type CountryRequestStatus,
   type MasterListType,
 } from '@ayetis/shared';
@@ -140,6 +142,14 @@ export interface IBusinessConfig extends Document {
   caseSubmissionTabs: Record<string, boolean>;
   reportVisibility: Record<string, boolean>;
   autoAssignmentEnabled: boolean;
+  sla: {
+    hoursBySegment: {
+      individual: number;
+      company: number;
+      sub_account: number;
+    };
+    warningPercent: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -166,6 +176,14 @@ const businessConfigSchema = new Schema<IBusinessConfig>(
       default: () => ({ ...DEFAULT_REPORT_VISIBILITY }),
     },
     autoAssignmentEnabled: { type: Boolean, default: true },
+    sla: {
+      hoursBySegment: {
+        individual: { type: Number, default: DEFAULT_SLA_HOURS_BY_SEGMENT.individual },
+        company: { type: Number, default: DEFAULT_SLA_HOURS_BY_SEGMENT.company },
+        sub_account: { type: Number, default: DEFAULT_SLA_HOURS_BY_SEGMENT.sub_account },
+      },
+      warningPercent: { type: Number, default: DEFAULT_SLA_WARNING_PERCENT, min: 1, max: 100 },
+    },
   },
   { timestamps: true },
 );

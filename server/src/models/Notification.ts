@@ -1,6 +1,7 @@
 import {
   ALL_NOTIFICATION_TYPES,
   NOTIFICATION_TYPES,
+  notificationChannelForType,
   type NotificationDto,
   type NotificationType,
 } from '@ayetis/shared';
@@ -53,6 +54,7 @@ export function toNotificationDto(doc: INotification): NotificationDto {
   return {
     id: doc.id,
     type: doc.type,
+    channel: notificationChannelForType(doc.type),
     title: doc.title,
     body: doc.body,
     link: doc.link ?? null,

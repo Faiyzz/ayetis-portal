@@ -29,6 +29,10 @@ export interface SupervisorQueueCaseDto {
   assigneeName: string | null;
   delayLevel: DelayLevel;
   delayHours: number;
+  slaHours: number | null;
+  slaDeadlineAt: string | null;
+  slaUtilizationPercent: number | null;
+  slaProgressColor: import('./caseTaxonomy').SlaProgressColor | null;
   updatedAt: string;
 }
 

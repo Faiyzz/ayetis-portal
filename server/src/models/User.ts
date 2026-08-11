@@ -62,8 +62,8 @@ export interface IUser extends Document {
   passwordHistory: string[];
   passwordChangedAt?: Date;
   mustChangePassword: boolean;
-  /** SLA business hours for this doctor's cases (default 48). */
-  slaBusinessHours: number;
+  /** Per-doctor SLA override (business hours). Null/undefined → use account-type default. */
+  slaBusinessHours?: number | null;
   billingArrangement?: import('@ayetis/shared').BillingArrangement;
   prepaidCaseBalance: number;
   preferredCurrency?: string;
@@ -244,8 +244,8 @@ const userSchema = new Schema<IUser>(
     },
     slaBusinessHours: {
       type: Number,
-      default: 48,
       min: 1,
+      default: undefined,
     },
     billingArrangement: { type: String, trim: true, index: true },
     prepaidCaseBalance: { type: Number, default: 0, min: 0 },

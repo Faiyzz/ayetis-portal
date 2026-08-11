@@ -358,6 +358,9 @@ export interface CaseListItemDto {
   isDeleted: boolean;
   isDemo: boolean;
   invoiceId: string | null;
+  /** Prior status shown in Updated-Status until doctor acknowledges. */
+  previousStatus: CaseStatus | null;
+  statusPendingDoctorAck: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -425,6 +428,29 @@ export interface CaseListResult {
   total: number;
   page: number;
   pageSize: number;
+}
+
+export const CASE_LIST_SORT_FIELDS = {
+  CREATED_AT: 'createdAt',
+  UPDATED_AT: 'updatedAt',
+  CASE_ID: 'caseId',
+  PATIENT_NAME: 'patientName',
+  STATUS: 'status',
+  CATEGORY: 'caseCategory',
+  TYPE: 'caseType',
+} as const;
+
+export type CaseListSortField =
+  (typeof CASE_LIST_SORT_FIELDS)[keyof typeof CASE_LIST_SORT_FIELDS];
+
+export const ALL_CASE_LIST_SORT_FIELDS: CaseListSortField[] = Object.values(CASE_LIST_SORT_FIELDS);
+
+export interface DoctorCaseSummaryDto {
+  generatedAt: string;
+  total: number;
+  byCategory: Record<string, number>;
+  byType: Record<string, number>;
+  pendingStatusAckCount: number;
 }
 
 export interface CreateCaseInput {

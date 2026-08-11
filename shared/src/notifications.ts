@@ -16,6 +16,9 @@ export const NOTIFICATION_TYPES = {
   CASE_DOCTOR_VIEWED: 'case_doctor_viewed',
   CASE_DOCTOR_DECISION: 'case_doctor_decision',
   CLINICAL_REMARK: 'clinical_remark',
+  SLA_WARNING: 'sla_warning',
+  SLA_BREACH: 'sla_breach',
+  CASE_STATUS_CHANGED: 'case_status_changed',
   SYSTEM: 'system',
 } as const;
 
@@ -41,12 +44,21 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   [NOTIFICATION_TYPES.CASE_DOCTOR_VIEWED]: 'Doctor viewed case',
   [NOTIFICATION_TYPES.CASE_DOCTOR_DECISION]: 'Doctor decision',
   [NOTIFICATION_TYPES.CLINICAL_REMARK]: 'Clinical remark',
+  [NOTIFICATION_TYPES.SLA_WARNING]: 'SLA Warning',
+  [NOTIFICATION_TYPES.SLA_BREACH]: 'SLA Breach',
+  [NOTIFICATION_TYPES.CASE_STATUS_CHANGED]: 'Case status updated',
   [NOTIFICATION_TYPES.SYSTEM]: 'System',
 };
+
+export interface NotificationUnreadByChannel {
+  status_alerts: number;
+  clarifications: number;
+}
 
 export interface NotificationDto {
   id: string;
   type: NotificationType;
+  channel: import('./notificationChannels').NotificationChannel;
   title: string;
   body: string;
   link: string | null;
@@ -60,8 +72,10 @@ export interface NotificationListResult {
   items: NotificationDto[];
   total: number;
   unreadCount: number;
+  unreadByChannel: NotificationUnreadByChannel;
   page: number;
   pageSize: number;
+  channel: import('./notificationChannels').NotificationChannel | null;
 }
 
 export function isNotificationType(value: string): value is NotificationType {

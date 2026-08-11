@@ -3,6 +3,7 @@ import { connectDatabase } from './config/database';
 import { env } from './config/env';
 import { startFileColdStorageJobs } from './jobs/fileColdStorage.job';
 import { startCaseLifecycleJobs } from './jobs/caseLifecycle.job';
+import { startSlaMonitorJobs } from './jobs/slaMonitor.job';
 import { migrateAuthUsers } from './models/migrateAuthUsers';
 import { migrateCaseManagement } from './models/migrateCaseManagement';
 import { migrateCorporateHierarchy } from './models/migrateCorporateHierarchy';
@@ -24,6 +25,7 @@ async function bootstrap() {
 
   startFileColdStorageJobs();
   startCaseLifecycleJobs();
+  startSlaMonitorJobs();
 }
 
 bootstrap().catch((error) => {

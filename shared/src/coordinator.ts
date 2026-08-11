@@ -107,6 +107,10 @@ export interface CoordinatorQueueCaseDto {
   queue: CoordinatorQueue;
   delayLevel: DelayLevel;
   delayHours: number;
+  slaHours: number | null;
+  slaDeadlineAt: string | null;
+  slaUtilizationPercent: number | null;
+  slaProgressColor: import('./caseTaxonomy').SlaProgressColor | null;
   fileCount: number;
   openClarificationCount: number;
   assignedDesignerName: string | null;

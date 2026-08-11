@@ -2,13 +2,13 @@ import {
   CASE_CATEGORIES,
   CASE_STATUSES,
   CASE_TYPES,
-  DEFAULT_SLA_BUSINESS_HOURS,
   LEGACY_STATUS_TO_URD,
 } from '@ayetis/shared';
 import { Case } from './Case';
 import { computeSlaDeadline } from '../utils/businessHours';
 import { User } from './User';
 import { TreatmentPlan } from './TreatmentPlan';
+import { resolveSlaHoursForUser } from '../features/settings/settings.service';
 
 /**
  * Migrate legacy case statuses → URD statuses, backfill taxonomy / SLA fields.
@@ -50,8 +50,10 @@ export async function migrateCaseManagement(): Promise<void> {
   }).limit(500);
 
   for (const caseDoc of openWithoutSla) {
-    const doctor = await User.findById(caseDoc.doctorId).select('slaBusinessHours');
-    const hours = doctor?.slaBusinessHours ?? DEFAULT_SLA_BUSINESS_HOURS;
+    const doctor = await User.findById(caseDoc.doctorId).select(
+      'slaBusinessHours accountType subAccountId',
+    );
+    const hours = doctor ? await resolveSlaHoursForUser(doctor) : 48;
     const start = caseDoc.submittedAt ?? caseDoc.createdAt;
     caseDoc.slaHours = hours;
     caseDoc.slaDeadlineAt = computeSlaDeadline(start, hours);
