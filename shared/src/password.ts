@@ -20,6 +20,8 @@ export const PASSWORD_POLICY = {
 export const PASSWORD_POLICY_DESCRIPTION =
   'At least 8 characters with uppercase, lowercase, a number, and a special character.';
 
+export const PASSWORD_VALIDATION_FAILED = 'Password validation failed';
+
 export function validatePasswordComplexity(password: string): string[] {
   const errors: string[] = [];
   if (password.length < PASSWORD_POLICY.minLength) {

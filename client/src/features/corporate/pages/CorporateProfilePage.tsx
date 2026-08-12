@@ -61,6 +61,14 @@ export function CorporateProfilePage() {
         },
       });
       setOrg(updated);
+      setForm({
+        companyName: updated.companyName,
+        street: updated.address.street,
+        city: updated.address.city,
+        state: updated.address.state,
+        country: updated.address.country || updated.country,
+        postalCode: updated.address.postalCode,
+      });
       toast().success('Organization profile saved');
     } catch (err) {
       setError(getErrorMessage(err, 'Unable to save profile'));

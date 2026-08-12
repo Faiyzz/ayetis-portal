@@ -1,22 +1,13 @@
 import {
   ALL_ACCOUNT_STATUSES,
   ALL_ACCOUNT_TYPES,
-  isPasswordComplex,
   isRole,
-  PASSWORD_POLICY_DESCRIPTION,
   type AccountStatus,
   type AccountType,
   type Role,
 } from '@ayetis/shared';
 import { z } from 'zod';
-
-const passwordSchema = z
-  .string()
-  .min(8)
-  .max(128)
-  .refine((value) => isPasswordComplex(value), {
-    message: PASSWORD_POLICY_DESCRIPTION,
-  });
+import { passwordSchema } from '../../utils/passwordSchema';
 
 const permissionListSchema = z.array(z.string()).default([]);
 

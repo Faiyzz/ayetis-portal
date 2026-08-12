@@ -1,8 +1,9 @@
-import { isPasswordComplex, PASSWORD_POLICY_DESCRIPTION, PERMISSIONS } from '@ayetis/shared';
+import { PERMISSIONS } from '@ayetis/shared';
 import { Router } from 'express';
 import { z } from 'zod';
 import { authenticate, requireAnyPermission } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
+import { passwordSchema } from '../../utils/passwordSchema';
 import * as supervisorController from './supervisor.controller';
 
 const router = Router();
@@ -17,13 +18,7 @@ const performanceQuerySchema = z.object({
 
 const addMemberSchema = z.object({
   email: z.string().email(),
-  password: z
-    .string()
-    .min(8)
-    .max(128)
-    .refine((value) => isPasswordComplex(value), {
-      message: PASSWORD_POLICY_DESCRIPTION,
-    }),
+  password: passwordSchema,
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
   role: z.enum(['designer', 'qc', 'orthodontist']),

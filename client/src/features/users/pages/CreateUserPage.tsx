@@ -1,8 +1,11 @@
 import {
   ALL_EXPERIENCE_LEVELS,
   EXPERIENCE_LEVEL_LABELS,
+  PASSWORD_POLICY_DESCRIPTION,
+  PASSWORD_VALIDATION_FAILED,
   ROLES,
   getRoleLabel,
+  validatePasswordComplexity,
   type CreateUserInput,
   type ExperienceLevel,
   type RoleDefinitionDto,
@@ -14,7 +17,7 @@ import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI'
 import { toast } from '@/features/notifications/toastStore';
 import { fetchRoleDefinitions } from '@/features/rbac/api';
 import * as usersApi from '@/features/users/api';
-import { getErrorMessage } from '@/lib/api';
+import { getErrorMessage, getFieldError } from '@/lib/api';
 
 const INITIAL_FORM: CreateUserInput = {
   firstName: '',
@@ -34,6 +37,7 @@ export function CreateUserPage() {
   const [roleDefinitions, setRoleDefinitions] = useState<RoleDefinitionDto[]>([]);
   const [softwareText, setSoftwareText] = useState('');
   const [error, setError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -74,6 +78,14 @@ export function CreateUserPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError('');
+    setPasswordError('');
+    const passwordIssues = validatePasswordComplexity(form.password);
+    if (passwordIssues.length) {
+      setPasswordError(PASSWORD_VALIDATION_FAILED);
+      setError(PASSWORD_VALIDATION_FAILED);
+      toast().error(PASSWORD_VALIDATION_FAILED);
+      return;
+    }
     setLoading(true);
     try {
       const roles = form.roles?.length ? form.roles : [form.primaryRole ?? form.role];
@@ -95,6 +107,7 @@ export function CreateUserPage() {
       });
     } catch (err) {
       const message = getErrorMessage(err, 'Unable to create user');
+      if (getFieldError(err, 'password')) setPasswordError(PASSWORD_VALIDATION_FAILED);
       setError(message);
       toast().error(message);
     } finally {
@@ -162,8 +175,12 @@ export function CreateUserPage() {
           autoComplete="new-password"
           required
           value={form.password}
-          onChange={(e) => update('password', e.target.value)}
-          placeholder="Min. 8 chars, mixed case + number"
+          onChange={(e) => {
+            update('password', e.target.value);
+            setPasswordError('');
+          }}
+          hint={PASSWORD_POLICY_DESCRIPTION}
+          error={passwordError}
         />
 
         <label className="block space-y-1.5" htmlFor="primaryRole">

@@ -3,7 +3,6 @@ import {
   ACCOUNT_TYPES,
   AUDIT_ACTIONS,
   CASE_STATUSES,
-  EMPTY_COMPANY_ADDRESS,
   FACILITY_STATUSES,
   formatEmployeeId,
   formatSubAccountId,
@@ -11,6 +10,7 @@ import {
   PERMISSIONS,
   ROLES,
   permissionsInclude,
+  type CompanyAddress,
   type CreateEmployeeInput,
   type CreateFacilityInput,
   type CreateSubAccountInput,
@@ -64,16 +64,30 @@ function createRawToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+function toCompanyAddress(value: unknown): CompanyAddress {
+  const raw =
+    value && typeof value === 'object'
+      ? typeof (value as { toObject?: () => unknown }).toObject === 'function'
+        ? ((value as { toObject: () => Record<string, unknown> }).toObject() ?? {})
+        : (value as Record<string, unknown>)
+      : {};
+  return {
+    street: String(raw.street ?? '').trim(),
+    city: String(raw.city ?? '').trim(),
+    state: String(raw.state ?? '').trim(),
+    country: String(raw.country ?? '').trim(),
+    postalCode: String(raw.postalCode ?? '').trim(),
+  };
+}
+
 function orgDto(doc: IOrganization): OrganizationDto {
+  const address = toCompanyAddress(doc.address);
   return {
     id: doc.id,
     corporateCustomerId: doc.corporateCustomerId,
     companyName: doc.companyName,
-    address: {
-      ...EMPTY_COMPANY_ADDRESS,
-      ...(doc.address ?? {}),
-    },
-    country: doc.country ?? '',
+    address,
+    country: (doc.country || address.country || '').trim(),
     status: doc.status,
     ownerUserId: doc.ownerUserId ? String(doc.ownerUserId) : null,
     subAccountSeq: doc.subAccountSeq ?? 0,
@@ -155,12 +169,16 @@ export async function updateOrganization(
   if (input.country !== undefined) org.country = input.country.trim();
   if (input.status !== undefined) org.status = input.status as OrganizationStatus;
   if (input.address) {
-    org.address = {
-      ...EMPTY_COMPANY_ADDRESS,
-      ...org.address,
-      ...input.address,
+    const nextAddress = {
+      ...toCompanyAddress(org.address),
+      ...toCompanyAddress(input.address),
     };
-    if (input.address.country) org.country = input.address.country;
+    if (input.country?.trim() && !nextAddress.country) {
+      nextAddress.country = input.country.trim();
+    }
+    org.set('address', nextAddress);
+    org.markModified('address');
+    if (nextAddress.country) org.country = nextAddress.country;
   }
   await org.save();
 

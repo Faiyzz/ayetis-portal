@@ -71,8 +71,12 @@ export function CorporateDashboardPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-ink">Company profile</h2>
+                <p className="mt-1 text-base font-medium text-ink">
+                  {data.organization.companyName || 'Unnamed company'}
+                </p>
                 <p className="text-sm text-muted">
-                  {data.organization.corporateCustomerId} · {data.organization.country || '—'}
+                  {data.organization.corporateCustomerId}
+                  {data.organization.country ? ` · ${data.organization.country}` : ''}
                 </p>
               </div>
               <Link

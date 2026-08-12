@@ -1,19 +1,12 @@
 import {
   ACCOUNT_TYPES,
   ALL_ACCOUNT_TYPES,
-  isPasswordComplex,
-  PASSWORD_POLICY_DESCRIPTION,
   type AccountType,
 } from '@ayetis/shared';
 import { z } from 'zod';
+import { passwordSchema } from '../../utils/passwordSchema';
 
-export const passwordSchema = z
-  .string()
-  .min(8)
-  .max(128)
-  .refine((value) => isPasswordComplex(value), {
-    message: PASSWORD_POLICY_DESCRIPTION,
-  });
+export { passwordSchema };
 
 const accountTypeSchema = z.custom<AccountType>(
   (value): value is AccountType =>

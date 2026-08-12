@@ -3,9 +3,10 @@ import type { FormEvent, InputHTMLAttributes, ReactNode } from 'react';
 interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
   error?: string;
+  hint?: string;
 }
 
-export function TextField({ label, error, id, className = '', ...props }: TextFieldProps) {
+export function TextField({ label, error, hint, id, className = '', ...props }: TextFieldProps) {
   const fieldId = id ?? props.name;
 
   return (
@@ -22,7 +23,8 @@ export function TextField({ label, error, id, className = '', ...props }: TextFi
         ].join(' ')}
         {...props}
       />
-      {error ? <span className="text-sm text-red-500">{error}</span> : null}
+      {hint ? <span className="block text-xs leading-relaxed text-muted">{hint}</span> : null}
+      {error ? <span className="block text-sm text-red-500">{error}</span> : null}
     </label>
   );
 }

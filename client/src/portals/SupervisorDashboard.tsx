@@ -3,6 +3,7 @@ import {
   CASE_STATUS_LABELS,
   DELAY_LEVEL_LABELS,
   DELAY_LEVELS,
+  PASSWORD_POLICY_DESCRIPTION,
   ROLE_LABELS,
   type DelayLevel,
   type SupervisorDashboardDto,
@@ -402,6 +403,7 @@ export function SupervisorDashboard({ firstName }: { firstName: string }) {
               type="password"
               value={memberForm.password}
               onChange={(e) => setMemberForm((s) => ({ ...s, password: e.target.value }))}
+              hint={PASSWORD_POLICY_DESCRIPTION}
               required
             />
             <label className="block space-y-1.5 text-sm">

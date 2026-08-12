@@ -1,3 +1,4 @@
+import { PASSWORD_VALIDATION_FAILED } from '@ayetis/shared';
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../utils/AppError';
@@ -27,10 +28,14 @@ export function errorHandler(
   }
 
   if (err instanceof ZodError) {
+    const errors = err.flatten();
+    const passwordIssue = Boolean(
+      errors.fieldErrors.password?.length || errors.fieldErrors.newPassword?.length,
+    );
     res.status(400).json({
       success: false,
-      message: 'Validation failed',
-      errors: err.flatten(),
+      message: passwordIssue ? PASSWORD_VALIDATION_FAILED : 'Validation failed',
+      errors,
     });
     return;
   }

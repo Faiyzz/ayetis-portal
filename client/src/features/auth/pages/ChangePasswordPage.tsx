@@ -1,4 +1,4 @@
-import { PASSWORD_POLICY_DESCRIPTION } from '@ayetis/shared';
+import { PASSWORD_POLICY_DESCRIPTION, PASSWORD_VALIDATION_FAILED, validatePasswordComplexity } from '@ayetis/shared';
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
@@ -6,7 +6,7 @@ import { changePassword } from '@/features/auth/api';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { useAuthStore } from '@/features/auth/store';
 import { toast } from '@/features/notifications/toastStore';
-import { getErrorMessage } from '@/lib/api';
+import { getErrorMessage, getFieldError } from '@/lib/api';
 
 export function ChangePasswordPage() {
   const user = useAuthStore((s) => s.user);
@@ -18,16 +18,26 @@ export function ChangePasswordPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError('');
+    setPasswordError('');
 
     if (newPassword !== confirm) {
       const message = 'New passwords do not match.';
       setError(message);
       toast().warning(message);
+      return;
+    }
+
+    const passwordIssues = validatePasswordComplexity(newPassword);
+    if (passwordIssues.length) {
+      setPasswordError(PASSWORD_VALIDATION_FAILED);
+      setError(PASSWORD_VALIDATION_FAILED);
+      toast().error(PASSWORD_VALIDATION_FAILED);
       return;
     }
 
@@ -46,6 +56,9 @@ export function ChangePasswordPage() {
       }
     } catch (err) {
       const message = getErrorMessage(err, 'Unable to change password');
+      if (getFieldError(err, 'newPassword') || getFieldError(err, 'password')) {
+        setPasswordError(PASSWORD_VALIDATION_FAILED);
+      }
       setError(message);
       toast().error(message);
     } finally {
@@ -65,7 +78,6 @@ export function ChangePasswordPage() {
             : 'Update your password regularly to keep your account secure.'
         }
       />
-      <p className="text-xs text-muted">{PASSWORD_POLICY_DESCRIPTION}</p>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-4">
         {error ? <Alert>{error}</Alert> : null}
@@ -87,7 +99,12 @@ export function ChangePasswordPage() {
           autoComplete="new-password"
           required
           value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
+          onChange={(e) => {
+            setNewPassword(e.target.value);
+            setPasswordError('');
+          }}
+          hint={PASSWORD_POLICY_DESCRIPTION}
+          error={passwordError}
         />
 
         <TextField

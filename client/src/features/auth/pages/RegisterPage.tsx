@@ -3,6 +3,8 @@ import {
   ACCOUNT_TYPE_LABELS,
   MASTER_LIST_TYPES,
   PASSWORD_POLICY_DESCRIPTION,
+  PASSWORD_VALIDATION_FAILED,
+  validatePasswordComplexity,
   type AccountType,
   type CountryDto,
   type MasterListItemDto,
@@ -18,7 +20,7 @@ import {
   fetchCurrentPrivacy,
   fetchMasterListItems,
 } from '@/features/settings/api';
-import { getErrorMessage } from '@/lib/api';
+import { getErrorMessage, getFieldError } from '@/lib/api';
 
 export function RegisterPage() {
   const [searchParams] = useSearchParams();
@@ -59,6 +61,7 @@ export function RegisterPage() {
   const [titles, setTitles] = useState<MasterListItemDto[]>([]);
   const [privacy, setPrivacy] = useState<PrivacyPolicyDto | null>(null);
   const [error, setError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [devVerifyUrl, setDevVerifyUrl] = useState('');
@@ -134,6 +137,7 @@ export function RegisterPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError('');
+    setPasswordError('');
     if (!privacy?.version || !form.privacyAccepted) {
       setError('You must accept the Privacy Notice to continue');
       return;
@@ -144,6 +148,12 @@ export function RegisterPage() {
     }
     if (isOtherCountry && !form.otherCountryName.trim()) {
       setError('Enter your country name');
+      return;
+    }
+    const passwordIssues = validatePasswordComplexity(form.password);
+    if (passwordIssues.length) {
+      setPasswordError(PASSWORD_VALIDATION_FAILED);
+      setError(PASSWORD_VALIDATION_FAILED);
       return;
     }
     setLoading(true);
@@ -187,6 +197,8 @@ export function RegisterPage() {
       setSuccessMessage(result.message);
       setDevVerifyUrl(result.verifyUrl ?? '');
     } catch (err) {
+      const passwordField = getFieldError(err, 'password');
+      if (passwordField) setPasswordError(PASSWORD_VALIDATION_FAILED);
       setError(getErrorMessage(err, 'Unable to submit registration'));
     } finally {
       setLoading(false);
@@ -490,8 +502,12 @@ export function RegisterPage() {
         autoComplete="new-password"
         required
         value={form.password}
-        onChange={(e) => update('password', e.target.value)}
-        placeholder={PASSWORD_POLICY_DESCRIPTION}
+        onChange={(e) => {
+          update('password', e.target.value);
+          setPasswordError('');
+        }}
+        hint={PASSWORD_POLICY_DESCRIPTION}
+        error={passwordError}
       />
 
       <label className="flex items-start gap-2 text-sm text-ink">
