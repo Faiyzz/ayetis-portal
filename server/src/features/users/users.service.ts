@@ -5,6 +5,7 @@ import {
   AUDIT_ACTIONS,
   ROLES,
   ROLE_LABELS,
+  THEMES,
   canLogin,
   getPermissionCatalog,
   getPermissionsForRole,
@@ -132,6 +133,8 @@ function baseUserFields(
   const accountType = user.accountType ?? ACCOUNT_TYPES.INDIVIDUAL;
   const roles = resolveUserRoleKeys(user);
   const primaryRole = user.primaryRole ?? user.role;
+  const lockoutUntil = user.lockoutUntil ?? null;
+  const isLocked = Boolean(lockoutUntil && lockoutUntil.getTime() > Date.now());
 
   return {
     id: user.id,
@@ -178,6 +181,12 @@ function baseUserFields(
     passwordExpired: expired,
     passwordChangedAt: changedAt ? changedAt.toISOString() : null,
     passwordExpiresAt: expiresAt ? expiresAt.toISOString() : null,
+    themePreference: user.themePreference ?? THEMES.LIGHT,
+    lockoutUntil: lockoutUntil ? lockoutUntil.toISOString() : null,
+    isLocked,
+    lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
+    lastLoginIp: user.lastLoginIp ?? null,
+    lastLoginUserAgent: user.lastLoginUserAgent ?? null,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };
@@ -463,6 +472,34 @@ export async function updateUser(
     targetType: 'user',
     targetId: user.id,
     metadata: { before, after: input },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return toPublicUserAsync(user);
+}
+
+export async function unlockLogin(
+  userId: string,
+  actorId: string,
+  audit?: RequestAuditContext,
+) {
+  const user = await User.findById(userId);
+  if (!user) throw new AppError('User not found', 404);
+
+  user.failedLoginAttempts = 0;
+  user.lockoutUntil = null;
+  user.lastFailedLoginAt = null;
+  await user.save();
+
+  const actor = await resolveActor(actorId);
+  await recordActivity({
+    action: AUDIT_ACTIONS.AUTH_ACCOUNT_UNLOCKED,
+    summary: `${actor?.actorEmail ?? 'Admin'} cleared login lockout for ${user.email}`,
+    ...(actor ?? {}),
+    targetType: 'user',
+    targetId: user.id,
+    metadata: { unlockedBy: actorId },
     ipAddress: audit?.ipAddress,
     userAgent: audit?.userAgent,
   });

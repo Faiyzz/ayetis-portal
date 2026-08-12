@@ -73,3 +73,8 @@ export async function resetUserPassword(userId: string): Promise<{
   const { data } = await api.post(`/users/${userId}/reset-password`);
   return data.data;
 }
+
+export async function unlockUserLogin(userId: string): Promise<PublicUser> {
+  const { data } = await api.post(`/users/${userId}/unlock-login`);
+  return data.data;
+}

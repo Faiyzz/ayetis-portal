@@ -404,6 +404,18 @@ export async function getBusinessConfig(): Promise<BusinessConfigDto> {
       ...(doc.caseSubmissionTabs ?? {}),
     },
     reportVisibility: { ...DEFAULT_REPORT_VISIBILITY, ...(doc.reportVisibility ?? {}) },
+    sessionIdleTimeoutMinutes:
+      doc.sessionIdleTimeoutMinutes != null && Number.isFinite(doc.sessionIdleTimeoutMinutes)
+        ? Math.max(0, Math.floor(doc.sessionIdleTimeoutMinutes))
+        : env.sessionIdleTimeoutMinutes,
+    loginMaxFailedAttempts:
+      doc.loginMaxFailedAttempts != null && Number.isFinite(doc.loginMaxFailedAttempts)
+        ? Math.max(1, Math.floor(doc.loginMaxFailedAttempts))
+        : env.loginMaxFailedAttempts,
+    loginLockoutMinutes:
+      doc.loginLockoutMinutes != null && Number.isFinite(doc.loginLockoutMinutes)
+        ? Math.max(1, Math.floor(doc.loginLockoutMinutes))
+        : env.loginLockoutMinutes,
     updatedAt: doc.updatedAt?.toISOString() ?? null,
   };
 }
@@ -470,6 +482,15 @@ export async function updateBusinessConfig(
   }
   if (input.reportVisibility) {
     doc.reportVisibility = { ...doc.reportVisibility, ...input.reportVisibility };
+  }
+  if (input.sessionIdleTimeoutMinutes != null && Number.isFinite(input.sessionIdleTimeoutMinutes)) {
+    doc.sessionIdleTimeoutMinutes = Math.max(0, Math.floor(input.sessionIdleTimeoutMinutes));
+  }
+  if (input.loginMaxFailedAttempts != null && Number.isFinite(input.loginMaxFailedAttempts)) {
+    doc.loginMaxFailedAttempts = Math.max(1, Math.floor(input.loginMaxFailedAttempts));
+  }
+  if (input.loginLockoutMinutes != null && Number.isFinite(input.loginLockoutMinutes)) {
+    doc.loginLockoutMinutes = Math.max(1, Math.floor(input.loginLockoutMinutes));
   }
   await doc.save();
   invalidateUploadBytesCache();

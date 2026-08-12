@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import toothBackground from '@/assets/tooth-login-background.jpg';
 import { BrandMark } from '@/features/auth/components/AuthUI';
 import { useBranding } from '@/features/settings/useBranding';
+import { ThemeToggle } from '@/features/theme/ThemeToggle';
 
 export function AuthLayout() {
   const { pathname } = useLocation();
@@ -10,7 +11,7 @@ export function AuthLayout() {
   const companyName = branding?.companyName || 'Ayetis Portal';
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-100">
+    <div className="relative min-h-screen overflow-hidden bg-surface">
       {isLogin ? (
         <>
           <div
@@ -26,7 +27,7 @@ export function AuthLayout() {
             className="pointer-events-none absolute inset-0"
             style={{
               background:
-                'radial-gradient(ellipse 80% 60% at 10% -10%, rgba(51,65,85,0.14), transparent 55%), radial-gradient(ellipse 70% 50% at 100% 0%, rgba(100,116,139,0.12), transparent 50%), linear-gradient(180deg, #ffffff 0%, #f4f7f9 100%)',
+                'radial-gradient(ellipse 80% 60% at 10% -10%, rgba(51,65,85,0.14), transparent 55%), radial-gradient(ellipse 70% 50% at 100% 0%, rgba(100,116,139,0.12), transparent 50%), linear-gradient(180deg, var(--color-panel) 0%, var(--color-surface) 100%)',
             }}
           />
           <div
@@ -42,7 +43,7 @@ export function AuthLayout() {
       )}
 
       <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-5 py-6 sm:px-8 lg:px-12">
-        <header className="flex items-center justify-between">
+        <header className="flex items-center justify-between gap-3">
           <Link to="/login" className="inline-flex items-center">
             <BrandMark
               tone={isLogin ? 'brand' : 'dark'}
@@ -51,9 +52,16 @@ export function AuthLayout() {
             />
             <span className="sr-only">{companyName}</span>
           </Link>
-          <span className={isLogin ? 'text-sm font-medium text-slate-600' : 'text-sm text-muted'}>
-            Digital Workflow Portal
-          </span>
+          <div className="flex items-center gap-3">
+            <span
+              className={
+                isLogin ? 'hidden text-sm font-medium text-muted sm:inline' : 'text-sm text-muted'
+              }
+            >
+              Digital Workflow Portal
+            </span>
+            <ThemeToggle />
+          </div>
         </header>
 
         <main
@@ -68,7 +76,7 @@ export function AuthLayout() {
         <footer
           className={[
             'pb-2 text-xs',
-            isLogin ? 'text-left text-slate-600' : 'text-center text-muted/80',
+            isLogin ? 'text-left text-muted' : 'text-center text-muted/80',
           ].join(' ')}
         >
           © {new Date().getFullYear()} {companyName.replace(/\s*Portal$/i, '') || 'Ayetis'}. Secure

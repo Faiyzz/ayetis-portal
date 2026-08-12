@@ -62,6 +62,12 @@ router.post(
   usersController.resetPassword,
 );
 
+router.post(
+  '/:userId/unlock-login',
+  requirePermission(PERMISSIONS.USER_UPDATE),
+  usersController.unlockLogin,
+);
+
 router.put(
   '/:userId/permissions',
   requirePermission(PERMISSIONS.USER_ASSIGN_PERMISSIONS),

@@ -14,7 +14,7 @@ export function TextField({ label, error, id, className = '', ...props }: TextFi
       <input
         id={fieldId}
         className={[
-          'w-full rounded-xl border bg-white px-3.5 py-3 text-[15px] text-ink outline-none transition',
+          'w-full rounded-xl border bg-panel px-3.5 py-3 text-[15px] text-ink outline-none transition',
           'placeholder:text-muted/70',
           'focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15',
           error ? 'border-red-400' : 'border-line',

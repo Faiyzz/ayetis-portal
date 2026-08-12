@@ -66,4 +66,10 @@ export const env = {
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
   stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY ?? '',
+  /** Idle minutes before client logout (0 disables). Overridable via BusinessConfig. */
+  sessionIdleTimeoutMinutes: Math.max(0, Number(process.env.SESSION_IDLE_TIMEOUT_MINUTES ?? 30)),
+  /** Failed password attempts before temporary lockout. */
+  loginMaxFailedAttempts: Math.max(1, Number(process.env.LOGIN_MAX_FAILED_ATTEMPTS ?? 5)),
+  /** Minutes the account stays locked after max failures. */
+  loginLockoutMinutes: Math.max(1, Number(process.env.LOGIN_LOCKOUT_MINUTES ?? 15)),
 };

@@ -27,4 +27,5 @@ export * from './complaints';
 export * from './deletions';
 export * from './reports';
 export * from './password';
+export * from './security';
 export * from './storage';

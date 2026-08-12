@@ -181,6 +181,9 @@ export function SettingsAdminPage() {
     requiredFields: { ...DEFAULT_REQUIRED_FIELDS },
     caseSubmissionTabs: { ...DEFAULT_CASE_SUBMISSION_TABS },
     reportVisibility: { ...DEFAULT_REPORT_VISIBILITY },
+    sessionIdleTimeoutMinutes: '30',
+    loginMaxFailedAttempts: '5',
+    loginLockoutMinutes: '15',
   });
 
   const [slaConfig, setSlaConfig] = useState<SlaConfigDto | null>(null);
@@ -273,6 +276,9 @@ export function SettingsAdminPage() {
                 data.caseSubmissionTabs,
               ),
               reportVisibility: mergeToggleKeys(DEFAULT_REPORT_VISIBILITY, data.reportVisibility),
+              sessionIdleTimeoutMinutes: String(data.sessionIdleTimeoutMinutes ?? 30),
+              loginMaxFailedAttempts: String(data.loginMaxFailedAttempts ?? 5),
+              loginLockoutMinutes: String(data.loginLockoutMinutes ?? 15),
             });
           })(),
         );
@@ -476,6 +482,9 @@ export function SettingsAdminPage() {
         requiredFields: businessForm.requiredFields,
         caseSubmissionTabs: businessForm.caseSubmissionTabs,
         reportVisibility: businessForm.reportVisibility,
+        sessionIdleTimeoutMinutes: Math.max(0, Math.floor(Number(businessForm.sessionIdleTimeoutMinutes) || 0)),
+        loginMaxFailedAttempts: Math.max(1, Math.floor(Number(businessForm.loginMaxFailedAttempts) || 5)),
+        loginLockoutMinutes: Math.max(1, Math.floor(Number(businessForm.loginLockoutMinutes) || 15)),
       });
       setBusinessConfig(updated);
       toast().success('Business configuration updated');
@@ -1127,6 +1136,42 @@ export function SettingsAdminPage() {
             onChange={(e) => setBusinessForm((p) => ({ ...p, maxUploadMb: e.target.value }))}
             required
           />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <TextField
+              label="Session idle timeout (minutes)"
+              name="sessionIdleTimeoutMinutes"
+              type="number"
+              min={0}
+              value={businessForm.sessionIdleTimeoutMinutes}
+              onChange={(e) =>
+                setBusinessForm((p) => ({ ...p, sessionIdleTimeoutMinutes: e.target.value }))
+              }
+            />
+            <TextField
+              label="Max failed logins"
+              name="loginMaxFailedAttempts"
+              type="number"
+              min={1}
+              value={businessForm.loginMaxFailedAttempts}
+              onChange={(e) =>
+                setBusinessForm((p) => ({ ...p, loginMaxFailedAttempts: e.target.value }))
+              }
+            />
+            <TextField
+              label="Lockout duration (minutes)"
+              name="loginLockoutMinutes"
+              type="number"
+              min={1}
+              value={businessForm.loginLockoutMinutes}
+              onChange={(e) =>
+                setBusinessForm((p) => ({ ...p, loginLockoutMinutes: e.target.value }))
+              }
+            />
+          </div>
+          <p className="text-xs text-muted">
+            Idle timeout of 0 disables automatic logout. Failed-login lockout is temporary and can be
+            cleared from Users.
+          </p>
           {renderToggleGroup('Required fields', businessForm.requiredFields, (key, checked) =>
             setBusinessForm((p) => ({
               ...p,

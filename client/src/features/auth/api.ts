@@ -99,6 +99,13 @@ export async function changePassword(
   return data.data;
 }
 
+export async function updatePreferences(payload: {
+  themePreference?: 'light' | 'dark';
+}): Promise<PublicUser> {
+  const { data } = await api.patch('/auth/preferences', payload);
+  return data.data;
+}
+
 export async function fetchRegistrations(params?: {
   page?: number;
   pageSize?: number;

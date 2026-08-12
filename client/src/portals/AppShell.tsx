@@ -20,6 +20,7 @@ import { usePermissions } from '@/features/auth/permissions';
 import { useAuthStore } from '@/features/auth/store';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
 import { useBranding } from '@/features/settings/useBranding';
+import { ThemeToggle } from '@/features/theme/ThemeToggle';
 
 export function RequireAuth() {
   const user = useAuthStore((s) => s.user);
@@ -595,7 +596,7 @@ export function AppShell() {
 
         <aside
           className={[
-            'fixed inset-y-0 left-0 z-40 flex w-65 flex-col border-r border-line bg-white transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0',
+            'fixed inset-y-0 left-0 z-40 flex w-65 flex-col border-r border-line bg-panel transition-transform duration-200 lg:static lg:h-full lg:shrink-0 lg:translate-x-0',
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           ].join(' ')}
         >
@@ -632,7 +633,7 @@ export function AppShell() {
         </aside>
 
         <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:h-full lg:min-h-0">
-          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-white px-4 py-2.5 lg:px-8">
+          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-panel px-4 py-2.5 lg:px-8">
             <button
               type="button"
               aria-label="Open navigation"
@@ -654,6 +655,7 @@ export function AppShell() {
 
             <div className="ml-auto flex shrink-0 items-center gap-2">
               <div ref={actionsSlotRef} className="flex items-center gap-2" />
+              <ThemeToggle />
               <NotificationBell />
             </div>
           </header>

@@ -1,6 +1,7 @@
-import type { AccountType, PublicUser } from '@ayetis/shared';
+import type { AccountType, PublicUser, ThemePreference } from '@ayetis/shared';
 import { create } from 'zustand';
 import * as authApi from '@/features/auth/api';
+import { useThemeStore } from '@/features/theme/themeStore';
 
 const TOKEN_KEY = 'ayetis_token';
 
@@ -13,6 +14,13 @@ interface AuthState {
   bootstrap: () => Promise<void>;
   login: (email: string, password: string, accountType: AccountType) => Promise<void>;
   logout: () => Promise<void>;
+  setUser: (user: PublicUser) => void;
+}
+
+function syncThemeFromUser(user: PublicUser | null) {
+  if (user?.themePreference) {
+    useThemeStore.getState().hydrateFromUser(user.themePreference);
+  }
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -22,7 +30,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setSession: (user, token) => {
     localStorage.setItem(TOKEN_KEY, token);
+    syncThemeFromUser(user);
     set({ user, token });
+  },
+
+  setUser: (user) => {
+    syncThemeFromUser(user);
+    set({ user });
   },
 
   clearSession: () => {
@@ -39,6 +53,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       const user = await authApi.fetchMe();
+      syncThemeFromUser(user);
       set({ user, isBootstrapping: false });
     } catch {
       get().clearSession();
@@ -63,3 +78,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 }));
+
+export async function persistThemePreference(theme: ThemePreference): Promise<PublicUser | null> {
+  const token = useAuthStore.getState().token;
+  if (!token) return null;
+  const user = await authApi.updatePreferences({ themePreference: theme });
+  useAuthStore.getState().setUser(user);
+  return user;
+}

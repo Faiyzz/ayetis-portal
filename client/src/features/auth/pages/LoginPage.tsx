@@ -39,7 +39,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="w-full max-w-121 rounded-3xl border border-white/80 bg-white/90 p-6 shadow-[0_28px_80px_rgba(15,23,42,0.18)] backdrop-blur-xl sm:p-8 lg:p-10">
+    <div className="w-full max-w-121 rounded-3xl border border-line bg-panel/95 p-6 shadow-[0_28px_80px_rgba(15,23,42,0.18)] backdrop-blur-xl sm:p-8 lg:p-10">
       <AuthCard
         title="Welcome back"
         subtitle="Choose your account type, then sign in to your digital orthodontic workspace."

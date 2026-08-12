@@ -133,6 +133,27 @@ export async function resetPassword(
   }
 }
 
+export async function unlockLogin(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await usersService.unlockLogin(
+      req.params.userId,
+      req.user!.id,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'Login lockout cleared',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function updateUserPermissions(
   req: AuthenticatedRequest,
   res: Response,

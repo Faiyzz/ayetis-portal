@@ -5,11 +5,14 @@ import {
   ALL_ACCOUNT_TYPES,
   ALL_EXPERIENCE_LEVELS,
   ALL_PERMISSIONS,
+  ALL_THEMES,
+  THEMES,
   type AccountStatus,
   type AccountType,
   type ExperienceLevel,
   type Permission,
   type Role,
+  type ThemePreference,
 } from '@ayetis/shared';
 import bcrypt from 'bcryptjs';
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
@@ -70,6 +73,13 @@ export interface IUser extends Document {
   regionIds: Types.ObjectId[];
   scopedCountryIds: Types.ObjectId[];
   excludedCountryIds: Types.ObjectId[];
+  themePreference: ThemePreference;
+  failedLoginAttempts: number;
+  lockoutUntil?: Date | null;
+  lastFailedLoginAt?: Date | null;
+  lastLoginAt?: Date | null;
+  lastLoginIp?: string | null;
+  lastLoginUserAgent?: string | null;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
@@ -253,6 +263,17 @@ const userSchema = new Schema<IUser>(
     regionIds: { type: [{ type: Schema.Types.ObjectId, ref: 'Region' }], default: [] },
     scopedCountryIds: { type: [{ type: Schema.Types.ObjectId, ref: 'Country' }], default: [] },
     excludedCountryIds: { type: [{ type: Schema.Types.ObjectId, ref: 'Country' }], default: [] },
+    themePreference: {
+      type: String,
+      enum: ALL_THEMES,
+      default: THEMES.LIGHT,
+    },
+    failedLoginAttempts: { type: Number, default: 0, min: 0 },
+    lockoutUntil: { type: Date, default: null, index: true },
+    lastFailedLoginAt: { type: Date, default: null },
+    lastLoginAt: { type: Date, default: null },
+    lastLoginIp: { type: String, trim: true, default: null },
+    lastLoginUserAgent: { type: String, trim: true, default: null },
   },
   {
     timestamps: true,

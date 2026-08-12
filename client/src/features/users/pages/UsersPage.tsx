@@ -63,6 +63,22 @@ export function UsersPage() {
     }
   }
 
+  async function handleUnlockLogin(user: PublicUser) {
+    const confirmed = await dialog.confirm({
+      title: 'Clear login lockout',
+      message: `Allow ${user.email} to sign in again immediately?`,
+      confirmLabel: 'Unlock',
+    });
+    if (!confirmed) return;
+    try {
+      await usersApi.unlockUserLogin(user.id);
+      toast().success('Login lockout cleared');
+      await load();
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to clear lockout'));
+    }
+  }
+
   async function handleDelete(user: PublicUser) {
     const reason = await dialog.prompt({
       title: 'Request user deletion',
@@ -199,17 +215,27 @@ export function UsersPage() {
                         : '—'}
                     </td>
                     <td className="px-5 py-3">
-                      <span
-                        className={
-                          user.accountStatus === ACCOUNT_STATUSES.ACTIVE
-                            ? 'rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700'
-                            : user.accountStatus === ACCOUNT_STATUSES.SUSPENDED
-                              ? 'rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800'
-                              : 'rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700'
-                        }
-                      >
-                        {ACCOUNT_STATUS_LABELS[user.accountStatus]}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span
+                          className={
+                            user.accountStatus === ACCOUNT_STATUSES.ACTIVE
+                              ? 'rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700'
+                              : user.accountStatus === ACCOUNT_STATUSES.SUSPENDED
+                                ? 'rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800'
+                                : 'rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700'
+                          }
+                        >
+                          {ACCOUNT_STATUS_LABELS[user.accountStatus]}
+                        </span>
+                        {user.isLocked ? (
+                          <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-800">
+                            Login locked
+                            {user.lockoutUntil
+                              ? ` until ${new Date(user.lockoutUntil).toLocaleString()}`
+                              : ''}
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex flex-wrap gap-2">
@@ -223,6 +249,15 @@ export function UsersPage() {
                         ) : null}
                         {can(PERMISSIONS.USER_UPDATE) ? (
                           <>
+                            {user.isLocked ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleUnlockLogin(user)}
+                                className="font-medium text-orange-700 hover:text-orange-800"
+                              >
+                                Unlock login
+                              </button>
+                            ) : null}
                             {user.accountStatus !== ACCOUNT_STATUSES.ACTIVE ? (
                               <button
                                 type="button"

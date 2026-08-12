@@ -15,9 +15,31 @@
   --color-brand-900: #020617;
 
   --color-surface: #f4f7f9;
+  --color-panel: #ffffff;
   --color-ink: #172033;
   --color-muted: #64748b;
   --color-line: #dce3ea;
+}
+
+/* URD: dark theme uses grey background (not pure black); keep brand slate accents. */
+html[data-theme="dark"] {
+  --color-brand-50: #3a4150;
+  --color-brand-100: #454d5e;
+  --color-brand-200: #5a6478;
+  --color-brand-300: #8b95a8;
+  --color-brand-400: #a8b0bf;
+  --color-brand-500: #c5ccd8;
+  --color-brand-600: #dbe1ea;
+  --color-brand-700: #eef2f7;
+  --color-brand-800: #f5f7fa;
+  --color-brand-900: #ffffff;
+
+  --color-surface: #3f4550;
+  --color-panel: #4a5160;
+  --color-ink: #f1f5f9;
+  --color-muted: #b0b8c6;
+  --color-line: #5c6575;
+  color-scheme: dark;
 }
 
 @layer base {

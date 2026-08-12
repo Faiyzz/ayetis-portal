@@ -1,6 +1,7 @@
 import type { AccountStatus, AccountType } from './account';
 import type { Permission } from './permissions';
 import type { Role } from './roles';
+import type { ThemePreference } from './security';
 
 export interface ApiSuccess<T> {
   success: true;
@@ -56,6 +57,14 @@ export interface PublicUser {
   passwordExpired: boolean;
   passwordChangedAt: string | null;
   passwordExpiresAt: string | null;
+  themePreference: ThemePreference;
+  /** Temporary login lockout end (ISO). Null when not locked. */
+  lockoutUntil: string | null;
+  /** True when lockoutUntil is in the future. */
+  isLocked: boolean;
+  lastLoginAt: string | null;
+  lastLoginIp: string | null;
+  lastLoginUserAgent: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -115,6 +124,12 @@ export interface ManagedUserDto {
   passwordExpired: boolean;
   passwordChangedAt: string | null;
   passwordExpiresAt: string | null;
+  themePreference: ThemePreference;
+  lockoutUntil: string | null;
+  isLocked: boolean;
+  lastLoginAt: string | null;
+  lastLoginIp: string | null;
+  lastLoginUserAgent: string | null;
   createdAt: string;
   updatedAt: string;
 }

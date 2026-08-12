@@ -116,9 +116,18 @@ export const changePasswordSchema = z.object({
   newPassword: passwordSchema,
 });
 
+export const updatePreferencesSchema = z
+  .object({
+    themePreference: z.enum(['light', 'dark']).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'At least one preference is required',
+  });
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ConfirmPasswordResetInput = z.infer<typeof confirmPasswordResetSchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type UpdatePreferencesInput = z.infer<typeof updatePreferencesSchema>;

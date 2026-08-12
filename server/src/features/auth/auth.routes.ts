@@ -9,6 +9,7 @@ import {
   forgotPasswordSchema,
   loginSchema,
   registerSchema,
+  updatePreferencesSchema,
   verifyEmailSchema,
 } from './auth.schemas';
 
@@ -43,6 +44,12 @@ router.post(
 );
 router.get('/confirm-password-reset', authLimiter, authController.confirmPasswordReset);
 router.get('/me', authenticate, authController.me);
+router.patch(
+  '/preferences',
+  authenticate,
+  validate(updatePreferencesSchema),
+  authController.updatePreferences,
+);
 router.post('/logout', authenticate, authController.logout);
 router.post(
   '/change-password',

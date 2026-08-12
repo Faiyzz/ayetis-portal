@@ -3,9 +3,12 @@ import {
   BRANDING_LOGO_SLOTS,
   COUNTRY_REQUEST_STATUSES,
   DEFAULT_CASE_SUBMISSION_TABS,
+  DEFAULT_LOGIN_LOCKOUT_MINUTES,
+  DEFAULT_LOGIN_MAX_FAILED_ATTEMPTS,
   DEFAULT_MAX_UPLOAD_BYTES,
   DEFAULT_REPORT_VISIBILITY,
   DEFAULT_REQUIRED_FIELDS,
+  DEFAULT_SESSION_IDLE_TIMEOUT_MINUTES,
   DEFAULT_SLA_HOURS_BY_SEGMENT,
   DEFAULT_SLA_WARNING_PERCENT,
   type CountryRequestStatus,
@@ -150,6 +153,9 @@ export interface IBusinessConfig extends Document {
     };
     warningPercent: number;
   };
+  sessionIdleTimeoutMinutes: number;
+  loginMaxFailedAttempts: number;
+  loginLockoutMinutes: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -183,6 +189,21 @@ const businessConfigSchema = new Schema<IBusinessConfig>(
         sub_account: { type: Number, default: DEFAULT_SLA_HOURS_BY_SEGMENT.sub_account },
       },
       warningPercent: { type: Number, default: DEFAULT_SLA_WARNING_PERCENT, min: 1, max: 100 },
+    },
+    sessionIdleTimeoutMinutes: {
+      type: Number,
+      default: DEFAULT_SESSION_IDLE_TIMEOUT_MINUTES,
+      min: 0,
+    },
+    loginMaxFailedAttempts: {
+      type: Number,
+      default: DEFAULT_LOGIN_MAX_FAILED_ATTEMPTS,
+      min: 1,
+    },
+    loginLockoutMinutes: {
+      type: Number,
+      default: DEFAULT_LOGIN_LOCKOUT_MINUTES,
+      min: 1,
     },
   },
   { timestamps: true },

@@ -116,6 +116,12 @@ export interface BusinessConfigDto {
   requiredFields: Record<string, boolean>;
   caseSubmissionTabs: Record<string, boolean>;
   reportVisibility: Record<string, boolean>;
+  /** Idle minutes before client logout (0 disables). */
+  sessionIdleTimeoutMinutes: number;
+  /** Failed password attempts before temporary lockout. */
+  loginMaxFailedAttempts: number;
+  /** Minutes the account stays locked after max failures. */
+  loginLockoutMinutes: number;
   updatedAt: string | null;
 }
 

@@ -5,7 +5,11 @@ import {
   ACCOUNT_TYPE_LABELS,
   AUDIT_ACTIONS,
   REGISTRATION_STATUSES,
+  THEMES,
   canLogin,
+  isThemePreference,
+  summarizeUserAgent,
+  type ThemePreference,
 } from '@ayetis/shared';
 import bcrypt from 'bcryptjs';
 import { env } from '../../config/env';
@@ -31,6 +35,7 @@ import {
   recordActivity,
   type RequestAuditContext,
 } from '../audit/audit.service';
+import { getBusinessConfig } from '../settings/settings.service';
 import { toPublicUserAsync } from '../users/users.service';
 import type {
   ChangePasswordInput,
@@ -262,6 +267,14 @@ export async function verifyEmail(input: VerifyEmailInput, ctx: RequestAuditCont
 
 export async function login(input: LoginInput, ctx: RequestAuditContext = {}) {
   const messages = await getSystemMessages();
+  const security = await getBusinessConfig();
+  const device = summarizeUserAgent(ctx.userAgent);
+  const auditMetaBase = {
+    ipAddress: ctx.ipAddress ?? null,
+    userAgent: ctx.userAgent ?? null,
+    device,
+  };
+
   const user = await User.findOne({ email: input.email }).select('+password');
   if (!user) {
     await recordActivity({
@@ -269,11 +282,33 @@ export async function login(input: LoginInput, ctx: RequestAuditContext = {}) {
       summary: `Failed login attempt for ${input.email}`,
       actorEmail: input.email,
       targetType: 'auth',
-      metadata: { reason: 'user_not_found' },
+      metadata: { reason: 'user_not_found', ...auditMetaBase },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
     throw new AppError('Invalid email or password', 401);
+  }
+
+  const now = new Date();
+  if (user.lockoutUntil && user.lockoutUntil > now) {
+    await recordActivity({
+      action: AUDIT_ACTIONS.AUTH_LOGIN_FAILED,
+      summary: `Failed login for locked account ${user.email}`,
+      ...actorFields(user),
+      targetType: 'auth',
+      targetId: user.id,
+      metadata: {
+        reason: 'locked',
+        lockoutUntil: user.lockoutUntil.toISOString(),
+        ...auditMetaBase,
+      },
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+    });
+    throw new AppError(
+      `Account temporarily locked due to too many failed sign-in attempts. Try again after ${user.lockoutUntil.toLocaleString()}.`,
+      423,
+    );
   }
 
   if (user.accountType !== input.accountType) {
@@ -287,6 +322,7 @@ export async function login(input: LoginInput, ctx: RequestAuditContext = {}) {
         reason: 'account_type_mismatch',
         expected: user.accountType,
         provided: input.accountType,
+        ...auditMetaBase,
       },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
@@ -304,7 +340,7 @@ export async function login(input: LoginInput, ctx: RequestAuditContext = {}) {
       ...actorFields(user),
       targetType: 'auth',
       targetId: user.id,
-      metadata: { reason: 'blocked' },
+      metadata: { reason: 'blocked', ...auditMetaBase },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
@@ -318,7 +354,7 @@ export async function login(input: LoginInput, ctx: RequestAuditContext = {}) {
       ...actorFields(user),
       targetType: 'auth',
       targetId: user.id,
-      metadata: { reason: 'pending_email_verification' },
+      metadata: { reason: 'pending_email_verification', ...auditMetaBase },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
@@ -332,7 +368,7 @@ export async function login(input: LoginInput, ctx: RequestAuditContext = {}) {
       ...actorFields(user),
       targetType: 'auth',
       targetId: user.id,
-      metadata: { reason: 'status', status: user.accountStatus },
+      metadata: { reason: 'status', status: user.accountStatus, ...auditMetaBase },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
@@ -341,18 +377,66 @@ export async function login(input: LoginInput, ctx: RequestAuditContext = {}) {
 
   const isMatch = await user.comparePassword(input.password);
   if (!isMatch) {
+    const attempts = (user.failedLoginAttempts ?? 0) + 1;
+    user.failedLoginAttempts = attempts;
+    user.lastFailedLoginAt = now;
+    const maxAttempts = security.loginMaxFailedAttempts;
+    let locked = false;
+    if (attempts >= maxAttempts) {
+      user.lockoutUntil = new Date(now.getTime() + security.loginLockoutMinutes * 60_000);
+      user.failedLoginAttempts = 0;
+      locked = true;
+    }
+    await user.save();
+
     await recordActivity({
       action: AUDIT_ACTIONS.AUTH_LOGIN_FAILED,
       summary: `Failed login attempt for ${user.email}`,
       ...actorFields(user),
       targetType: 'auth',
       targetId: user.id,
-      metadata: { reason: 'bad_password' },
+      metadata: {
+        reason: 'bad_password',
+        attempts: locked ? maxAttempts : attempts,
+        maxAttempts,
+        locked,
+        lockoutUntil: user.lockoutUntil ? user.lockoutUntil.toISOString() : null,
+        ...auditMetaBase,
+      },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
+
+    if (locked) {
+      await recordActivity({
+        action: AUDIT_ACTIONS.AUTH_ACCOUNT_LOCKED,
+        summary: `${user.email} locked after ${maxAttempts} failed sign-in attempts`,
+        ...actorFields(user),
+        targetType: 'user',
+        targetId: user.id,
+        metadata: {
+          lockoutUntil: user.lockoutUntil?.toISOString() ?? null,
+          lockoutMinutes: security.loginLockoutMinutes,
+          ...auditMetaBase,
+        },
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      });
+      throw new AppError(
+        `Account temporarily locked due to too many failed sign-in attempts. Try again after ${user.lockoutUntil!.toLocaleString()}.`,
+        423,
+      );
+    }
+
     throw new AppError('Invalid email or password', 401);
   }
+
+  user.failedLoginAttempts = 0;
+  user.lockoutUntil = null;
+  user.lastLoginAt = now;
+  user.lastLoginIp = ctx.ipAddress ?? null;
+  user.lastLoginUserAgent = ctx.userAgent ?? null;
+  await user.save();
 
   await recordActivity({
     action: AUDIT_ACTIONS.AUTH_LOGIN_SUCCESS,
@@ -360,12 +444,47 @@ export async function login(input: LoginInput, ctx: RequestAuditContext = {}) {
     ...actorFields(user),
     targetType: 'auth',
     targetId: user.id,
-    metadata: { accountStatus: user.accountStatus },
+    metadata: {
+      accountStatus: user.accountStatus,
+      ...auditMetaBase,
+    },
     ipAddress: ctx.ipAddress,
     userAgent: ctx.userAgent,
   });
 
   return buildAuthPayload(user);
+}
+
+export async function updatePreferences(
+  userId: string,
+  input: { themePreference?: ThemePreference },
+  ctx: RequestAuditContext = {},
+) {
+  const user = await User.findById(userId);
+  if (!user || user.accountStatus === ACCOUNT_STATUSES.BLOCKED) {
+    throw new AppError('User not found', 404);
+  }
+
+  if (input.themePreference !== undefined) {
+    if (!isThemePreference(input.themePreference)) {
+      throw new AppError('Invalid theme preference', 400);
+    }
+    user.themePreference = input.themePreference;
+  }
+
+  await user.save();
+  await recordActivity({
+    action: AUDIT_ACTIONS.AUTH_PREFERENCES_UPDATE,
+    summary: `${user.email} updated preferences`,
+    ...actorFields(user),
+    targetType: 'user',
+    targetId: user.id,
+    metadata: { themePreference: user.themePreference ?? THEMES.LIGHT },
+    ipAddress: ctx.ipAddress,
+    userAgent: ctx.userAgent,
+  });
+
+  return toPublicUserAsync(user);
 }
 
 export async function logout(userId: string, ctx: RequestAuditContext = {}) {

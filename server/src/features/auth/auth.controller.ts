@@ -136,3 +136,24 @@ export async function changePassword(
     next(error);
   }
 }
+
+export async function updatePreferences(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await authService.updatePreferences(
+      req.user!.id,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message: 'Preferences updated',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
