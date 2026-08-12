@@ -1,5 +1,5 @@
 import type { NextFunction, Response } from 'express';
-import type { Permission } from '@ayetis/shared';
+import type { Permission, ReportFilterQuery } from '@ayetis/shared';
 import type { AuthenticatedRequest } from '../../middleware/auth';
 import { AppError } from '../../utils/AppError';
 import { User } from '../../models/User';
@@ -15,10 +15,25 @@ async function actor(req: AuthenticatedRequest) {
   };
 }
 
-function periodQuery(req: AuthenticatedRequest) {
-  const month = typeof req.query.month === 'string' ? req.query.month : undefined;
-  const view = req.query.view === 'quarter' ? 'quarter' as const : 'month' as const;
-  return { month, view };
+function periodQuery(req: AuthenticatedRequest): ReportFilterQuery {
+  const str = (key: string) =>
+    typeof req.query[key] === 'string' ? String(req.query[key]) : undefined;
+  const sla = str('sla');
+  return {
+    month: str('month'),
+    view: req.query.view === 'quarter' ? ('quarter' as const) : ('month' as const),
+    from: str('from'),
+    to: str('to'),
+    doctor: str('doctor'),
+    customer: str('customer'),
+    supervisor: str('supervisor'),
+    consultant: str('consultant'),
+    designer: str('designer'),
+    qc: str('qc'),
+    priority: str('priority'),
+    status: str('status'),
+    sla: sla === 'breached' || sla === 'ok' ? sla : undefined,
+  };
 }
 
 export async function dashboard(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -87,7 +102,24 @@ export async function comparison(req: AuthenticatedRequest, res: Response, next:
 export async function exportCsv(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const report = String(req.params.report || '');
-    const result = await reportsService.exportReportCsv(await actor(req), report, periodQuery(req));
+    const format = String(req.query.format || 'csv');
+    const a = await actor(req);
+    const query = periodQuery(req);
+    if (format === 'xls' || format === 'excel') {
+      const result = await reportsService.exportReportExcel(a, report, query);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      res.send(result.xml);
+      return;
+    }
+    if (format === 'html' || format === 'pdf') {
+      const result = await reportsService.exportReportHtml(a, report, query);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', `inline; filename="${result.filename}"`);
+      res.send(result.html);
+      return;
+    }
+    const result = await reportsService.exportReportCsv(a, report, query);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
     res.send(result.csv);

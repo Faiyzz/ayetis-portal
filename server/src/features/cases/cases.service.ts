@@ -26,6 +26,7 @@ import {
   COORDINATOR_QUEUE_LABELS,
   COORDINATOR_QUEUES,
   DELAY_LEVELS,
+  EMAIL_TEMPLATE_KEYS,
   DOCTOR_DECISIONS,
   DOCTOR_DECISION_LABELS,
   EMPTY_TREATMENT_INSTRUCTIONS,
@@ -126,7 +127,7 @@ import { scanUploadedFile } from '../../services/malwareScan.service';
 import {
   caseDeliveredTemplate,
   caseEventTemplate,
-  sendTemplatedEmail,
+  sendCmsOrFallback,
 } from '../../services/email';
 import {
   recordActivity,
@@ -2840,6 +2841,7 @@ async function emailUsers(
     caseId: string;
     patientName?: string;
     ctaLabel?: string;
+    templateKey?: string;
   },
 ) {
   const unique = [...new Set(userIds.filter(Boolean))];
@@ -2848,21 +2850,35 @@ async function emailUsers(
     'email firstName lastName',
   );
   await Promise.all(
-    users.map((user) =>
-      sendTemplatedEmail(
+    users.map((user) => {
+      const recipientName = `${user.firstName} ${user.lastName}`.trim() || user.email;
+      const portalUrl = `${env.clientUrl}/app/cases/${input.caseId}`;
+      const patientLine = input.patientName ? ` (${input.patientName})` : '';
+      return sendCmsOrFallback(
         user.email,
+        input.templateKey ?? EMAIL_TEMPLATE_KEYS.CASE_EVENT,
+        {
+          recipientName,
+          subject: input.subject,
+          headline: input.headline,
+          caseId: input.caseId,
+          patientLine,
+          patientName: input.patientName ?? '',
+          message: input.message,
+          portalUrl,
+        },
         caseEventTemplate({
-          recipientName: `${user.firstName} ${user.lastName}`.trim() || user.email,
+          recipientName,
           subject: input.subject,
           headline: input.headline,
           message: input.message,
           caseId: input.caseId,
           patientName: input.patientName,
-          portalUrl: `${env.clientUrl}/app/cases/${input.caseId}`,
+          portalUrl,
           ctaLabel: input.ctaLabel,
         }),
-      ).catch(() => undefined),
-    ),
+      ).catch(() => undefined);
+    }),
   );
 }
 
@@ -3080,8 +3096,22 @@ export async function approveQcCase(
   });
 
   try {
-    await sendTemplatedEmail(
+    const deliveryNote = [
+      deliveryVideoStorageKey ? 'A video explanation is available.' : '',
+      deliveryViewLink ? 'A view link is available.' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    await sendCmsOrFallback(
       caseDoc.doctorEmail,
+      EMAIL_TEMPLATE_KEYS.CASE_DELIVERED,
+      {
+        doctorName: caseDoc.doctorName,
+        caseId: caseDoc.caseId,
+        patientName: caseDoc.patientName,
+        deliveryNote,
+        portalUrl,
+      },
       caseDeliveredTemplate({
         doctorName: caseDoc.doctorName,
         caseId: caseDoc.caseId,
@@ -3831,6 +3861,7 @@ export async function assignCase(
       message: `${actorName(actor)} assigned case ${caseDoc.caseId} (${caseDoc.patientName}) to you.`,
       caseId: caseDoc.caseId,
       patientName: caseDoc.patientName,
+      templateKey: EMAIL_TEMPLATE_KEYS.CASE_ASSIGNED,
     });
   } else if (input.mode === 'auto_queue') {
     const designerIds = await findUserIdsByRoles([ROLES.DESIGNER]);
@@ -3857,6 +3888,7 @@ export async function assignCase(
       message: `${actorName(actor)} assigned case ${caseDoc.caseId} (${caseDoc.patientName}) for cutting.`,
       caseId: caseDoc.caseId,
       patientName: caseDoc.patientName,
+      templateKey: EMAIL_TEMPLATE_KEYS.CASE_ASSIGNED,
     });
   } else if (input.mode === 'cut_auto_queue') {
     const operatorIds = await findUserIdsByRoles(['cut_operator']);

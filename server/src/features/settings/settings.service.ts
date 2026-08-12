@@ -12,6 +12,12 @@ import {
   DEFAULT_SLA_WARNING_PERCENT,
   GENDER_OPTIONS,
   MASTER_LIST_TYPES,
+  URD_ACADEMIC_TITLES,
+  URD_DIAL_CODES,
+  URD_LANGUAGES,
+  URD_PROFESSION_SPECIALIZATIONS,
+  URD_PROFESSIONS,
+  regionCodeForCountry,
   hoursForSlaSegment,
   mergeTemplatePlaceholders,
   resolveSlaAccountSegment,
@@ -133,7 +139,16 @@ export async function seedSettingsData(): Promise<void> {
   const weU = await Region.findOne({ code: 'WEU' });
   const latam = await Region.findOne({ code: 'LATAM' });
 
+  const regionByCode: Record<string, typeof nam> = {
+    NAM: nam,
+    APAC: apac,
+    CEMEA: cemEA,
+    LATAM: latam,
+    WEU: weU,
+  };
   const regionFor = (name: string) => {
+    const code = regionCodeForCountry(name);
+    if (code && regionByCode[code]?._id) return regionByCode[code]?._id;
     if (['United States', 'Canada', 'Mexico'].includes(name)) return nam?._id;
     if (
       [
@@ -198,10 +213,12 @@ export async function seedSettingsData(): Promise<void> {
         $setOnInsert: {
           code,
           name,
-          regionId: regionFor(name),
           isActive: true,
           isOther: false,
-          dialCode: undefined,
+        },
+        $set: {
+          regionId: regionFor(name),
+          ...(URD_DIAL_CODES[name] ? { dialCode: URD_DIAL_CODES[name] } : {}),
         },
       },
       { upsert: true },
@@ -238,7 +255,7 @@ export async function seedSettingsData(): Promise<void> {
     );
   }
 
-  const languages = ['English', 'Arabic', 'French', 'Spanish', 'German', 'Portuguese', 'Chinese'];
+  const languages = [...URD_LANGUAGES];
   sort = 0;
   for (const label of languages) {
     await MasterListItem.findOneAndUpdate(
@@ -256,7 +273,7 @@ export async function seedSettingsData(): Promise<void> {
     );
   }
 
-  const professions = ['Dentist', 'Orthodontist', 'Oral Surgeon', 'Lab Technician', 'Other'];
+  const professions = [...URD_PROFESSIONS];
   sort = 0;
   for (const label of professions) {
     await MasterListItem.findOneAndUpdate(
@@ -274,7 +291,24 @@ export async function seedSettingsData(): Promise<void> {
     );
   }
 
-  const titles = ['Dr', 'Prof', 'Mr', 'Mrs', 'Ms', 'Other'];
+  sort = 0;
+  for (const label of URD_PROFESSION_SPECIALIZATIONS) {
+    await MasterListItem.findOneAndUpdate(
+      { type: MASTER_LIST_TYPES.PROFESSION_SPECIALIZATION, label },
+      {
+        $setOnInsert: {
+          type: MASTER_LIST_TYPES.PROFESSION_SPECIALIZATION,
+          code: slugCode(label),
+          label,
+          sortOrder: sort++,
+          isActive: true,
+        },
+      },
+      { upsert: true },
+    );
+  }
+
+  const titles = [...URD_ACADEMIC_TITLES];
   sort = 0;
   for (const label of titles) {
     await MasterListItem.findOneAndUpdate(

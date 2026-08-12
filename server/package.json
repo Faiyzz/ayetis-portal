@@ -6,7 +6,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "seed": "tsx src/scripts/seed.ts"
+    "seed": "tsx src/scripts/seed.ts",
+    "uat:assert": "tsx src/scripts/uatAssert.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1095.0",

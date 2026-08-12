@@ -8,7 +8,9 @@ import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 import { RegistrationsPage } from '@/features/auth/pages/RegistrationsPage';
 import { VerifyEmailPage } from '@/features/auth/pages/VerifyEmailPage';
+import { CorporateAuditPage } from '@/features/corporate/pages/CorporateAuditPage';
 import { CorporateDashboardPage } from '@/features/corporate/pages/CorporateDashboardPage';
+import { CorporateReportsPage } from '@/features/corporate/pages/CorporateReportsPage';
 import { CorporateEmployeesPage } from '@/features/corporate/pages/CorporateEmployeesPage';
 import { CorporateFacilitiesPage } from '@/features/corporate/pages/CorporateFacilitiesPage';
 import { CorporateProfilePage } from '@/features/corporate/pages/CorporateProfilePage';
@@ -162,11 +164,15 @@ export function AppRouter() {
                   PERMISSIONS.SUBACCOUNT_MANAGE,
                   PERMISSIONS.CASE_VIEW_ORG,
                   PERMISSIONS.CASE_VIEW_ALL,
+                  PERMISSIONS.CORPORATE_REPORT_VIEW,
+                  PERMISSIONS.CORPORATE_AUDIT_VIEW,
                 ]}
               />
             }
           >
             <Route path="corporate" element={<CorporateDashboardPage />} />
+            <Route path="corporate/reports" element={<CorporateReportsPage />} />
+            <Route path="corporate/audit" element={<CorporateAuditPage />} />
             <Route path="corporate/profile" element={<CorporateProfilePage />} />
             <Route path="corporate/facilities" element={<CorporateFacilitiesPage />} />
             <Route path="corporate/employees" element={<CorporateEmployeesPage />} />

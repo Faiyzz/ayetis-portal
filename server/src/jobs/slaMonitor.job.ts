@@ -4,11 +4,15 @@
 
 import {
   CASE_STATUSES,
+  EMAIL_TEMPLATE_KEYS,
   NOTIFICATION_TYPES,
 } from '@ayetis/shared';
+import { env } from '../config/env';
 import { Case } from '../models/Case';
+import { User } from '../models/User';
 import { createNotificationsForUsers } from '../features/notifications/notifications.service';
 import { getSlaConfig } from '../features/settings/settings.service';
+import { caseEventTemplate, sendCmsOrFallback } from '../services/email';
 import { slaUtilizationPercent } from '../utils/businessHours';
 
 const INTERVAL_MS = 60_000;
@@ -26,6 +30,37 @@ function recipientIds(caseDoc: {
   if (caseDoc.assignedConsultantId) ids.push(String(caseDoc.assignedConsultantId));
   if (caseDoc.assignedCutOperatorId) ids.push(String(caseDoc.assignedCutOperatorId));
   return ids;
+}
+
+async function emailSla(
+  userIds: string[],
+  templateKey: string,
+  caseId: string,
+  headline: string,
+  message: string,
+) {
+  const users = await User.find({ _id: { $in: userIds }, isActive: { $ne: false } }).select(
+    'email firstName lastName',
+  );
+  const portalUrl = `${env.clientUrl}/app/cases/${caseId}`;
+  await Promise.all(
+    users.map((user) => {
+      const recipientName = `${user.firstName} ${user.lastName}`.trim() || user.email;
+      return sendCmsOrFallback(
+        user.email,
+        templateKey,
+        { recipientName, caseId, portalUrl },
+        caseEventTemplate({
+          recipientName,
+          subject: `${headline} — Case ${caseId}`,
+          headline,
+          message,
+          caseId,
+          portalUrl,
+        }),
+      ).catch(() => undefined);
+    }),
+  );
 }
 
 export async function runSlaMonitorSweep(): Promise<{ warnings: number; breaches: number }> {
@@ -68,6 +103,13 @@ export async function runSlaMonitorSweep(): Promise<{ warnings: number; breaches
         link: `/app/cases/${caseDoc.caseId}`,
         caseId: caseDoc.caseId,
       });
+      await emailSla(
+        users,
+        EMAIL_TEMPLATE_KEYS.SLA_BREACH,
+        caseDoc.caseId,
+        'SLA breached',
+        `Case ${caseDoc.caseId} has exceeded its SLA.`,
+      );
       breaches += 1;
       continue;
     }
@@ -86,6 +128,13 @@ export async function runSlaMonitorSweep(): Promise<{ warnings: number; breaches
         link: `/app/cases/${caseDoc.caseId}`,
         caseId: caseDoc.caseId,
       });
+      await emailSla(
+        users,
+        EMAIL_TEMPLATE_KEYS.SLA_WARNING,
+        caseDoc.caseId,
+        'SLA warning',
+        `Case ${caseDoc.caseId} is approaching its SLA deadline.`,
+      );
       warnings += 1;
     }
   }

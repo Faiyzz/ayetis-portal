@@ -221,6 +221,8 @@ function buildNavItems(
               PERMISSIONS.SUBACCOUNT_MANAGE,
               PERMISSIONS.CASE_VIEW_ORG,
               PERMISSIONS.CASE_VIEW_ALL,
+              PERMISSIONS.CORPORATE_REPORT_VIEW,
+              PERMISSIONS.CORPORATE_AUDIT_VIEW,
             ],
             isActive: (pathname: string) => pathname.startsWith('/app/corporate'),
             children: [
@@ -251,6 +253,20 @@ function buildNavItems(
                 to: '/app/corporate/subaccounts',
                 icon: <IconPlus className="h-3.5 w-3.5" />,
                 isActive: (pathname: string) => pathname.startsWith('/app/corporate/subaccounts'),
+              },
+              {
+                id: 'corp-reports',
+                label: 'Reports',
+                to: '/app/corporate/reports',
+                icon: <IconList className="h-3.5 w-3.5" />,
+                isActive: (pathname: string) => pathname.startsWith('/app/corporate/reports'),
+              },
+              {
+                id: 'corp-audit',
+                label: 'Audit',
+                to: '/app/corporate/audit',
+                icon: <IconActivity className="h-3.5 w-3.5" />,
+                isActive: (pathname: string) => pathname.startsWith('/app/corporate/audit'),
               },
             ],
           } satisfies NavItem,
@@ -543,6 +559,8 @@ export function AppShell() {
     PERMISSIONS.SUBACCOUNT_MANAGE,
     PERMISSIONS.CASE_VIEW_ORG,
     PERMISSIONS.CASE_VIEW_ALL,
+    PERMISSIONS.CORPORATE_REPORT_VIEW,
+    PERMISSIONS.CORPORATE_AUDIT_VIEW,
   );
   const canViewComplaints = canAny(
     PERMISSIONS.COMPLAINT_CREATE,

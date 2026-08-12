@@ -203,6 +203,36 @@ export async function createSubAccount(
   }
 }
 
+export async function insights(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const organizationId =
+      typeof req.query.organizationId === 'string' ? req.query.organizationId : undefined;
+    const data = await corporateService.getCorporateInsights(await actor(req), organizationId);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function audit(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const organizationId =
+      typeof req.query.organizationId === 'string' ? req.query.organizationId : undefined;
+    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+    const page = req.query.page ? Number(req.query.page) : undefined;
+    const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
+    const data = await corporateService.listCorporateAudit(await actor(req), {
+      organizationId,
+      q,
+      page,
+      pageSize,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function verifySubAccount(
   req: AuthenticatedRequest,
   res: Response,

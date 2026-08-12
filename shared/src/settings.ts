@@ -184,6 +184,13 @@ export const EMAIL_TEMPLATE_KEYS = {
   EMAIL_VERIFICATION: 'email_verification',
   PASSWORD_RESET: 'password_reset',
   ACCOUNT_BLOCKED: 'account_blocked',
+  CASE_EVENT: 'case_event',
+  CASE_DELIVERED: 'case_delivered',
+  CASE_ASSIGNED: 'case_assigned',
+  CLARIFICATION_REQUIRED: 'clarification_required',
+  CLARIFICATION_REPLIED: 'clarification_replied',
+  SLA_WARNING: 'sla_warning',
+  SLA_BREACH: 'sla_breach',
 } as const;
 
 export type EmailTemplateKey =
@@ -243,6 +250,77 @@ export const DEFAULT_EMAIL_TEMPLATE_DEFS: Array<{
     htmlBody:
       '<p>Hello {{firstName}},</p><p>Your account has been temporarily blocked. Contact your POC.</p>',
     placeholders: ['firstName'],
+  },
+  {
+    key: EMAIL_TEMPLATE_KEYS.CASE_EVENT,
+    name: 'Case status / workflow event',
+    subject: '{{subject}}',
+    htmlBody:
+      '<p>Hello {{recipientName}},</p><p>{{headline}}</p><p>Case <strong>{{caseId}}</strong>{{patientLine}}</p><p>{{message}}</p><p><a href="{{portalUrl}}">Open case</a></p>',
+    placeholders: [
+      'recipientName',
+      'subject',
+      'headline',
+      'caseId',
+      'patientLine',
+      'message',
+      'portalUrl',
+    ],
+  },
+  {
+    key: EMAIL_TEMPLATE_KEYS.CASE_DELIVERED,
+    name: 'Case delivered for doctor review',
+    subject: 'Case {{caseId}} is ready for your review',
+    htmlBody:
+      '<p>Hello {{doctorName}},</p><p>Case <strong>{{caseId}}</strong> ({{patientName}}) has been delivered. {{deliveryNote}}</p><p><a href="{{portalUrl}}">Open case</a></p>',
+    placeholders: ['doctorName', 'caseId', 'patientName', 'deliveryNote', 'portalUrl'],
+  },
+  {
+    key: EMAIL_TEMPLATE_KEYS.CASE_ASSIGNED,
+    name: 'Case assigned',
+    subject: 'Case {{caseId}} assigned to you',
+    htmlBody:
+      '<p>Hello {{recipientName}},</p><p>Case <strong>{{caseId}}</strong> has been assigned. {{message}}</p><p><a href="{{portalUrl}}">Open case</a></p>',
+    placeholders: ['recipientName', 'caseId', 'message', 'portalUrl'],
+  },
+  {
+    key: EMAIL_TEMPLATE_KEYS.CLARIFICATION_REQUIRED,
+    name: 'Clarification required',
+    subject: 'Clarification Required for Case ID: {{caseId}}',
+    htmlBody:
+      '<p>Hello {{doctorName}},</p><p>Additional information is required for case <strong>{{caseId}}</strong> ({{patientName}}).</p><p><strong>{{subject}}</strong></p><p>{{requiredInfo}}</p><p><a href="{{portalUrl}}">Respond in portal</a></p>',
+    placeholders: [
+      'doctorName',
+      'caseId',
+      'patientName',
+      'subject',
+      'requiredInfo',
+      'portalUrl',
+    ],
+  },
+  {
+    key: EMAIL_TEMPLATE_KEYS.CLARIFICATION_REPLIED,
+    name: 'Clarification reply received',
+    subject: 'Doctor has responded to clarification — Case {{caseId}}',
+    htmlBody:
+      '<p>Hello {{recipientName}},</p><p>A reply was received for case <strong>{{caseId}}</strong>.</p><p>{{replyPreview}}</p><p><a href="{{portalUrl}}">Open clarification</a></p>',
+    placeholders: ['recipientName', 'caseId', 'replyPreview', 'portalUrl'],
+  },
+  {
+    key: EMAIL_TEMPLATE_KEYS.SLA_WARNING,
+    name: 'SLA warning',
+    subject: 'SLA warning — Case {{caseId}}',
+    htmlBody:
+      '<p>Hello {{recipientName}},</p><p>Case <strong>{{caseId}}</strong> is approaching its SLA deadline.</p><p><a href="{{portalUrl}}">Open case</a></p>',
+    placeholders: ['recipientName', 'caseId', 'portalUrl'],
+  },
+  {
+    key: EMAIL_TEMPLATE_KEYS.SLA_BREACH,
+    name: 'SLA breach',
+    subject: 'SLA breached — Case {{caseId}}',
+    htmlBody:
+      '<p>Hello {{recipientName}},</p><p>Case <strong>{{caseId}}</strong> has exceeded its SLA.</p><p><a href="{{portalUrl}}">Open case</a></p>',
+    placeholders: ['recipientName', 'caseId', 'portalUrl'],
   },
 ];
 

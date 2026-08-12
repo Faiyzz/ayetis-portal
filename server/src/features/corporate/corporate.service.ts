@@ -19,7 +19,9 @@ import {
   type OrganizationStatus,
   type UpdateFacilityInput,
   type UpdateOrganizationInput,
+  CASE_STATUS_LABELS,
   type CorporateDashboardDto,
+  type CorporateInsightsDto,
   type Permission,
   type Role,
 } from '@ayetis/shared';
@@ -107,7 +109,9 @@ async function assertOrgAccess(actor: CorporateActor, organizationId: string) {
   if (
     permissionsInclude(actor.permissions, PERMISSIONS.ORG_MANAGE_SELF) ||
     permissionsInclude(actor.permissions, PERMISSIONS.FACILITY_MANAGE) ||
-    permissionsInclude(actor.permissions, PERMISSIONS.SUBACCOUNT_MANAGE)
+    permissionsInclude(actor.permissions, PERMISSIONS.SUBACCOUNT_MANAGE) ||
+    permissionsInclude(actor.permissions, PERMISSIONS.CORPORATE_REPORT_VIEW) ||
+    permissionsInclude(actor.permissions, PERMISSIONS.CORPORATE_AUDIT_VIEW)
   ) {
     if (actor.organizationId && actor.organizationId === organizationId) {
       return Organization.findById(organizationId);
@@ -646,6 +650,152 @@ export async function getCorporateDashboard(
 export async function listOrganizationsForAdmin() {
   const orgs = await Organization.find().sort({ companyName: 1 });
   return orgs.map(orgDto);
+}
+
+export async function getCorporateInsights(
+  actor: CorporateActor,
+  organizationId?: string,
+): Promise<CorporateInsightsDto> {
+  if (
+    !permissionsInclude(actor.permissions, PERMISSIONS.CORPORATE_REPORT_VIEW) &&
+    actor.role !== ROLES.ADMIN
+  ) {
+    throw new AppError('You do not have permission to view corporate reports', 403);
+  }
+  const id =
+    organizationId && actor.role === ROLES.ADMIN
+      ? organizationId
+      : await resolveActorOrganizationId(actor);
+  const org = await assertOrgAccess(actor, id);
+  if (!org) throw new AppError('Organization not found', 404);
+
+  const orgObjectId = org._id as Types.ObjectId;
+  const cases = await Case.find({
+    organizationId: orgObjectId,
+    isDeleted: { $ne: true },
+  }).select(
+    'status facilityId doctorId doctorName doctorDecision slaDeadlineAt createdAt',
+  );
+
+  const now = new Date();
+  const byStatusMap = new Map<string, number>();
+  const byFacilityMap = new Map<string, number>();
+  const byDoctorMap = new Map<
+    string,
+    { doctorName: string; count: number; approved: number; modifications: number }
+  >();
+  let slaBreached = 0;
+  let openCases = 0;
+  let approved = 0;
+  let cancelled = 0;
+
+  const facilities = await Facility.find({ organizationId: orgObjectId }).select('name');
+  const facilityNames = new Map(facilities.map((f) => [String(f._id), f.name]));
+
+  for (const caseDoc of cases) {
+    byStatusMap.set(caseDoc.status, (byStatusMap.get(caseDoc.status) ?? 0) + 1);
+    if (
+      caseDoc.status !== CASE_STATUSES.APPROVED &&
+      caseDoc.status !== CASE_STATUSES.CANCELLED
+    ) {
+      openCases += 1;
+    }
+    if (caseDoc.status === CASE_STATUSES.APPROVED) approved += 1;
+    if (caseDoc.status === CASE_STATUSES.CANCELLED) cancelled += 1;
+    if (
+      caseDoc.slaDeadlineAt &&
+      caseDoc.slaDeadlineAt < now &&
+      caseDoc.status !== CASE_STATUSES.APPROVED &&
+      caseDoc.status !== CASE_STATUSES.CANCELLED
+    ) {
+      slaBreached += 1;
+    }
+    if (caseDoc.facilityId) {
+      const fid = String(caseDoc.facilityId);
+      byFacilityMap.set(fid, (byFacilityMap.get(fid) ?? 0) + 1);
+    }
+    const did = String(caseDoc.doctorId);
+    const doctor = byDoctorMap.get(did) ?? {
+      doctorName: caseDoc.doctorName,
+      count: 0,
+      approved: 0,
+      modifications: 0,
+    };
+    doctor.count += 1;
+    if (caseDoc.doctorDecision === 'approve') doctor.approved += 1;
+    if (caseDoc.doctorDecision === 'request_modification') doctor.modifications += 1;
+    byDoctorMap.set(did, doctor);
+  }
+
+  return {
+    organizationId: org.id,
+    companyName: org.companyName,
+    period: {
+      view: 'month',
+      periodKey: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`,
+      periodLabel: 'All time',
+      availableMonths: [],
+    },
+    totalCases: cases.length,
+    openCases,
+    approved,
+    cancelled,
+    slaBreached,
+    byStatus: [...byStatusMap.entries()].map(([status, count]) => ({
+      status,
+      label: CASE_STATUS_LABELS[status as keyof typeof CASE_STATUS_LABELS] ?? status,
+      count,
+    })),
+    byFacility: [...byFacilityMap.entries()].map(([facilityId, count]) => ({
+      facilityId,
+      name: facilityNames.get(facilityId) ?? 'Unassigned facility',
+      count,
+    })),
+    byDoctor: [...byDoctorMap.entries()].map(([doctorId, row]) => ({
+      doctorId,
+      ...row,
+    })),
+  };
+}
+
+export async function listCorporateAudit(
+  actor: CorporateActor,
+  query: { page?: number; pageSize?: number; q?: string; organizationId?: string } = {},
+) {
+  if (
+    !permissionsInclude(actor.permissions, PERMISSIONS.CORPORATE_AUDIT_VIEW) &&
+    actor.role !== ROLES.ADMIN
+  ) {
+    throw new AppError('You do not have permission to view corporate audit', 403);
+  }
+  const id =
+    query.organizationId && actor.role === ROLES.ADMIN
+      ? query.organizationId
+      : await resolveActorOrganizationId(actor);
+  const org = await assertOrgAccess(actor, id);
+  if (!org) throw new AppError('Organization not found', 404);
+
+  const members = await User.find({ organizationId: org._id }).select('email');
+  const emails = members.map((m) => m.email.toLowerCase());
+  const caseIds = await Case.find({ organizationId: org._id, isDeleted: { $ne: true } })
+    .select('caseId')
+    .limit(1000);
+  const { listActivityLogs } = await import('../audit/audit.service');
+  const result = await listActivityLogs({
+    page: query.page,
+    pageSize: query.pageSize,
+    q: query.q,
+    actorEmails: emails,
+    targetIds: caseIds.map((c) => c.caseId),
+  });
+  return {
+    organizationId: org.id,
+    companyName: org.companyName,
+    items: result.items,
+    total: result.total,
+    page: result.page,
+    pageSize: result.pageSize,
+  };
 }
 
 /** Helper for loading actor org fields from User doc */

@@ -36,6 +36,18 @@ router.get(
 );
 
 router.get(
+  '/reports',
+  requireAnyPermission(PERMISSIONS.CORPORATE_REPORT_VIEW, PERMISSIONS.CASE_VIEW_ALL),
+  corporateController.insights,
+);
+
+router.get(
+  '/audit',
+  requireAnyPermission(PERMISSIONS.CORPORATE_AUDIT_VIEW, PERMISSIONS.AUDIT_VIEW),
+  corporateController.audit,
+);
+
+router.get(
   '/organizations',
   requirePermission(PERMISSIONS.CASE_VIEW_ALL),
   corporateController.listOrganizations,

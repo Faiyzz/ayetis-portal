@@ -2,6 +2,7 @@ import {
   NOTIFICATION_CHANNELS,
   NOTIFICATION_CHANNEL_LABELS,
   NOTIFICATION_TYPE_LABELS,
+  notificationCatalog,
   type NotificationChannel,
   type NotificationDto,
   type NotificationUnreadByChannel,
@@ -164,6 +165,24 @@ export function NotificationCenterPage() {
           </AuthButton>
         </div>
       </div>
+
+      <section className="rounded-xl border border-line bg-white p-5">
+        <h2 className="text-sm font-semibold text-ink">Notification catalog</h2>
+        <p className="mt-1 text-sm text-muted">
+          In-app types, channel, and CMS email template when the event also sends mail.
+        </p>
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2 text-sm">
+          {notificationCatalog().map((item) => (
+            <li key={item.type} className="rounded-lg border border-line px-3 py-2">
+              <p className="font-medium text-ink">{item.label}</p>
+              <p className="text-xs text-muted">
+                {NOTIFICATION_CHANNEL_LABELS[item.channel]}
+                {item.emailTemplateKey ? ` · email: ${item.emailTemplateKey}` : ' · in-app only'}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section className="rounded-xl border border-line bg-white p-5">
         {loading ? <p className="text-sm text-muted">Loading…</p> : null}

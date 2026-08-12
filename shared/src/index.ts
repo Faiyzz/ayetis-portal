@@ -29,3 +29,4 @@ export * from './reports';
 export * from './password';
 export * from './security';
 export * from './storage';
+export * from './urdMasterData';

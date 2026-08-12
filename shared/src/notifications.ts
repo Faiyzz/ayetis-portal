@@ -81,3 +81,19 @@ export interface NotificationListResult {
 export function isNotificationType(value: string): value is NotificationType {
   return (ALL_NOTIFICATION_TYPES as string[]).includes(value);
 }
+
+/** In-app type → CMS email template key (empty = in-app only). */
+export const NOTIFICATION_EMAIL_TEMPLATE: Partial<Record<NotificationType, string>> = {
+  [NOTIFICATION_TYPES.CASE_ASSIGNED]: 'case_assigned',
+  [NOTIFICATION_TYPES.CASE_CUT_ASSIGNED]: 'case_assigned',
+  [NOTIFICATION_TYPES.CASE_DELIVERED]: 'case_delivered',
+  [NOTIFICATION_TYPES.CASE_SUBMITTED]: 'case_event',
+  [NOTIFICATION_TYPES.CASE_QC_REJECTED]: 'case_event',
+  [NOTIFICATION_TYPES.CASE_QC_APPROVED]: 'case_event',
+  [NOTIFICATION_TYPES.CASE_STATUS_CHANGED]: 'case_event',
+  [NOTIFICATION_TYPES.CASE_ESCALATED]: 'case_event',
+  [NOTIFICATION_TYPES.CLARIFICATION_REQUIRED]: 'clarification_required',
+  [NOTIFICATION_TYPES.CLARIFICATION_REPLIED]: 'clarification_replied',
+  [NOTIFICATION_TYPES.SLA_WARNING]: 'sla_warning',
+  [NOTIFICATION_TYPES.SLA_BREACH]: 'sla_breach',
+};

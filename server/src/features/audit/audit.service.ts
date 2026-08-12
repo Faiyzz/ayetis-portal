@@ -86,6 +86,8 @@ export async function listActivityLogs(query: {
   pageSize?: number;
   action?: AuditAction;
   actorEmail?: string;
+  actorEmails?: string[];
+  targetIds?: string[];
   q?: string;
   from?: string;
   to?: string;
@@ -102,15 +104,30 @@ export async function listActivityLogs(query: {
     filter.actorEmail = query.actorEmail.toLowerCase().trim();
   }
 
+  const and: Record<string, unknown>[] = [];
+  if (query.actorEmails?.length || query.targetIds?.length) {
+    const scoped: Record<string, unknown>[] = [];
+    if (query.actorEmails?.length) {
+      scoped.push({ actorEmail: { $in: query.actorEmails.map((e) => e.toLowerCase()) } });
+    }
+    if (query.targetIds?.length) {
+      scoped.push({ targetId: { $in: query.targetIds } });
+    }
+    and.push({ $or: scoped });
+  }
+
   if (query.q?.trim()) {
     const term = query.q.trim();
-    filter.$or = [
-      { summary: { $regex: term, $options: 'i' } },
-      { actorEmail: { $regex: term, $options: 'i' } },
-      { actorName: { $regex: term, $options: 'i' } },
-      { targetId: { $regex: term, $options: 'i' } },
-    ];
+    and.push({
+      $or: [
+        { summary: { $regex: term, $options: 'i' } },
+        { actorEmail: { $regex: term, $options: 'i' } },
+        { actorName: { $regex: term, $options: 'i' } },
+        { targetId: { $regex: term, $options: 'i' } },
+      ],
+    });
   }
+  if (and.length) filter.$and = and;
 
   const createdAt: Record<string, Date> = {};
   if (query.from) {

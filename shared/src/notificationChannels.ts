@@ -3,7 +3,13 @@
  * Status Alerts (bell) vs Clarification notifications — independent unread/mark-read.
  */
 
-import { NOTIFICATION_TYPES, type NotificationType } from './notifications';
+import {
+  ALL_NOTIFICATION_TYPES,
+  NOTIFICATION_EMAIL_TEMPLATE,
+  NOTIFICATION_TYPE_LABELS,
+  NOTIFICATION_TYPES,
+  type NotificationType,
+} from './notifications';
 
 export const NOTIFICATION_CHANNELS = {
   STATUS_ALERTS: 'status_alerts',
@@ -47,4 +53,20 @@ export function typesForNotificationChannel(channel: NotificationChannel): Notif
   return Object.values(NOTIFICATION_TYPES).filter(
     (type) => !(CLARIFICATION_NOTIFICATION_TYPES as string[]).includes(type),
   );
+}
+
+export interface NotificationCatalogItem {
+  type: NotificationType;
+  label: string;
+  channel: NotificationChannel;
+  emailTemplateKey: string | null;
+}
+
+export function notificationCatalog(): NotificationCatalogItem[] {
+  return ALL_NOTIFICATION_TYPES.map((type) => ({
+    type,
+    label: NOTIFICATION_TYPE_LABELS[type],
+    channel: notificationChannelForType(type),
+    emailTemplateKey: NOTIFICATION_EMAIL_TEMPLATE[type] ?? null,
+  }));
 }

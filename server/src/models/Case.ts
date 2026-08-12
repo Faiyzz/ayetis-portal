@@ -625,6 +625,10 @@ caseSchema.index({ escalatedForOversight: 1, updatedAt: -1 });
 caseSchema.index({ assignedConsultantId: 1, updatedAt: -1 });
 caseSchema.index({ consultantIndicator: 1, updatedAt: -1 });
 caseSchema.index({ cutPhase: 1, cutAssignmentMode: 1, assignedCutOperatorId: 1 });
+caseSchema.index({ organizationId: 1, createdAt: -1 });
+caseSchema.index({ doctorId: 1, createdAt: -1 });
+caseSchema.index({ assignedDesignerId: 1, status: 1 });
+caseSchema.index({ slaDeadlineAt: 1, status: 1 });
 
 caseSchema.post('init', function trackStatusBaseline(doc) {
   (doc as ICase & { _statusBaseline?: string })._statusBaseline = doc.status;

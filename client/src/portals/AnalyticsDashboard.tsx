@@ -1,4 +1,10 @@
-import type { AnalyticsDashboardDto } from '@ayetis/shared';
+import {
+  ALL_CASE_PRIORITIES,
+  ALL_CASE_STATUSES,
+  CASE_PRIORITY_LABELS,
+  CASE_STATUS_LABELS,
+  type AnalyticsDashboardDto,
+} from '@ayetis/shared';
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { AuthButton } from '@/features/auth/components/AuthUI';
@@ -28,13 +34,39 @@ export function AnalyticsDashboard({ firstName }: { firstName: string }) {
     | 'supervisor'
     | 'comparison'
     | 'clarifications'
+    | 'doctors'
   >('pipeline');
+  const [doctor, setDoctor] = useState('');
+  const [customer, setCustomer] = useState('');
+  const [designer, setDesigner] = useState('');
+  const [consultant, setConsultant] = useState('');
+  const [qc, setQc] = useState('');
+  const [supervisor, setSupervisor] = useState('');
+  const [priority, setPriority] = useState('');
+  const [status, setStatus] = useState('');
+  const [sla, setSla] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
 
   async function load(nextMonth = month, nextView = view) {
     setLoading(true);
     try {
       const { data: res } = await api.get('/reports/dashboard', {
-        params: { month: nextMonth, view: nextView },
+        params: {
+          month: nextMonth,
+          view: nextView,
+          doctor: doctor || undefined,
+          customer: customer || undefined,
+          designer: designer || undefined,
+          consultant: consultant || undefined,
+          qc: qc || undefined,
+          supervisor: supervisor || undefined,
+          priority: priority || undefined,
+          status: status || undefined,
+          sla: sla || undefined,
+          from: from || undefined,
+          to: to || undefined,
+        },
       });
       setData(res.data);
       if (!nextMonth) setMonth(res.data.period.periodKey);
@@ -50,25 +82,50 @@ export function AnalyticsDashboard({ firstName }: { firstName: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function exportCsv(report: string) {
+  function exportParams(format?: string) {
+    return {
+      month,
+      view,
+      format,
+      doctor: doctor || undefined,
+      customer: customer || undefined,
+      designer: designer || undefined,
+      consultant: consultant || undefined,
+      qc: qc || undefined,
+      supervisor: supervisor || undefined,
+      priority: priority || undefined,
+      status: status || undefined,
+      sla: sla || undefined,
+      from: from || undefined,
+      to: to || undefined,
+    };
+  }
+
+  async function exportCsv(report: string, format: 'csv' | 'xls' | 'html' = 'csv') {
     try {
       const response = await api.get(`/reports/export/${report}`, {
-        params: { month, view },
+        params: exportParams(format === 'csv' ? undefined : format),
         responseType: 'blob',
       });
       const filename =
         response.headers['content-disposition']?.match(/filename="(.+)"/)?.[1] ||
-        `${report}.csv`;
+        `${report}.${format}`;
       const text = await (response.data as Blob).text();
-      downloadBlob(filename, text, 'text/csv;charset=utf-8');
-      toast().success('CSV exported');
+      if (format === 'html') {
+        const url = URL.createObjectURL(new Blob([text], { type: 'text/html' }));
+        window.open(url, '_blank');
+        toast().success('Printable report opened');
+        return;
+      }
+      downloadBlob(
+        filename,
+        text,
+        format === 'xls' ? 'application/vnd.ms-excel' : 'text/csv;charset=utf-8',
+      );
+      toast().success(format === 'xls' ? 'Excel exported' : 'CSV exported');
     } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to export CSV'));
+      toast().error(getErrorMessage(err, 'Unable to export report'));
     }
-  }
-
-  function exportPdf() {
-    window.print();
   }
 
   return (
@@ -119,12 +176,132 @@ export function AnalyticsDashboard({ firstName }: { firstName: string }) {
             <p className="text-sm text-muted self-center">{data.period.periodLabel}</p>
           </>
         ) : null}
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-ink">From</span>
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="rounded-xl border border-line px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-ink">To</span>
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="rounded-xl border border-line px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-ink">Doctor</span>
+          <input
+            value={doctor}
+            onChange={(e) => setDoctor(e.target.value)}
+            placeholder="Name or ID"
+            className="rounded-xl border border-line px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-ink">Customer</span>
+          <input
+            value={customer}
+            onChange={(e) => setCustomer(e.target.value)}
+            placeholder="Name"
+            className="rounded-xl border border-line px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-ink">Designer</span>
+          <input
+            value={designer}
+            onChange={(e) => setDesigner(e.target.value)}
+            placeholder="Name"
+            className="rounded-xl border border-line px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-ink">Consultant</span>
+          <input
+            value={consultant}
+            onChange={(e) => setConsultant(e.target.value)}
+            placeholder="Name"
+            className="rounded-xl border border-line px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-ink">QC</span>
+          <input
+            value={qc}
+            onChange={(e) => setQc(e.target.value)}
+            placeholder="Name"
+            className="rounded-xl border border-line px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-ink">Supervisor</span>
+          <input
+            value={supervisor}
+            onChange={(e) => setSupervisor(e.target.value)}
+            placeholder="Name"
+            className="rounded-xl border border-line px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-ink">Priority</span>
+          <select
+            value={priority}
+            onChange={(e) => setPriority(e.target.value)}
+            className="rounded-xl border border-line px-3 py-2"
+          >
+            <option value="">All</option>
+            {ALL_CASE_PRIORITIES.map((value) => (
+              <option key={value} value={value}>
+                {CASE_PRIORITY_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-ink">Status</span>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="rounded-xl border border-line px-3 py-2"
+          >
+            <option value="">All</option>
+            {ALL_CASE_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {CASE_STATUS_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-ink">SLA</span>
+          <select
+            value={sla}
+            onChange={(e) => setSla(e.target.value)}
+            className="rounded-xl border border-line px-3 py-2"
+          >
+            <option value="">All</option>
+            <option value="breached">Breached</option>
+            <option value="ok">Within SLA</option>
+          </select>
+        </label>
+        <AuthButton type="button" variant="ghost" onClick={() => void load(month, view)}>
+          Apply filters
+        </AuthButton>
         <div className="ml-auto flex flex-wrap gap-2">
           <AuthButton type="button" variant="ghost" onClick={() => void exportCsv(tab === 'pipeline' ? 'pipeline' : tab)}>
             Export CSV
           </AuthButton>
-          <AuthButton type="button" onClick={exportPdf}>
-            Export PDF
+          <AuthButton type="button" variant="ghost" onClick={() => void exportCsv(tab === 'pipeline' ? 'pipeline' : tab, 'xls')}>
+            Excel
+          </AuthButton>
+          <AuthButton type="button" onClick={() => void exportCsv(tab === 'pipeline' ? 'pipeline' : tab, 'html')}>
+            Print / PDF
           </AuthButton>
         </div>
       </div>
@@ -139,6 +316,7 @@ export function AnalyticsDashboard({ firstName }: { firstName: string }) {
             ['supervisor', 'Supervisors'],
             ['comparison', 'Comparison'],
             ['clarifications', 'Clarifications'],
+            ['doctors', 'Doctors'],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -170,6 +348,8 @@ export function AnalyticsDashboard({ firstName }: { firstName: string }) {
               ['QC pending', data.pipeline.qcPending],
               ['QC rejected', data.pipeline.qcRejected],
               ['Completed', data.pipeline.completed],
+              ['SLA breached', data.pipeline.slaBreached],
+              ['On hold', data.pipeline.onHold],
             ].map(([label, value]) => (
               <div key={label} className="rounded-xl border border-line bg-white px-4 py-3">
                 <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
@@ -346,6 +526,66 @@ export function AnalyticsDashboard({ firstName }: { firstName: string }) {
                   <td className="py-2">
                     {row.rejectionOrRevisionRate != null ? `${row.rejectionOrRevisionRate}%` : '—'}
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+
+      {data && tab === 'doctors' ? (
+        <section className="rounded-xl border border-line bg-white p-5 overflow-x-auto">
+          <h2 className="text-sm font-semibold text-ink">Doctor performance</h2>
+          <p className="mt-1 text-sm text-muted">
+            Approval rate = approved ÷ viewed · Modification rate = modifications ÷ viewed
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-4 text-sm">
+            <div>
+              <p className="text-xs text-muted">Viewed</p>
+              <p className="font-semibold">{data.doctors.totals.viewed}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted">Approval %</p>
+              <p className="font-semibold">{data.doctors.totals.approvalRate ?? '—'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted">Modification %</p>
+              <p className="font-semibold">{data.doctors.totals.modificationRate ?? '—'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted">Avg review hours</p>
+              <p className="font-semibold">{data.doctors.totals.averageReviewHours ?? '—'}</p>
+            </div>
+          </div>
+          <table className="mt-4 w-full min-w-[720px] text-left text-sm">
+            <thead className="text-xs uppercase text-muted">
+              <tr>
+                <th className="pb-2">Doctor</th>
+                <th className="pb-2">Viewed</th>
+                <th className="pb-2">Approved</th>
+                <th className="pb-2">Mods</th>
+                <th className="pb-2">Approval %</th>
+                <th className="pb-2">Mod %</th>
+                <th className="pb-2">Avg hours</th>
+                <th className="pb-2">Satisfaction</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {data.doctors.members.map((m) => (
+                <tr key={m.doctorId}>
+                  <td className="py-2 font-medium">
+                    {m.doctorName}
+                    {m.doctorDisplayId ? (
+                      <span className="ml-1 text-xs text-muted">{m.doctorDisplayId}</span>
+                    ) : null}
+                  </td>
+                  <td className="py-2">{m.viewed}</td>
+                  <td className="py-2">{m.approved}</td>
+                  <td className="py-2">{m.modifications}</td>
+                  <td className="py-2">{m.approvalRate ?? '—'}</td>
+                  <td className="py-2">{m.modificationRate ?? '—'}</td>
+                  <td className="py-2">{m.averageReviewHours ?? '—'}</td>
+                  <td className="py-2">{m.satisfactionScore ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

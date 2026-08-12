@@ -7,6 +7,7 @@ import {
   CLARIFICATION_PRIORITIES,
   CLARIFICATION_SENDER_ROLE_LABELS,
   CLARIFICATION_STATUSES,
+  EMAIL_TEMPLATE_KEYS,
   NOTIFICATION_TYPES,
   PERMISSIONS,
   ROLE_LABELS,
@@ -36,7 +37,7 @@ import { User } from '../../models/User';
 import {
   clarificationRepliedTemplate,
   clarificationRequiredTemplate,
-  sendTemplatedEmail,
+  sendCmsOrFallback,
 } from '../../services/email';
 import { persistUploadedFile } from '../../services/storage.service';
 import {
@@ -330,8 +331,17 @@ async function notifyDoctorClarification(
     clarificationId: clarification.id,
   });
   try {
-    await sendTemplatedEmail(
+    await sendCmsOrFallback(
       caseDoc.doctorEmail,
+      EMAIL_TEMPLATE_KEYS.CLARIFICATION_REQUIRED,
+      {
+        doctorName: caseDoc.doctorName,
+        caseId: caseDoc.caseId,
+        patientName: caseDoc.patientName,
+        subject,
+        requiredInfo,
+        portalUrl,
+      },
       clarificationRequiredTemplate({
         doctorName: caseDoc.doctorName,
         caseId: caseDoc.caseId,
@@ -581,10 +591,18 @@ export async function replyToClarification(
 
     for (const recipient of recipients) {
       try {
-        await sendTemplatedEmail(
+        const recipientName = `${recipient.firstName} ${recipient.lastName}`.trim();
+        await sendCmsOrFallback(
           recipient.email,
+          EMAIL_TEMPLATE_KEYS.CLARIFICATION_REPLIED,
+          {
+            recipientName,
+            caseId: caseDoc.caseId,
+            replyPreview: trimmed,
+            portalUrl,
+          },
           clarificationRepliedTemplate({
-            recipientName: `${recipient.firstName} ${recipient.lastName}`.trim(),
+            recipientName,
             caseId: caseDoc.caseId,
             patientName: caseDoc.patientName,
             subject: clarification.subject,

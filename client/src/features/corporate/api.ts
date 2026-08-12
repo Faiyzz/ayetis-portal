@@ -1,5 +1,7 @@
 import type {
+  ActivityLogDto,
   CorporateDashboardDto,
+  CorporateInsightsDto,
   CreateEmployeeInput,
   CreateFacilityInput,
   CreateSubAccountInput,
@@ -10,6 +12,30 @@ import type {
   UpdateOrganizationInput,
 } from '@ayetis/shared';
 import api from '@/lib/api';
+
+export async function fetchCorporateInsights(organizationId?: string) {
+  const { data } = await api.get('/corporate/reports', {
+    params: organizationId ? { organizationId } : undefined,
+  });
+  return data.data as CorporateInsightsDto;
+}
+
+export async function fetchCorporateAudit(params?: {
+  organizationId?: string;
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const { data } = await api.get('/corporate/audit', { params });
+  return data.data as {
+    organizationId: string;
+    companyName: string;
+    items: ActivityLogDto[];
+    total: number;
+    page: number;
+    pageSize: number;
+  };
+}
 
 export async function fetchCorporateDashboard(organizationId?: string) {
   const { data } = await api.get('/corporate/dashboard', {
