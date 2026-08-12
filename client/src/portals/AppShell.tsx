@@ -390,7 +390,7 @@ function NavLinkRow({
         active
           ? depth > 0
             ? 'bg-brand-50 text-brand-700'
-            : 'bg-brand-500 text-white'
+            : 'bg-brand-700 text-brand-50'
           : depth > 0
             ? 'text-muted hover:bg-brand-50/70 hover:text-brand-700'
             : 'text-slate-600 hover:bg-brand-50 hover:text-brand-700',
@@ -443,7 +443,7 @@ function SidebarNav({
                 className={[
                   'flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-semibold tracking-tight transition',
                   parentActive && !hasChildren
-                    ? 'bg-brand-500 text-white'
+                    ? 'bg-brand-700 text-brand-50'
                     : parentActive
                       ? 'bg-brand-50 text-brand-800'
                       : 'text-slate-700 hover:bg-brand-50 hover:text-brand-700',
@@ -452,7 +452,7 @@ function SidebarNav({
                 <span
                   className={[
                     'shrink-0 opacity-90',
-                    parentActive && !hasChildren ? 'text-white' : 'text-slate-500',
+                    parentActive && !hasChildren ? 'text-brand-50' : 'text-slate-500',
                     parentActive && hasChildren ? 'text-brand-600' : '',
                   ].join(' ')}
                 >

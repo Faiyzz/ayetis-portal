@@ -43,7 +43,7 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
             }
             className={`rounded-t-lg px-3 py-2 text-sm font-semibold ${
               tab === id
-                ? 'border border-b-white border-line bg-white text-brand-700'
+                ? 'border border-b-panel border-line bg-panel text-ink'
                 : 'text-muted hover:text-ink'
             }`}
           >
@@ -68,7 +68,7 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
             <Link
               key={label}
               to={to}
-              className="rounded-xl border border-line bg-white px-4 py-4 hover:border-brand-300"
+              className="rounded-xl border border-line bg-panel px-4 py-4 hover:border-brand-300"
             >
               <p className="font-semibold text-ink">{label}</p>
               <p className="mt-1 text-sm text-muted">{description}</p>
@@ -177,7 +177,7 @@ function DepartmentsPanel() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <form onSubmit={handleCreate} className="space-y-3 rounded-xl border border-line bg-white p-5">
+      <form onSubmit={handleCreate} className="space-y-3 rounded-xl border border-line bg-panel p-5">
         <h2 className="text-sm font-semibold text-ink">Add department</h2>
         <TextField
           label="Name"
@@ -208,7 +208,7 @@ function DepartmentsPanel() {
         <AuthButton loading={busy}>Create department</AuthButton>
       </form>
 
-      <form onSubmit={handleTransfer} className="space-y-3 rounded-xl border border-line bg-white p-5">
+      <form onSubmit={handleTransfer} className="space-y-3 rounded-xl border border-line bg-panel p-5">
         <h2 className="text-sm font-semibold text-ink">Transfer member</h2>
         <label className="block space-y-1.5 text-sm">
           <span className="font-medium text-ink">User</span>
@@ -244,7 +244,7 @@ function DepartmentsPanel() {
         <AuthButton loading={busy}>Transfer</AuthButton>
       </form>
 
-      <section className="lg:col-span-2 rounded-xl border border-line bg-white p-5">
+      <section className="lg:col-span-2 rounded-xl border border-line bg-panel p-5">
         <h2 className="text-sm font-semibold text-ink">Departments</h2>
         <ul className="mt-3 divide-y divide-line">
           {items.map((dept) => (
@@ -327,7 +327,7 @@ function DeletionsPanel() {
   const items = subTab === 'pending' ? pending : log;
 
   return (
-    <section className="rounded-xl border border-line bg-white p-5">
+    <section className="rounded-xl border border-line bg-panel p-5">
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
