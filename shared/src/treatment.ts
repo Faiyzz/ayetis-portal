@@ -691,6 +691,218 @@ export function firstFieldError(errors: FieldErrors): string | null {
   return errors[keys[0]!] ?? null;
 }
 
+export const PROSTHO_MATERIALS = {
+  ZIRCONIA: 'zirconia',
+  EMAX: 'emax',
+  PFM: 'pfm',
+  FULL_METAL: 'full_metal',
+  ACRYLIC: 'acrylic',
+  OTHER: 'other',
+} as const;
+
+export type ProsthoMaterial = (typeof PROSTHO_MATERIALS)[keyof typeof PROSTHO_MATERIALS];
+
+export const ALL_PROSTHO_MATERIALS: ProsthoMaterial[] = Object.values(PROSTHO_MATERIALS);
+
+export const PROSTHO_MATERIAL_LABELS: Record<ProsthoMaterial, string> = {
+  [PROSTHO_MATERIALS.ZIRCONIA]: 'Zirconia',
+  [PROSTHO_MATERIALS.EMAX]: 'E.max / Lithium disilicate',
+  [PROSTHO_MATERIALS.PFM]: 'PFM',
+  [PROSTHO_MATERIALS.FULL_METAL]: 'Full metal',
+  [PROSTHO_MATERIALS.ACRYLIC]: 'Acrylic',
+  [PROSTHO_MATERIALS.OTHER]: 'Other',
+};
+
+export const IMPLANT_PLANNING_MODES = {
+  SURGICAL: 'surgical',
+  RESTORATIVE: 'restorative',
+  BOTH: 'both',
+} as const;
+
+export type ImplantPlanningMode =
+  (typeof IMPLANT_PLANNING_MODES)[keyof typeof IMPLANT_PLANNING_MODES];
+
+export const ALL_IMPLANT_PLANNING_MODES: ImplantPlanningMode[] =
+  Object.values(IMPLANT_PLANNING_MODES);
+
+export const IMPLANT_PLANNING_MODE_LABELS: Record<ImplantPlanningMode, string> = {
+  [IMPLANT_PLANNING_MODES.SURGICAL]: 'Surgical planning',
+  [IMPLANT_PLANNING_MODES.RESTORATIVE]: 'Restorative planning',
+  [IMPLANT_PLANNING_MODES.BOTH]: 'Surgical + restorative',
+};
+
+export interface ProsthoDetails {
+  restorationTeeth: string[];
+  abutmentTeeth: string[];
+  ponticTeeth: string[];
+  material: ProsthoMaterial | '';
+  materialOther: string;
+  shade: string;
+  units: number | null;
+  antagonistNotes: string;
+  clinicalNotes: string;
+}
+
+export const EMPTY_PROSTHO_DETAILS: ProsthoDetails = {
+  restorationTeeth: [],
+  abutmentTeeth: [],
+  ponticTeeth: [],
+  material: '',
+  materialOther: '',
+  shade: '',
+  units: null,
+  antagonistNotes: '',
+  clinicalNotes: '',
+};
+
+export interface ImplantDetails {
+  implantSites: string[];
+  implantCount: number | null;
+  planningMode: ImplantPlanningMode | '';
+  cbctAvailable: boolean | null;
+  boneGraftRequired: boolean | null;
+  restorationPlanned: string;
+  surgicalGuideRequired: boolean | null;
+  clinicalNotes: string;
+}
+
+export const EMPTY_IMPLANT_DETAILS: ImplantDetails = {
+  implantSites: [],
+  implantCount: null,
+  planningMode: '',
+  cbctAvailable: null,
+  boneGraftRequired: null,
+  restorationPlanned: '',
+  surgicalGuideRequired: null,
+  clinicalNotes: '',
+};
+
+export function isProsthoMaterial(value: string): value is ProsthoMaterial {
+  return (ALL_PROSTHO_MATERIALS as string[]).includes(value);
+}
+
+export function isImplantPlanningMode(value: string): value is ImplantPlanningMode {
+  return (ALL_IMPLANT_PLANNING_MODES as string[]).includes(value);
+}
+
+export function validatePatientCore(input: DigitalAlignerPart1Input): FieldErrors {
+  const errors: FieldErrors = {};
+  if (!input.patientName?.trim()) errors.patientName = 'Patient name is required';
+  if (!practiceNameOf(input)) errors.practiceName = 'Practice name is required';
+  if (!input.chiefComplaint?.trim()) errors.chiefComplaint = 'Chief complaint is required';
+  if (!input.caseCategory) errors.caseCategory = 'Select a case category';
+  if (!input.caseType) errors.caseType = 'Select a case type';
+  if (input.needsDoctorPicker && !input.doctorId) {
+    errors.doctorId = 'Select the treating doctor';
+  }
+  if (input.patientDateOfBirth) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.patientDateOfBirth.trim())) {
+      errors.patientDateOfBirth = 'Date of birth must be YYYY-MM-DD';
+    }
+  }
+  const records = { ...EMPTY_RECORDS_NUMBERING, ...(input.recordsNumbering ?? {}) };
+  if (!records.impressionMethod) {
+    errors['recordsNumbering.impressionMethod'] = 'Impression method is required';
+  }
+  return errors;
+}
+
+export function validateProsthodonticSubmit(input: {
+  patient?: DigitalAlignerPart1Input;
+  prosthoDetails?: Partial<ProsthoDetails> | null;
+  commercial?: Partial<CaseCommercial> | null;
+}): FieldErrors {
+  const errors: FieldErrors = {
+    ...validatePatientCore(input.patient ?? {}),
+  };
+  const details = { ...EMPTY_PROSTHO_DETAILS, ...(input.prosthoDetails ?? {}) };
+  if (details.restorationTeeth.length === 0 && details.abutmentTeeth.length === 0) {
+    errors['prosthoDetails.restorationTeeth'] =
+      'Select restoration and/or abutment teeth on the chart';
+  }
+  if (!details.material) {
+    errors['prosthoDetails.material'] = 'Select a restoration material';
+  } else if (details.material === PROSTHO_MATERIALS.OTHER && !details.materialOther.trim()) {
+    errors['prosthoDetails.materialOther'] = 'Specify the material';
+  }
+  if (!input.commercial?.treatmentPlanId) {
+    errors['commercial.treatmentPlanId'] = 'Select a treatment plan';
+  }
+  return errors;
+}
+
+export function validateImplantSubmit(input: {
+  patient?: DigitalAlignerPart1Input;
+  implantDetails?: Partial<ImplantDetails> | null;
+  commercial?: Partial<CaseCommercial> | null;
+}): FieldErrors {
+  const errors: FieldErrors = {
+    ...validatePatientCore(input.patient ?? {}),
+  };
+  const details = { ...EMPTY_IMPLANT_DETAILS, ...(input.implantDetails ?? {}) };
+  if (details.implantSites.length === 0) {
+    errors['implantDetails.implantSites'] = 'Select implant site(s) on the tooth chart';
+  }
+  if (!details.planningMode) {
+    errors['implantDetails.planningMode'] = 'Select a planning mode';
+  }
+  if (details.cbctAvailable === null || details.cbctAvailable === undefined) {
+    errors['implantDetails.cbctAvailable'] = 'Indicate whether CBCT is available';
+  }
+  if (!input.commercial?.treatmentPlanId) {
+    errors['commercial.treatmentPlanId'] = 'Select a treatment plan';
+  }
+  return errors;
+}
+
+export interface PendingCaseFile {
+  name: string;
+  category?: string | null;
+}
+
+function fileLooksLike(file: PendingCaseFile, needles: RegExp): boolean {
+  const hay = `${file.name} ${file.category ?? ''}`.toLowerCase();
+  return needles.test(hay);
+}
+
+/** URD §10 — mandatory patient files before final submit. */
+export function validateRequiredCaseFiles(
+  category: string | null | undefined,
+  files: PendingCaseFile[],
+): FieldErrors {
+  const errors: FieldErrors = {};
+  if (files.length === 0) {
+    errors.files = 'Upload the required patient files before submitting';
+    return errors;
+  }
+
+  const hasScan = files.some((f) =>
+    fileLooksLike(f, /\.(stl|obj|ply)(\b|$)|scan|model|stl|obj|ply/),
+  );
+  const hasPhoto = files.some((f) =>
+    fileLooksLike(f, /\.(jpe?g|png|tiff?|webp|bmp|gif)(\b|$)|photo|image|smile|intraoral/),
+  );
+  const hasDicomOrXray = files.some((f) =>
+    fileLooksLike(f, /\.(dcm|dicom)(\b|$)|dicom|cbct|opg|x-?ray|radiograph|ceph/),
+  );
+
+  if (category === 'digital_aligner' || category === 'prosthodontic') {
+    if (!hasScan) {
+      errors.files = 'Upload at least one digital scan (STL, OBJ, or PLY)';
+    } else if (category === 'prosthodontic' && !hasPhoto) {
+      errors.files = 'Upload clinical photographs in addition to the scan files';
+    }
+  } else if (category === 'implant') {
+    if (!hasDicomOrXray) {
+      errors.files = 'Upload CBCT / DICOM or radiographic records';
+    } else if (!hasScan) {
+      errors.files = 'Upload a digital scan in addition to CBCT/radiographs';
+    }
+  }
+
+  return errors;
+}
+
 export interface UpdateCasePaymentInput {
   status?: PaymentStatus;
   currency?: string;

@@ -14,7 +14,9 @@ import {
 } from '@ayetis/shared';
 import { CancellationAudit, type ICancellationAudit } from '../../models/CancellationAudit';
 import { Case } from '../../models/Case';
+import { PaymentSession } from '../../models/Commercial';
 import { AppError } from '../../utils/AppError';
+import { refundStripePayment } from '../commercial/paymentProviders';
 import {
   recordActivity,
   type RequestAuditContext,
@@ -375,10 +377,44 @@ export async function updateCancellationRefund(
   const doc = await CancellationAudit.findById(id);
   if (!doc) throw new AppError('Cancellation audit not found', 404);
 
-  doc.refundStatus = input.refundStatus;
-  if (input.refundTransactionReference !== undefined) {
+  const next = input.refundStatus;
+  const providedRef = input.refundTransactionReference?.trim();
+
+  if (next === REFUND_STATUSES.PROCESSED) {
+    const alreadyRefunded = Boolean(doc.refundTransactionReference);
+    if (!alreadyRefunded) {
+      let stripeRefund: { refundId: string } | null = null;
+      const caseDoc = await Case.findById(doc.caseMongoId);
+      if (caseDoc?.paymentSessionId) {
+        const session = await PaymentSession.findById(caseDoc.paymentSessionId);
+        if (session?.stripeSessionId || session?.stripePaymentIntentId) {
+          stripeRefund = await refundStripePayment({
+            stripeSessionId: session.stripeSessionId,
+            stripePaymentIntentId: session.stripePaymentIntentId,
+            amount: doc.refundAmount,
+          });
+        }
+      }
+      if (stripeRefund) {
+        doc.refundTransactionReference = stripeRefund.refundId;
+      } else if (providedRef) {
+        doc.refundTransactionReference = providedRef;
+      } else {
+        throw new AppError(
+          'Enter a refund transaction reference before marking processed (required when Stripe cannot refund automatically).',
+          400,
+        );
+      }
+    } else if (providedRef) {
+      doc.refundTransactionReference = providedRef;
+    }
+  } else if (providedRef) {
+    doc.refundTransactionReference = providedRef;
+  } else if (input.refundTransactionReference !== undefined) {
     doc.refundTransactionReference = input.refundTransactionReference;
   }
+
+  doc.refundStatus = next;
   await doc.save();
 
   await recordActivity({
@@ -389,7 +425,10 @@ export async function updateCancellationRefund(
     actorRole: actor.role,
     targetType: 'case',
     targetId: doc.caseId,
-    metadata: { refundStatus: input.refundStatus },
+    metadata: {
+      refundStatus: next,
+      refundTransactionReference: doc.refundTransactionReference,
+    },
     ipAddress: audit.ipAddress,
     userAgent: audit.userAgent,
   });

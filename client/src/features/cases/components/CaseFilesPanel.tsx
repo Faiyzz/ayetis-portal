@@ -69,6 +69,25 @@ function StorageBadge({ tier }: { tier: FileStorageTier }) {
   );
 }
 
+function ScanBadge({ file }: { file: CaseFileDto }) {
+  const status = file.scanStatus;
+  if (!status || status === 'skipped') return null;
+  const styles =
+    status === 'clean'
+      ? 'bg-emerald-50 text-emerald-800'
+      : status === 'infected'
+        ? 'bg-red-50 text-red-800'
+        : 'bg-amber-50 text-amber-900';
+  return (
+    <span
+      className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${styles}`}
+      title={file.scanMessage || status}
+    >
+      scan {status}
+    </span>
+  );
+}
+
 function isViewerLink(file: CaseFileDto) {
   return file.category === FILE_CATEGORIES.HTML_LINK || Boolean(file.viewUrl);
 }
@@ -323,7 +342,7 @@ export function CaseFilesPanel({
           <h2 className="text-sm font-semibold text-ink">Patient files</h2>
           <p className="mt-0.5 text-sm text-muted">
             ZIP/RAR/7Z archives auto-extract; STL members become scan files. Also attach HTML viewer
-            links. Unused files move to cold storage after the hot window.
+            links. Unused files move to Glacier after the hot window; Restore starts a temporary copy.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -527,13 +546,31 @@ export function CaseFilesPanel({
                     <p className="truncate text-sm font-semibold text-ink" title={group.name}>
                       {group.name}
                     </p>
-                    <StorageBadge tier={latest.storageTier ?? FILE_STORAGE_TIERS.HOT} />
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <StorageBadge tier={latest.storageTier ?? FILE_STORAGE_TIERS.HOT} />
+                      <ScanBadge file={latest} />
+                    </div>
                   </div>
                   <p className="mt-0.5 text-xs text-muted">
                     {FILE_CATEGORY_LABELS[latest.category]} · {formatBytes(latest.sizeBytes)} · v
                     {latest.version}
+                    {group.versions.length > 1 ? ` · ${group.versions.length} versions` : ''}
                   </p>
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {group.versions.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedHistory((s) => ({
+                            ...s,
+                            [group.name]: !s[group.name],
+                          }))
+                        }
+                        className="rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-ink"
+                      >
+                        {expandedHistory[group.name] ? 'Hide history' : 'History'}
+                      </button>
+                    ) : null}
                     <FileActions
                       file={latest}
                       downloadingId={downloadingId}
@@ -542,6 +579,25 @@ export function CaseFilesPanel({
                       onRestore={(f) => void handleRestore(f)}
                     />
                   </div>
+                  {expandedHistory[group.name]
+                    ? group.versions.slice(1).map((file) => (
+                        <div
+                          key={file.id}
+                          className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-surface/60 px-2 py-1.5 text-xs text-muted"
+                        >
+                          <span>
+                            v{file.version} · {formatBytes(file.sizeBytes)}
+                          </span>
+                          <FileActions
+                            file={file}
+                            downloadingId={downloadingId}
+                            restoringId={restoringId}
+                            onDownload={(f) => void handleDownload(f)}
+                            onRestore={(f) => void handleRestore(f)}
+                          />
+                        </div>
+                      ))
+                    : null}
                 </li>
               );
             })}
@@ -571,6 +627,7 @@ export function CaseFilesPanel({
                           <div className="flex flex-wrap items-center gap-1.5">
                             <p className="font-medium text-ink">{group.name}</p>
                             <StorageBadge tier={latest.storageTier ?? FILE_STORAGE_TIERS.HOT} />
+                            <ScanBadge file={latest} />
                           </div>
                           {latest.note ? <p className="text-xs text-muted">{latest.note}</p> : null}
                           {latest.extractedFrom ? (
@@ -619,13 +676,14 @@ export function CaseFilesPanel({
                         </td>
                       </tr>
                       {hasHistory && open
-                        ? group.versions.map((file) => (
+                        ? group.versions.slice(1).map((file) => (
                             <tr key={file.id} className="border-b border-line bg-surface/40">
                               <td className="px-2 py-2 pl-6 text-xs text-muted" colSpan={4}>
                                 <span className="inline-flex items-center gap-1.5">
                                   v{file.version} · {formatBytes(file.sizeBytes)} ·{' '}
                                   {file.uploadedByName}
                                   <StorageBadge tier={file.storageTier ?? FILE_STORAGE_TIERS.HOT} />
+                                  <ScanBadge file={file} />
                                 </span>
                                 {file.note ? ` · ${file.note}` : ''}
                               </td>

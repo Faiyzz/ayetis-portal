@@ -27,6 +27,7 @@ import {
   fetchDiscountCodes,
   fetchInvoices,
   fetchPaymentProviders,
+  generateBatchInvoices,
   fetchPrepaidLedger,
   fetchTreatmentPlans,
   updateBillingArrangement,
@@ -77,6 +78,7 @@ export function CommercialAdminPage() {
   const canPrepaid = can(PERMISSIONS.PREPAID_MANAGE);
   const canProviders = can(PERMISSIONS.PAYMENT_PROVIDER_MANAGE);
   const canInvoices = can(PERMISSIONS.INVOICE_VIEW);
+  const canManageInvoices = can(PERMISSIONS.INVOICE_MANAGE);
 
   const firstTab: Tab = canPlans
     ? 'plans'
@@ -123,6 +125,7 @@ export function CommercialAdminPage() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [batching, setBatching] = useState(false);
   const [error, setError] = useState('');
 
   async function load() {
@@ -845,11 +848,45 @@ export function CommercialAdminPage() {
 
       {tab === 'invoices' && canInvoices ? (
         <section className="overflow-hidden rounded-xl border border-line bg-white">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
+            <div>
+              <h2 className="text-sm font-semibold text-ink">Invoices</h2>
+              <p className="mt-0.5 text-sm text-muted">
+                Weekly / bi-monthly / monthly / quarterly arrangements are billed in a batch. Prepaid
+                and Stripe checkout invoices appear here as they are paid.
+              </p>
+            </div>
+            {canManageInvoices ? (
+              <div className="w-full max-w-xs shrink-0 sm:w-auto">
+              <AuthButton
+                type="button"
+                loading={batching}
+                onClick={() => {
+                  void (async () => {
+                    setBatching(true);
+                    try {
+                      const result = await generateBatchInvoices();
+                      toast().success(result.message);
+                      await load();
+                    } catch (err) {
+                      toast().error(getErrorMessage(err, 'Unable to generate invoices'));
+                    } finally {
+                      setBatching(false);
+                    }
+                  })();
+                }}
+              >
+                Generate scheduled invoices
+              </AuthButton>
+              </div>
+            ) : null}
+          </div>
           <table className="min-w-full text-left text-sm">
             <thead className="bg-surface text-muted">
               <tr>
                 <th className="px-4 py-3 font-medium">Invoice</th>
                 <th className="px-4 py-3 font-medium">Customer</th>
+                <th className="px-4 py-3 font-medium">Cases</th>
                 <th className="px-4 py-3 font-medium">Total</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium" />
@@ -862,6 +899,9 @@ export function CommercialAdminPage() {
                   <td className="px-4 py-3">
                     <p>{inv.customerName}</p>
                     <p className="text-xs text-muted">{inv.customerEmail}</p>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted">
+                    {(inv.caseIds ?? []).join(', ') || '—'}
                   </td>
                   <td className="px-4 py-3">
                     {inv.currency} {inv.total.toFixed(2)}

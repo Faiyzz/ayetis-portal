@@ -547,6 +547,24 @@ router.get(
   },
 );
 
+router.post(
+  '/invoices/batch',
+  requirePermission(PERMISSIONS.INVOICE_MANAGE),
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const caseIds = Array.isArray(req.body?.caseIds) ? req.body.caseIds.map(String) : [];
+      const data = await invoices.generateScheduledInvoices({
+        caseIds: caseIds.length ? caseIds : undefined,
+        actor: { id: req.user!.id, email: req.user!.email, role: req.user!.role },
+        audit: getRequestAuditContext(req),
+      });
+      res.json({ success: true, data, message: data.message });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.get(
   '/invoices/:id',
   requirePermission(PERMISSIONS.INVOICE_VIEW),
@@ -589,10 +607,15 @@ router.get(
 router.post(
   '/invoices/batch-stub',
   requirePermission(PERMISSIONS.INVOICE_MANAGE),
-  async (req, res, next) => {
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const caseIds = Array.isArray(req.body?.caseIds) ? req.body.caseIds.map(String) : [];
-      res.json({ success: true, data: await invoices.generateScheduledInvoiceStub(caseIds) });
+      const data = await invoices.generateScheduledInvoices({
+        caseIds: caseIds.length ? caseIds : undefined,
+        actor: { id: req.user!.id, email: req.user!.email, role: req.user!.role },
+        audit: getRequestAuditContext(req),
+      });
+      res.json({ success: true, data, message: data.message });
     } catch (error) {
       next(error);
     }

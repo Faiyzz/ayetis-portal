@@ -72,4 +72,8 @@ export const env = {
   loginMaxFailedAttempts: Math.max(1, Number(process.env.LOGIN_MAX_FAILED_ATTEMPTS ?? 5)),
   /** Minutes the account stays locked after max failures. */
   loginLockoutMinutes: Math.max(1, Number(process.env.LOGIN_LOCKOUT_MINUTES ?? 15)),
+  /** Optional malware scan on case file upload (URD). Off by default. */
+  malwareScanEnabled: (process.env.MALWARE_SCAN_ENABLED ?? '').toLowerCase() === 'true',
+  /** e.g. `clamscan -i --no-summary`. Empty = safe stub that marks files clean. */
+  malwareScanCommand: process.env.MALWARE_SCAN_COMMAND ?? '',
 };

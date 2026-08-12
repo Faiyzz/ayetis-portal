@@ -182,6 +182,8 @@ export interface InvoiceDto {
   id: string;
   invoiceNumber: string;
   caseId: string | null;
+  /** Human-readable case IDs covered by this invoice (batch or single). */
+  caseIds: string[];
   paymentSessionId: string | null;
   customerUserId: string | null;
   customerEmail: string;
@@ -195,6 +197,13 @@ export interface InvoiceDto {
   issuedAt: string;
   paidAt: string | null;
   createdAt: string;
+}
+
+export interface BatchInvoiceResult {
+  invoices: InvoiceDto[];
+  billedCaseIds: string[];
+  skipped: Array<{ caseId: string; reason: string }>;
+  message: string;
 }
 
 export interface PaymentReceiptDto {

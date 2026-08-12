@@ -4,10 +4,11 @@ import {
   CASE_CATEGORIES,
   CASE_PRIORITY_LABELS,
   CASE_STATUS_LABELS,
-  COUNTRIES,
   EMPTY_CASE_COMMERCIAL,
   EMPTY_CLINICAL_PREFERENCES,
+  EMPTY_IMPLANT_DETAILS,
   EMPTY_OCCLUSION_GOALS,
+  EMPTY_PROSTHO_DETAILS,
   EMPTY_RECORDS_NUMBERING,
   EMPTY_TREATMENT_INSTRUCTIONS,
   PERMISSIONS,
@@ -16,13 +17,18 @@ import {
   isCaseDeliveryLocked,
   validateDigitalAlignerPart1,
   validateDigitalAlignerPart3,
+  validateImplantSubmit,
+  validatePatientCore,
+  validateProsthodonticSubmit,
   type CaseCategory,
   type CaseCommercial,
   type CasePriority,
   type CaseStatus,
   type ClinicalPreferences,
   type FieldErrors,
+  type ImplantDetails,
   type OcclusionGoals,
+  type ProsthoDetails,
   type RecordsNumbering,
   type TreatmentInstructions,
   type TreatmentPlanDto,
@@ -31,21 +37,19 @@ import {
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
-import { SearchableSelect } from '@/components/SearchableSelect';
-import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { Alert, AuthButton } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import { fetchCase, updateCase } from '@/features/cases/api';
 import {
   ClinicalPreferencesPart,
+  ImplantClinicalPart,
   OcclusionCommercialPart,
+  ProsthodonticClinicalPart,
   RecordsNumberingPart,
 } from '@/features/cases/components/treatment-form';
-import { TreatmentInstructionsFields } from '@/features/cases/components/TreatmentInstructionsPanel';
 import { fetchTreatmentPlans, validateDiscountCode } from '@/features/commercial/api';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
-
-const COUNTRY_OPTIONS = COUNTRIES.map((name) => ({ value: name, label: name }));
 
 export function EditCasePage() {
   const { caseId = '' } = useParams();
@@ -62,6 +66,8 @@ export function EditCasePage() {
     ...EMPTY_CLINICAL_PREFERENCES,
   });
   const [occlusion, setOcclusion] = useState<OcclusionGoals>({ ...EMPTY_OCCLUSION_GOALS });
+  const [prostho, setProstho] = useState<ProsthoDetails>({ ...EMPTY_PROSTHO_DETAILS });
+  const [implant, setImplant] = useState<ImplantDetails>({ ...EMPTY_IMPLANT_DETAILS });
   const [commercial, setCommercial] = useState<CaseCommercial>({ ...EMPTY_CASE_COMMERCIAL });
   const [plans, setPlans] = useState<TreatmentPlanDto[]>([]);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -71,6 +77,8 @@ export function EditCasePage() {
   const [locked, setLocked] = useState(false);
 
   const isAligner = caseCategory === CASE_CATEGORIES.DIGITAL_ALIGNER;
+  const isProstho = caseCategory === CASE_CATEGORIES.PROSTHODONTIC;
+  const isImplant = caseCategory === CASE_CATEGORIES.IMPLANT;
 
   const filteredPlans = useMemo(
     () => plans.filter((plan) => !plan.caseCategory || plan.caseCategory === caseCategory),
@@ -124,6 +132,8 @@ export function EditCasePage() {
         setRecords({ ...EMPTY_RECORDS_NUMBERING, ...(data.recordsNumbering ?? {}) });
         setClinical({ ...EMPTY_CLINICAL_PREFERENCES, ...(data.clinicalPreferences ?? {}) });
         setOcclusion({ ...EMPTY_OCCLUSION_GOALS, ...(data.occlusionGoals ?? {}) });
+        setProstho({ ...EMPTY_PROSTHO_DETAILS, ...(data.prosthoDetails ?? {}) });
+        setImplant({ ...EMPTY_IMPLANT_DETAILS, ...(data.implantDetails ?? {}) });
         setCommercial({ ...EMPTY_CASE_COMMERCIAL, ...(data.commercial ?? {}) });
       } catch (err) {
         const message = getErrorMessage(err, 'Unable to load case');
@@ -135,6 +145,47 @@ export function EditCasePage() {
     }
     void load();
   }, [caseId]);
+
+  function patientCore() {
+    return {
+      patientName: form?.patientName,
+      practiceName: form?.practiceName,
+      clinicName: form?.clinicName,
+      chiefComplaint: form?.chiefComplaint,
+      patientDateOfBirth: form?.patientDateOfBirth,
+      caseCategory: form?.caseCategory ?? caseCategory,
+      caseType: form?.caseType,
+      recordsNumbering: records,
+    };
+  }
+
+  function validateForm(): FieldErrors {
+    if (isAligner) {
+      return {
+        ...validateDigitalAlignerPart1(patientCore()),
+        ...validateDigitalAlignerPart3({ commercial }),
+      };
+    }
+    if (isProstho) {
+      return validateProsthodonticSubmit({
+        patient: patientCore(),
+        prosthoDetails: prostho,
+        commercial,
+      });
+    }
+    if (isImplant) {
+      return validateImplantSubmit({
+        patient: patientCore(),
+        implantDetails: implant,
+        commercial,
+      });
+    }
+    const errors = validatePatientCore(patientCore());
+    if (!commercial.treatmentPlanId) {
+      errors['commercial.treatmentPlanId'] = 'Select a treatment plan';
+    }
+    return errors;
+  }
 
   async function applyDiscount() {
     if (!commercial.discountCode.trim()) return;
@@ -159,27 +210,13 @@ export function EditCasePage() {
     event.preventDefault();
     if (!form || locked) return;
 
-    if (isAligner) {
-      const errors = {
-        ...validateDigitalAlignerPart1({
-          patientName: form.patientName,
-          practiceName: form.practiceName,
-          clinicName: form.clinicName,
-          chiefComplaint: form.chiefComplaint,
-          patientDateOfBirth: form.patientDateOfBirth,
-          caseCategory: form.caseCategory ?? caseCategory,
-          caseType: form.caseType,
-          recordsNumbering: records,
-        }),
-        ...validateDigitalAlignerPart3({ commercial }),
-      };
-      setFieldErrors(errors);
-      const message = firstFieldError(errors);
-      if (message) {
-        setError(message);
-        toast().warning(message);
-        return;
-      }
+    const errors = validateForm();
+    setFieldErrors(errors);
+    const message = firstFieldError(errors);
+    if (message) {
+      setError(message);
+      toast().warning(message);
+      return;
     }
 
     setSaving(true);
@@ -193,6 +230,8 @@ export function EditCasePage() {
         recordsNumbering: records,
         clinicalPreferences: clinical,
         occlusionGoals: occlusion,
+        prosthoDetails: prostho,
+        implantDetails: implant,
         commercial,
       };
       if (!canSetPriority) {
@@ -231,6 +270,14 @@ export function EditCasePage() {
     );
   }
 
+  const subtitle = isAligner
+    ? `Digital Treatment Planning form for ${caseId}`
+    : isProstho
+      ? `Prosthodontic planning for ${caseId}`
+      : isImplant
+        ? `Implant planning for ${caseId}`
+        : `Update case information for ${caseId}.`;
+
   return (
     <div className="w-full max-w-5xl space-y-5">
       <PageHeader
@@ -240,11 +287,7 @@ export function EditCasePage() {
           </Link>
         }
         title="Edit case"
-        subtitle={
-          isAligner
-            ? `Digital Treatment Planning form for ${caseId}`
-            : `Update case information for ${caseId}.`
-        }
+        subtitle={subtitle}
       />
 
       <form
@@ -253,117 +296,72 @@ export function EditCasePage() {
       >
         {error ? <Alert>{error}</Alert> : null}
 
-        {isAligner ? (
-          <>
-            <RecordsNumberingPart
-              form={{
-                patientName: form.patientName ?? '',
-                patientAge: form.patientAge ?? null,
-                patientGender: form.patientGender ?? '',
-                patientDateOfBirth: form.patientDateOfBirth ?? null,
-                practiceName: form.practiceName ?? '',
-                clinicName: form.clinicName ?? '',
-                country: form.country ?? '',
-                chiefComplaint: form.chiefComplaint ?? '',
-                caseCategory: (form.caseCategory as CaseCategory) || caseCategory,
-                caseType: form.caseType as UpdateCaseInput['caseType'],
-                doctorId: undefined,
-                treatmentSummary: form.treatmentSummary ?? '',
-              }}
-              records={records}
+        <RecordsNumberingPart
+          form={{
+            patientName: form.patientName ?? '',
+            patientAge: form.patientAge ?? null,
+            patientGender: form.patientGender ?? '',
+            patientDateOfBirth: form.patientDateOfBirth ?? null,
+            practiceName: form.practiceName ?? '',
+            clinicName: form.clinicName ?? '',
+            country: form.country ?? '',
+            chiefComplaint: form.chiefComplaint ?? '',
+            caseCategory: (form.caseCategory as CaseCategory) || caseCategory,
+            caseType: form.caseType as UpdateCaseInput['caseType'],
+            doctorId: undefined,
+            treatmentSummary: form.treatmentSummary ?? '',
+          }}
+          records={records}
+          errors={fieldErrors}
+          doctors={[]}
+          needsDoctorPicker={false}
+          onFormChange={(key, value) => setForm((prev) => ({ ...prev!, [key]: value }))}
+          onRecordsChange={(patch) => setRecords((prev) => ({ ...prev, ...patch }))}
+          showAlignerParams={isAligner}
+        />
+
+        <div className="rounded-xl border border-line p-4">
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
+            Part 2 — Clinical details
+          </h3>
+          {isProstho ? (
+            <ProsthodonticClinicalPart
+              details={prostho}
+              numberingSystem={records.toothNumberingSystem || TOOTH_NUMBERING_SYSTEMS.FDI}
               errors={fieldErrors}
-              doctors={[]}
-              needsDoctorPicker={false}
-              onFormChange={(key, value) =>
-                setForm((prev) => ({ ...prev!, [key]: value }))
+              onChange={(patch) => setProstho((prev) => ({ ...prev, ...patch }))}
+            />
+          ) : isImplant ? (
+            <ImplantClinicalPart
+              details={implant}
+              numberingSystem={records.toothNumberingSystem || TOOTH_NUMBERING_SYSTEMS.FDI}
+              errors={fieldErrors}
+              onChange={(patch) => setImplant((prev) => ({ ...prev, ...patch }))}
+            />
+          ) : (
+            <ClinicalPreferencesPart
+              clinical={clinical}
+              numberingSystem={records.toothNumberingSystem || TOOTH_NUMBERING_SYSTEMS.FDI}
+              instructions={form.instructions}
+              onClinicalChange={(patch) => setClinical((prev) => ({ ...prev, ...patch }))}
+              onInstructionsChange={(value) =>
+                setForm((prev) => ({ ...prev!, instructions: value }))
               }
-              onRecordsChange={(patch) => setRecords((prev) => ({ ...prev, ...patch }))}
             />
+          )}
+        </div>
 
-            <div className="rounded-xl border border-line p-4">
-              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
-                Part 2 — Clinical preferences
-              </h3>
-              <ClinicalPreferencesPart
-                clinical={clinical}
-                numberingSystem={records.toothNumberingSystem || TOOTH_NUMBERING_SYSTEMS.FDI}
-                instructions={form.instructions}
-                onClinicalChange={(patch) => setClinical((prev) => ({ ...prev, ...patch }))}
-                onInstructionsChange={(value) =>
-                  setForm((prev) => ({ ...prev!, instructions: value }))
-                }
-              />
-            </div>
-
-            <OcclusionCommercialPart
-              occlusion={occlusion}
-              commercial={commercial}
-              plans={filteredPlans}
-              errors={fieldErrors}
-              onOcclusionChange={(patch) => setOcclusion((prev) => ({ ...prev, ...patch }))}
-              onCommercialChange={(patch) => setCommercial((prev) => ({ ...prev, ...patch }))}
-              onApplyDiscount={() => void applyDiscount()}
-            />
-          </>
-        ) : (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <TextField
-                label="Patient name"
-                required
-                value={form.patientName ?? ''}
-                onChange={(e) => setForm((prev) => ({ ...prev!, patientName: e.target.value }))}
-              />
-              <TextField
-                label="Patient age"
-                type="number"
-                value={form.patientAge ?? ''}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev!,
-                    patientAge: e.target.value === '' ? null : Number(e.target.value),
-                  }))
-                }
-              />
-              <TextField
-                label="Clinic"
-                value={form.clinicName ?? ''}
-                onChange={(e) => setForm((prev) => ({ ...prev!, clinicName: e.target.value }))}
-              />
-              <div className="sm:col-span-2">
-                <SearchableSelect
-                  label="Country"
-                  value={form.country ?? ''}
-                  onChange={(next) => setForm((prev) => ({ ...prev!, country: next }))}
-                  options={COUNTRY_OPTIONS}
-                  placeholder="Search countries…"
-                  allowCustom
-                />
-              </div>
-            </div>
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-ink">Treatment summary</span>
-              <textarea
-                required
-                rows={3}
-                value={form.treatmentSummary ?? ''}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev!, treatmentSummary: e.target.value }))
-                }
-                className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px]"
-              />
-            </label>
-            <div className="rounded-xl border border-line bg-surface/40 p-4">
-              <p className="text-sm font-semibold text-ink">Clinical / treatment instructions</p>
-              <div className="mt-4">
-                <TreatmentInstructionsFields
-                  value={treatmentInstructions}
-                  onChange={setTreatmentInstructions}
-                />
-              </div>
-            </div>
-          </>
-        )}
+        <OcclusionCommercialPart
+          occlusion={occlusion}
+          commercial={commercial}
+          plans={filteredPlans}
+          errors={fieldErrors}
+          onOcclusionChange={(patch) => setOcclusion((prev) => ({ ...prev, ...patch }))}
+          onCommercialChange={(patch) => setCommercial((prev) => ({ ...prev, ...patch }))}
+          onApplyDiscount={() => void applyDiscount()}
+          showOcclusion={isAligner}
+          requireApproach={isAligner}
+        />
 
         <div className="grid gap-4 sm:grid-cols-2">
           {canSetPriority ? (

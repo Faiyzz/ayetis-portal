@@ -322,6 +322,7 @@ async function fulfillPaidSession(
 
   const docs = await issueInvoiceAndReceipt({
     caseId: caseDoc.id,
+    billedCaseIds: [created.caseId],
     paymentSessionId: session.id,
     customerUserId: String(user._id),
     customerEmail: user.email,

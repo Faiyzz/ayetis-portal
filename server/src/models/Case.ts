@@ -23,7 +23,9 @@ import {
   CUT_PHASES,
   EMPTY_CASE_COMMERCIAL,
   EMPTY_CLINICAL_PREFERENCES,
+  EMPTY_IMPLANT_DETAILS,
   EMPTY_OCCLUSION_GOALS,
+  EMPTY_PROSTHO_DETAILS,
   EMPTY_RECORDS_NUMBERING,
   EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORIES,
@@ -39,7 +41,9 @@ import {
   type CaseStatus,
   type CaseType,
   type ClinicalPreferences,
+  type ImplantDetails,
   type OcclusionGoals,
+  type ProsthoDetails,
   type RecordsNumbering,
   type ConsultantIndicator,
   type DoctorDecision,
@@ -78,6 +82,8 @@ export interface ICaseFile {
   version: number;
   note?: string;
   createdAt: Date;
+  scanStatus?: 'skipped' | 'clean' | 'infected' | 'error';
+  scanMessage?: string;
   storageTier: FileStorageTier;
   restoreStatus: FileRestoreStatus;
   hotUntil?: Date;
@@ -173,6 +179,8 @@ export interface ICase extends Document {
   recordsNumbering?: RecordsNumbering;
   clinicalPreferences?: ClinicalPreferences;
   occlusionGoals?: OcclusionGoals;
+  prosthoDetails?: ProsthoDetails;
+  implantDetails?: ImplantDetails;
   commercial?: CaseCommercial;
   submittedAt?: Date;
   slaHours?: number;
@@ -297,6 +305,8 @@ const caseFileSchema = new Schema<ICaseFile>(
     version: { type: Number, default: 1, min: 1 },
     note: { type: String, trim: true },
     createdAt: { type: Date, default: Date.now },
+    scanStatus: { type: String, enum: ['skipped', 'clean', 'infected', 'error'], default: 'skipped' },
+    scanMessage: { type: String, trim: true },
     storageTier: {
       type: String,
       enum: ALL_FILE_STORAGE_TIERS,
@@ -467,6 +477,8 @@ const caseSchema = new Schema<ICase>(
     recordsNumbering: { type: Schema.Types.Mixed, default: () => ({ ...EMPTY_RECORDS_NUMBERING }) },
     clinicalPreferences: { type: Schema.Types.Mixed, default: () => ({ ...EMPTY_CLINICAL_PREFERENCES }) },
     occlusionGoals: { type: Schema.Types.Mixed, default: () => ({ ...EMPTY_OCCLUSION_GOALS }) },
+    prosthoDetails: { type: Schema.Types.Mixed, default: () => ({ ...EMPTY_PROSTHO_DETAILS }) },
+    implantDetails: { type: Schema.Types.Mixed, default: () => ({ ...EMPTY_IMPLANT_DETAILS }) },
     commercial: { type: Schema.Types.Mixed, default: () => ({ ...EMPTY_CASE_COMMERCIAL }) },
     submittedAt: { type: Date, index: true },
     slaHours: { type: Number },

@@ -105,3 +105,58 @@ export async function confirmStripeSession(
 export function providerSupportsImmediateConfirm(provider: PaymentProviderId): boolean {
   return provider === PAYMENT_PROVIDERS.STRIPE;
 }
+
+export async function refundStripePayment(input: {
+  stripeSessionId?: string | null;
+  stripePaymentIntentId?: string | null;
+  amount?: number;
+}): Promise<{ refundId: string; status: string } | null> {
+  const sessionId = input.stripeSessionId?.trim() || '';
+  const intentId = input.stripePaymentIntentId?.trim() || '';
+  if (!sessionId && !intentId) return null;
+
+  if (!isStripeConfigured() || sessionId.startsWith('mock_') || intentId.startsWith('mock_')) {
+    return {
+      refundId: `mock_re_${Date.now()}`,
+      status: 'succeeded',
+    };
+  }
+
+  let paymentIntent = intentId;
+  if (!paymentIntent && sessionId) {
+    const sessionRes = await fetch(
+      `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`,
+      { headers: { Authorization: `Bearer ${env.stripeSecretKey}` } },
+    );
+    if (!sessionRes.ok) {
+      const text = await sessionRes.text();
+      throw new AppError(`Stripe session lookup failed: ${text}`, 502);
+    }
+    const session = (await sessionRes.json()) as { payment_intent?: string | null };
+    paymentIntent = session.payment_intent || '';
+  }
+  if (!paymentIntent) {
+    throw new AppError('Stripe payment intent not found for refund', 400);
+  }
+
+  const params = new URLSearchParams();
+  params.set('payment_intent', paymentIntent);
+  if (input.amount && input.amount > 0) {
+    params.set('amount', String(Math.round(input.amount * 100)));
+  }
+
+  const response = await fetch('https://api.stripe.com/v1/refunds', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.stripeSecretKey}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new AppError(`Stripe refund failed: ${text}`, 502);
+  }
+  const data = (await response.json()) as { id: string; status?: string };
+  return { refundId: data.id, status: data.status || 'succeeded' };
+}

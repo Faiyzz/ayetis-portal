@@ -160,6 +160,10 @@ export const PaymentSession: Model<IPaymentSession> =
 export interface IInvoice extends Document {
   invoiceNumber: string;
   caseId?: Types.ObjectId;
+  /** Mongo ids of all cases on a scheduled/batch invoice. */
+  batchedCaseIds?: Types.ObjectId[];
+  /** Human-readable case IDs listed on the invoice. */
+  billedCaseIds?: string[];
   paymentSessionId?: Types.ObjectId;
   customerUserId?: Types.ObjectId;
   customerEmail: string;
@@ -181,6 +185,8 @@ const invoiceSchema = new Schema<IInvoice>(
   {
     invoiceNumber: { type: String, required: true, unique: true, index: true },
     caseId: { type: Schema.Types.ObjectId, ref: 'Case', index: true },
+    batchedCaseIds: { type: [{ type: Schema.Types.ObjectId, ref: 'Case' }], default: [] },
+    billedCaseIds: { type: [String], default: [] },
     paymentSessionId: { type: Schema.Types.ObjectId, ref: 'PaymentSession' },
     customerUserId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     customerEmail: { type: String, required: true },

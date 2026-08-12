@@ -18,6 +18,8 @@ import {
   ALL_VELOCITY_PER_STAGE,
   ALL_WEAR_SCHEDULES,
   AESTHETIC_SUBCATEGORIES,
+  ALL_IMPLANT_PLANNING_MODES,
+  ALL_PROSTHO_MATERIALS,
   CASE_CATEGORIES,
   COMPLEX_SUBCATEGORIES,
   firstFieldError,
@@ -33,10 +35,15 @@ import {
   isQcErrorCode,
   validateDigitalAlignerPart1,
   validateDigitalAlignerPart3,
+  validateImplantSubmit,
+  validateProsthodonticSubmit,
   type CasePriority,
   type CaseStatus,
+  type CaseCommercial,
   type DigitalAlignerPart1Input,
   type DigitalAlignerPart3Input,
+  type ImplantDetails,
+  type ProsthoDetails,
 } from '@ayetis/shared';
 import { z } from 'zod';
 
@@ -119,6 +126,33 @@ const ALL_SUBCATEGORIES = [
   ...AESTHETIC_SUBCATEGORIES,
   ...COMPLEX_SUBCATEGORIES,
 ] as const;
+
+const prosthoDetailsSchema = z
+  .object({
+    restorationTeeth: looseStringArray,
+    abutmentTeeth: looseStringArray,
+    ponticTeeth: looseStringArray,
+    material: enumOrEmpty(ALL_PROSTHO_MATERIALS),
+    materialOther: z.string().trim().max(120).optional(),
+    shade: z.string().trim().max(40).optional(),
+    units: z.number().int().min(1).max(32).nullable().optional(),
+    antagonistNotes: z.string().trim().max(2000).optional(),
+    clinicalNotes: z.string().trim().max(5000).optional(),
+  })
+  .optional();
+
+const implantDetailsSchema = z
+  .object({
+    implantSites: looseStringArray,
+    implantCount: z.number().int().min(1).max(32).nullable().optional(),
+    planningMode: enumOrEmpty(ALL_IMPLANT_PLANNING_MODES),
+    cbctAvailable: z.boolean().nullable().optional(),
+    boneGraftRequired: z.boolean().nullable().optional(),
+    restorationPlanned: z.string().trim().max(200).optional(),
+    surgicalGuideRequired: z.boolean().nullable().optional(),
+    clinicalNotes: z.string().trim().max(5000).optional(),
+  })
+  .optional();
 
 const commercialSchema = z
   .object({
@@ -235,6 +269,8 @@ export const createCaseSchema = z
     recordsNumbering: recordsNumberingSchema,
     clinicalPreferences: clinicalPreferencesSchema,
     occlusionGoals: occlusionGoalsSchema,
+    prosthoDetails: prosthoDetailsSchema,
+    implantDetails: implantDetailsSchema,
     commercial: commercialSchema,
     priority: z
       .string()
@@ -251,9 +287,7 @@ export const createCaseSchema = z
   })
   .superRefine((value, ctx) => {
     if (value.asDraft) return;
-    if (value.caseCategory !== CASE_CATEGORIES.DIGITAL_ALIGNER) return;
-
-    const part1 = validateDigitalAlignerPart1({
+    const patient = {
       patientName: value.patientName,
       practiceName: value.practiceName,
       clinicName: value.clinicName,
@@ -262,11 +296,28 @@ export const createCaseSchema = z
       caseCategory: value.caseCategory,
       caseType: value.caseType,
       recordsNumbering: value.recordsNumbering as DigitalAlignerPart1Input['recordsNumbering'],
-    });
-    const part3 = validateDigitalAlignerPart3({
-      commercial: value.commercial as DigitalAlignerPart3Input['commercial'],
-    });
-    const combined = { ...part1, ...part3 };
+    };
+    let combined: Record<string, string> = {};
+    if (value.caseCategory === CASE_CATEGORIES.DIGITAL_ALIGNER || !value.caseCategory) {
+      combined = {
+        ...validateDigitalAlignerPart1(patient),
+        ...validateDigitalAlignerPart3({
+          commercial: value.commercial as DigitalAlignerPart3Input['commercial'],
+        }),
+      };
+    } else if (value.caseCategory === CASE_CATEGORIES.PROSTHODONTIC) {
+      combined = validateProsthodonticSubmit({
+        patient,
+        prosthoDetails: value.prosthoDetails as Partial<ProsthoDetails> | undefined,
+        commercial: value.commercial as Partial<CaseCommercial> | undefined,
+      });
+    } else if (value.caseCategory === CASE_CATEGORIES.IMPLANT) {
+      combined = validateImplantSubmit({
+        patient,
+        implantDetails: value.implantDetails as Partial<ImplantDetails> | undefined,
+        commercial: value.commercial as Partial<CaseCommercial> | undefined,
+      });
+    }
     const message = firstFieldError(combined);
     if (message) {
       ctx.addIssue({
@@ -301,6 +352,8 @@ export const updateCaseSchema = z
     recordsNumbering: recordsNumberingSchema,
     clinicalPreferences: clinicalPreferencesSchema,
     occlusionGoals: occlusionGoalsSchema,
+    prosthoDetails: prosthoDetailsSchema,
+    implantDetails: implantDetailsSchema,
     commercial: commercialSchema,
     priority: z
       .string()

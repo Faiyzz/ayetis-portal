@@ -281,6 +281,9 @@ export interface CaseFileDto {
   version: number;
   createdAt: string;
   note?: string;
+  /** Malware scan result when scan hook is enabled. */
+  scanStatus?: 'skipped' | 'clean' | 'infected' | 'error';
+  scanMessage?: string;
   storageTier: import('./storage').FileStorageTier;
   restoreStatus: import('./storage').FileRestoreStatus;
   hotUntil: string | null;
@@ -377,6 +380,8 @@ export interface CaseDetailDto extends CaseListItemDto {
   recordsNumbering: import('./treatment').RecordsNumbering | null;
   clinicalPreferences: import('./treatment').ClinicalPreferences | null;
   occlusionGoals: import('./treatment').OcclusionGoals | null;
+  prosthoDetails: import('./treatment').ProsthoDetails | null;
+  implantDetails: import('./treatment').ImplantDetails | null;
   commercial: import('./treatment').CaseCommercial | null;
   payment: CasePaymentOverview;
   cancelReason: string | null;
@@ -471,6 +476,8 @@ export interface CreateCaseInput {
   recordsNumbering?: Partial<import('./treatment').RecordsNumbering>;
   clinicalPreferences?: Partial<import('./treatment').ClinicalPreferences>;
   occlusionGoals?: Partial<import('./treatment').OcclusionGoals>;
+  prosthoDetails?: Partial<import('./treatment').ProsthoDetails>;
+  implantDetails?: Partial<import('./treatment').ImplantDetails>;
   commercial?: Partial<import('./treatment').CaseCommercial>;
   priority?: CasePriority;
   initialNote?: string;
@@ -503,6 +510,8 @@ export interface UpdateCaseInput {
   recordsNumbering?: Partial<import('./treatment').RecordsNumbering>;
   clinicalPreferences?: Partial<import('./treatment').ClinicalPreferences>;
   occlusionGoals?: Partial<import('./treatment').OcclusionGoals>;
+  prosthoDetails?: Partial<import('./treatment').ProsthoDetails>;
+  implantDetails?: Partial<import('./treatment').ImplantDetails>;
   commercial?: Partial<import('./treatment').CaseCommercial>;
   priority?: CasePriority;
   status?: CaseStatus;

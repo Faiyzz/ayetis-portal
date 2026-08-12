@@ -6,6 +6,7 @@ import {
   CASE_CATEGORY_LABELS,
   PAYMENT_STATUS_LABELS,
   PERMISSIONS,
+  REFUND_STATUSES,
   REFUND_STATUS_LABELS,
   type CancellationAuditDto,
   type CancellationReportSummary,
@@ -212,10 +213,34 @@ export function CancellationReportPage() {
         refundStatus: next,
         refundTransactionReference,
       });
-      toast().success('Refund status updated');
+      toast().success(
+        next === REFUND_STATUSES.PROCESSED
+          ? 'Refund processed'
+          : 'Refund status updated',
+      );
       await load(page);
     } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to update refund status'));
+      const message = getErrorMessage(err, 'Unable to update refund status');
+      if (next === REFUND_STATUSES.PROCESSED && /transaction reference/i.test(message)) {
+        const entered = window.prompt(message);
+        if (!entered?.trim()) {
+          toast().error(message);
+          return;
+        }
+        try {
+          await updateCancellationRefund(id, {
+            refundStatus: next,
+            refundTransactionReference: entered.trim(),
+          });
+          toast().success('Refund processed');
+          await load(page);
+          return;
+        } catch (retryErr) {
+          toast().error(getErrorMessage(retryErr, 'Unable to update refund status'));
+          return;
+        }
+      }
+      toast().error(message);
     }
   }
 

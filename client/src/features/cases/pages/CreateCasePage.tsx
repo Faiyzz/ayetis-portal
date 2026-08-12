@@ -7,7 +7,9 @@ import {
   DEMO_CASE_MESSAGES,
   EMPTY_CASE_COMMERCIAL,
   EMPTY_CLINICAL_PREFERENCES,
+  EMPTY_IMPLANT_DETAILS,
   EMPTY_OCCLUSION_GOALS,
+  EMPTY_PROSTHO_DETAILS,
   EMPTY_RECORDS_NUMBERING,
   EMPTY_TREATMENT_INSTRUCTIONS,
   FILE_CATEGORY_LABELS,
@@ -16,6 +18,10 @@ import {
   firstFieldError,
   validateDigitalAlignerPart1,
   validateDigitalAlignerPart3,
+  validateImplantSubmit,
+  validatePatientCore,
+  validateProsthodonticSubmit,
+  validateRequiredCaseFiles,
   type CaseCategory,
   type CaseType,
   type CreateCaseInput,
@@ -36,7 +42,9 @@ import {
 } from '@/features/cases/api';
 import {
   ClinicalPreferencesPart,
+  ImplantClinicalPart,
   OcclusionCommercialPart,
+  ProsthodonticClinicalPart,
   RecordsNumberingPart,
 } from '@/features/cases/components/treatment-form';
 import {
@@ -59,14 +67,20 @@ const ALIGNER_STEPS = [
   { id: 'files', title: 'Files & Submit', hint: 'Attach files, save or submit' },
 ] as const;
 
-const OTHER_STEPS = [
-  { id: 'records', title: 'Patient & Case', hint: 'Category, patient, and summary' },
-  { id: 'files', title: 'Files & Submit', hint: 'Attach files, save or submit' },
+const CLINICAL_STEPS = [
+  { id: 'records', title: 'Part 1 — Patient & records', hint: 'Category, patient, and impressions' },
+  { id: 'clinical', title: 'Part 2 — Clinical details', hint: 'Tooth chart and restoration / implant plan' },
+  {
+    id: 'occlusion_commercial',
+    title: 'Part 3 — Commercial',
+    hint: 'Treatment plan, discount, and pricing',
+  },
+  { id: 'files', title: 'Files & Submit', hint: 'Required scans/photos and submit' },
 ] as const;
 
-type AlignerStepId = (typeof ALIGNER_STEPS)[number]['id'];
-type OtherStepId = (typeof OTHER_STEPS)[number]['id'];
-type StepId = AlignerStepId | OtherStepId;
+type StepId =
+  | (typeof ALIGNER_STEPS)[number]['id']
+  | (typeof CLINICAL_STEPS)[number]['id'];
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -98,6 +112,8 @@ export function CreateCasePage() {
     recordsNumbering: { ...EMPTY_RECORDS_NUMBERING },
     clinicalPreferences: { ...EMPTY_CLINICAL_PREFERENCES },
     occlusionGoals: { ...EMPTY_OCCLUSION_GOALS },
+    prosthoDetails: { ...EMPTY_PROSTHO_DETAILS },
+    implantDetails: { ...EMPTY_IMPLANT_DETAILS },
     commercial: { ...EMPTY_CASE_COMMERCIAL },
     priority: CASE_PRIORITIES.NORMAL,
     initialNote: '',
@@ -114,7 +130,9 @@ export function CreateCasePage() {
 
   const category = (form.caseCategory || CASE_CATEGORIES.DIGITAL_ALIGNER) as CaseCategory;
   const isAligner = category === CASE_CATEGORIES.DIGITAL_ALIGNER;
-  const steps = isAligner ? ALIGNER_STEPS : OTHER_STEPS;
+  const isProstho = category === CASE_CATEGORIES.PROSTHODONTIC;
+  const isImplant = category === CASE_CATEGORIES.IMPLANT;
+  const steps = isAligner ? ALIGNER_STEPS : CLINICAL_STEPS;
   const step = steps[Math.min(stepIndex, steps.length - 1)]!;
   const progress = useMemo(
     () => ((Math.min(stepIndex, steps.length - 1) + 1) / steps.length) * 100,
@@ -124,11 +142,13 @@ export function CreateCasePage() {
   const records = { ...EMPTY_RECORDS_NUMBERING, ...(form.recordsNumbering ?? {}) };
   const clinical = { ...EMPTY_CLINICAL_PREFERENCES, ...(form.clinicalPreferences ?? {}) };
   const occlusion = { ...EMPTY_OCCLUSION_GOALS, ...(form.occlusionGoals ?? {}) };
+  const prostho = { ...EMPTY_PROSTHO_DETAILS, ...(form.prosthoDetails ?? {}) };
+  const implant = { ...EMPTY_IMPLANT_DETAILS, ...(form.implantDetails ?? {}) };
   const commercial = { ...EMPTY_CASE_COMMERCIAL, ...(form.commercial ?? {}) };
 
   useEffect(() => {
     setStepIndex(0);
-  }, [isAligner]);
+  }, [category]);
 
   useEffect(() => {
     if (!needsDoctorPicker) return;
@@ -171,34 +191,58 @@ export function CreateCasePage() {
     update('commercial', { ...commercial, ...patch });
   }
 
+  function patientCore() {
+    return {
+      patientName: form.patientName,
+      practiceName: form.practiceName,
+      clinicName: form.clinicName,
+      chiefComplaint: form.chiefComplaint,
+      patientDateOfBirth: form.patientDateOfBirth,
+      caseCategory: form.caseCategory,
+      caseType: form.caseType,
+      doctorId: form.doctorId,
+      needsDoctorPicker,
+      recordsNumbering: records,
+    };
+  }
+
   function validateStep(id: StepId): FieldErrors {
     if (id === 'records') {
-      if (isAligner) {
-        return validateDigitalAlignerPart1({
-          patientName: form.patientName,
-          practiceName: form.practiceName,
-          clinicName: form.clinicName,
-          chiefComplaint: form.chiefComplaint,
-          patientDateOfBirth: form.patientDateOfBirth,
-          caseCategory: form.caseCategory,
-          caseType: form.caseType,
-          doctorId: form.doctorId,
-          needsDoctorPicker,
-          recordsNumbering: records,
-        });
-      }
-      const errors: FieldErrors = {};
-      if (!form.caseCategory) errors.caseCategory = 'Select a case category';
-      if (!form.caseType) errors.caseType = 'Select a case type';
-      if (!form.patientName.trim()) errors.patientName = 'Patient name is required';
-      if (!form.treatmentSummary.trim() && !form.chiefComplaint?.trim()) {
-        errors.chiefComplaint = 'Chief complaint or treatment summary is required';
-      }
-      if (needsDoctorPicker && !form.doctorId) errors.doctorId = 'Select the treating doctor';
-      return errors;
+      if (isAligner) return validateDigitalAlignerPart1(patientCore());
+      return validatePatientCore(patientCore());
     }
-    if (id === 'occlusion_commercial' && isAligner) {
-      return validateDigitalAlignerPart3({ commercial });
+    if (id === 'clinical') {
+      if (isProstho) {
+        const errors = validateProsthodonticSubmit({
+          patient: patientCore(),
+          prosthoDetails: prostho,
+          commercial: { treatmentPlanId: commercial.treatmentPlanId || 'pending' },
+        });
+        delete errors['commercial.treatmentPlanId'];
+        return errors;
+      }
+      if (isImplant) {
+        const errors = validateImplantSubmit({
+          patient: patientCore(),
+          implantDetails: implant,
+          commercial: { treatmentPlanId: commercial.treatmentPlanId || 'pending' },
+        });
+        delete errors['commercial.treatmentPlanId'];
+        return errors;
+      }
+      return {};
+    }
+    if (id === 'occlusion_commercial') {
+      if (isAligner) return validateDigitalAlignerPart3({ commercial });
+      if (!commercial.treatmentPlanId) {
+        return { 'commercial.treatmentPlanId': 'Select a treatment plan' };
+      }
+    }
+    if (id === 'files') {
+      return validateRequiredCaseFiles(
+        category,
+        pendingFiles.map((file) => ({ name: file.name, category: fileCategory })),
+      );
     }
     return {};
   }
@@ -249,7 +293,9 @@ export function CreateCasePage() {
     if (!asDraft) {
       const allErrors: FieldErrors = {
         ...validateStep('records'),
-        ...(isAligner ? validateStep('occlusion_commercial') : {}),
+        ...validateStep('clinical'),
+        ...validateStep('occlusion_commercial'),
+        ...validateStep('files'),
       };
       setFieldErrors(allErrors);
       const message = firstFieldError(allErrors);
@@ -352,7 +398,11 @@ export function CreateCasePage() {
         subtitle={
           isAligner
             ? 'Clinical case submission engine — Records, Clinical Preferences, Occlusion & Commercial.'
-            : 'Create a case with patient details, summary, and files.'
+            : isProstho
+              ? 'Prosthodontic planning — patient records, restoration chart, plan, and files.'
+              : isImplant
+                ? 'Implant planning — patient records, implant sites, plan, and CBCT/scans.'
+                : 'Create a case with patient details, clinical information, and files.'
         }
       >
         <Link to="/app/cases" className="text-sm font-medium text-brand-600 hover:text-brand-700">
@@ -395,37 +445,42 @@ export function CreateCasePage() {
         </div>
 
         {step.id === 'records' ? (
-          isAligner ? (
-            <RecordsNumberingPart
-              form={form}
-              records={records}
-              errors={fieldErrors}
-              doctors={doctors}
-              needsDoctorPicker={needsDoctorPicker}
-              onFormChange={update}
-              onRecordsChange={updateRecords}
-            />
-          ) : (
-            <RecordsNumberingPart
-              form={form}
-              records={records}
-              errors={fieldErrors}
-              doctors={doctors}
-              needsDoctorPicker={needsDoctorPicker}
-              onFormChange={update}
-              onRecordsChange={updateRecords}
-            />
-          )
+          <RecordsNumberingPart
+            form={form}
+            records={records}
+            errors={fieldErrors}
+            doctors={doctors}
+            needsDoctorPicker={needsDoctorPicker}
+            onFormChange={update}
+            onRecordsChange={updateRecords}
+            showAlignerParams={isAligner}
+          />
         ) : null}
 
         {step.id === 'clinical' ? (
-          <ClinicalPreferencesPart
-            clinical={clinical}
-            numberingSystem={records.toothNumberingSystem || TOOTH_NUMBERING_SYSTEMS.FDI}
-            instructions={form.instructions}
-            onClinicalChange={updateClinical}
-            onInstructionsChange={(value) => update('instructions', value)}
-          />
+          isProstho ? (
+            <ProsthodonticClinicalPart
+              details={prostho}
+              numberingSystem={records.toothNumberingSystem || TOOTH_NUMBERING_SYSTEMS.FDI}
+              errors={fieldErrors}
+              onChange={(patch) => update('prosthoDetails', { ...prostho, ...patch })}
+            />
+          ) : isImplant ? (
+            <ImplantClinicalPart
+              details={implant}
+              numberingSystem={records.toothNumberingSystem || TOOTH_NUMBERING_SYSTEMS.FDI}
+              errors={fieldErrors}
+              onChange={(patch) => update('implantDetails', { ...implant, ...patch })}
+            />
+          ) : (
+            <ClinicalPreferencesPart
+              clinical={clinical}
+              numberingSystem={records.toothNumberingSystem || TOOTH_NUMBERING_SYSTEMS.FDI}
+              instructions={form.instructions}
+              onClinicalChange={updateClinical}
+              onInstructionsChange={(value) => update('instructions', value)}
+            />
+          )
         ) : null}
 
         {step.id === 'occlusion_commercial' ? (
@@ -437,6 +492,8 @@ export function CreateCasePage() {
             onOcclusionChange={updateOcclusion}
             onCommercialChange={updateCommercial}
             onApplyDiscount={() => void applyDiscount()}
+            showOcclusion={isAligner}
+            requireApproach={isAligner}
           />
         ) : null}
 
@@ -476,6 +533,7 @@ export function CreateCasePage() {
                 ))}
               </ul>
             ) : null}
+            {fieldErrors.files ? <p className="text-sm text-red-600">{fieldErrors.files}</p> : null}
             <TextField
               label="Initial note"
               name="note"

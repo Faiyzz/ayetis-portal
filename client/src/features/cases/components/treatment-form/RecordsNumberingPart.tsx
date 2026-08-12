@@ -70,6 +70,7 @@ export function RecordsNumberingPart({
   needsDoctorPicker,
   onFormChange,
   onRecordsChange,
+  showAlignerParams = true,
 }: {
   form: RecordsFormSlice;
   records: RecordsNumbering;
@@ -78,6 +79,8 @@ export function RecordsNumberingPart({
   needsDoctorPicker: boolean;
   onFormChange: <K extends keyof RecordsFormSlice>(key: K, value: RecordsFormSlice[K]) => void;
   onRecordsChange: (patch: Partial<RecordsNumbering>) => void;
+  /** Aligner-only manufacturing fields (velocity, wear, trimline, retainer). */
+  showAlignerParams?: boolean;
 }) {
   const [countryOptions, setCountryOptions] = useState(FALLBACK_COUNTRY_OPTIONS);
   const [genderOptions, setGenderOptions] = useState(FALLBACK_GENDER_OPTIONS);
@@ -365,6 +368,7 @@ export function RecordsNumberingPart({
           </div>
         </fieldset>
 
+        {showAlignerParams ? (
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-ink">Treat arches *</span>
           <select
@@ -385,7 +389,10 @@ export function RecordsNumberingPart({
           </select>
           <FieldError errors={errors} name="recordsNumbering.treatArches" />
         </label>
+        ) : null}
 
+        {showAlignerParams ? (
+        <>
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-ink">Velocity per stage *</span>
           <select
@@ -507,6 +514,13 @@ export function RecordsNumberingPart({
           onChange={(e) => onRecordsChange({ plannedTreatmentDuration: e.target.value })}
           placeholder="e.g. 6–9 months"
         />
+        </>
+        ) : (
+          <p className="text-sm text-muted">
+            Use the next step for restoration / implant clinical details. Impression method and
+            records above still apply.
+          </p>
+        )}
       </SectionCard>
     </div>
   );

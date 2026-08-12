@@ -1,4 +1,5 @@
 import type {
+  BatchInvoiceResult,
   BillingArrangement,
   BillingProfileDto,
   CreateCaseEligibility,
@@ -235,4 +236,11 @@ export function invoiceHtmlUrl(id: string) {
 
 export function receiptHtmlUrl(id: string) {
   return `/api/commercial/receipts/${id}/html`;
+}
+
+export async function generateBatchInvoices(caseIds?: string[]): Promise<BatchInvoiceResult> {
+  const { data } = await api.post('/commercial/invoices/batch', {
+    caseIds: caseIds ?? [],
+  });
+  return data.data;
 }

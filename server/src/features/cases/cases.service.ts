@@ -12,7 +12,9 @@ import {
   CASE_CANCEL_WINDOW_MINUTES,
   EMPTY_CASE_COMMERCIAL,
   EMPTY_CLINICAL_PREFERENCES,
+  EMPTY_IMPLANT_DETAILS,
   EMPTY_OCCLUSION_GOALS,
+  EMPTY_PROSTHO_DETAILS,
   EMPTY_RECORDS_NUMBERING,
   REFUND_STATUSES,
   isWithinCancelWindow,
@@ -120,6 +122,7 @@ import { Case, type ICase, type IClinicalRemark, type IQcReview } from '../../mo
 import { generateCaseId } from '../../models/CaseCounter';
 import { User } from '../../models/User';
 import { extractArchiveMembers } from '../../services/archiveExtract.service';
+import { scanUploadedFile } from '../../services/malwareScan.service';
 import {
   caseDeliveredTemplate,
   caseEventTemplate,
@@ -546,6 +549,14 @@ async function toDetail(
       ...EMPTY_OCCLUSION_GOALS,
       ...(caseDoc.occlusionGoals ?? {}),
     },
+    prosthoDetails: {
+      ...EMPTY_PROSTHO_DETAILS,
+      ...(caseDoc.prosthoDetails ?? {}),
+    },
+    implantDetails: {
+      ...EMPTY_IMPLANT_DETAILS,
+      ...(caseDoc.implantDetails ?? {}),
+    },
     commercial: {
       ...EMPTY_CASE_COMMERCIAL,
       ...(caseDoc.commercial ?? {}),
@@ -619,6 +630,8 @@ async function toDetail(
       version: file.version || 1,
       createdAt: file.createdAt.toISOString(),
       note: file.note,
+      scanStatus: file.scanStatus,
+      scanMessage: file.scanMessage,
       ...toLifecycleDto(file, file.createdAt),
     })),
     history: mapHistory(caseDoc),
@@ -915,6 +928,8 @@ function pushCaseFile(
     note?: string;
     viewUrl?: string;
     extractedFrom?: string;
+    scanStatus?: 'skipped' | 'clean' | 'infected' | 'error';
+    scanMessage?: string;
   },
 ) {
   const sameNameCount = caseDoc.files.filter(
@@ -937,6 +952,8 @@ function pushCaseFile(
     version: sameNameCount + 1,
     note: input.note?.trim() || undefined,
     createdAt,
+    scanStatus: input.scanStatus ?? 'skipped',
+    scanMessage: input.scanMessage,
     storageTier: hot.storageTier,
     restoreStatus: hot.restoreStatus,
     hotUntil: hot.hotUntil,
@@ -1319,6 +1336,8 @@ export async function createCase(
     recordsNumbering: { ...EMPTY_RECORDS_NUMBERING, ...(input.recordsNumbering ?? {}) },
     clinicalPreferences: { ...EMPTY_CLINICAL_PREFERENCES, ...(input.clinicalPreferences ?? {}) },
     occlusionGoals: { ...EMPTY_OCCLUSION_GOALS, ...(input.occlusionGoals ?? {}) },
+    prosthoDetails: { ...EMPTY_PROSTHO_DETAILS, ...(input.prosthoDetails ?? {}) },
+    implantDetails: { ...EMPTY_IMPLANT_DETAILS, ...(input.implantDetails ?? {}) },
     commercial: resolvedCommercial,
     payment: {
       status: paymentStatus as never,
@@ -1552,6 +1571,34 @@ export async function updateCase(
       changes.push({
         field: 'occlusionGoals',
         label: 'Occlusion goals',
+        from: previous,
+        to: next,
+      });
+    }
+  }
+
+  if (input.prosthoDetails) {
+    const previous = { ...EMPTY_PROSTHO_DETAILS, ...(caseDoc.prosthoDetails ?? {}) };
+    const next = { ...previous, ...input.prosthoDetails };
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      caseDoc.prosthoDetails = next;
+      changes.push({
+        field: 'prosthoDetails',
+        label: 'Prosthodontic details',
+        from: previous,
+        to: next,
+      });
+    }
+  }
+
+  if (input.implantDetails) {
+    const previous = { ...EMPTY_IMPLANT_DETAILS, ...(caseDoc.implantDetails ?? {}) };
+    const next = { ...previous, ...input.implantDetails };
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      caseDoc.implantDetails = next;
+      changes.push({
+        field: 'implantDetails',
+        label: 'Implant details',
         from: previous,
         to: next,
       });
@@ -2014,6 +2061,7 @@ export async function uploadCaseFiles(
       });
       try {
         for (const member of members) {
+          const scan = await scanUploadedFile(member.tempPath, member.originalName);
           const category = detectCategory(
             member.originalName,
             member.mimeType,
@@ -2035,6 +2083,8 @@ export async function uploadCaseFiles(
             actor,
             note: options.note?.trim() || undefined,
             extractedFrom: file.originalname,
+            scanStatus: scan.status,
+            scanMessage: scan.message,
           });
           uploadedNames.push(member.originalName);
         }
@@ -2049,6 +2099,7 @@ export async function uploadCaseFiles(
       continue;
     }
 
+    const scan = await scanUploadedFile(file.path, file.originalname);
     const category = detectCategory(file.originalname, file.mimetype, options.category);
     const { storageKey } = await persistUploadedFile({
       caseId: caseDoc.caseId,
@@ -2066,6 +2117,8 @@ export async function uploadCaseFiles(
       category,
       actor,
       note: options.note?.trim() || undefined,
+      scanStatus: scan.status,
+      scanMessage: scan.message,
     });
     uploadedNames.push(file.originalname);
   }

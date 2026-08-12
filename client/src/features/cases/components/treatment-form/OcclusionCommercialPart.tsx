@@ -36,6 +36,8 @@ export function OcclusionCommercialPart({
   onOcclusionChange,
   onCommercialChange,
   onApplyDiscount,
+  showOcclusion = true,
+  requireApproach = true,
 }: {
   occlusion: OcclusionGoals;
   commercial: CaseCommercial;
@@ -44,6 +46,8 @@ export function OcclusionCommercialPart({
   onOcclusionChange: (patch: Partial<OcclusionGoals>) => void;
   onCommercialChange: (patch: Partial<CaseCommercial>) => void;
   onApplyDiscount: () => void;
+  showOcclusion?: boolean;
+  requireApproach?: boolean;
 }) {
   const occ = { ...EMPTY_OCCLUSION_GOALS, ...occlusion };
   const com = { ...EMPTY_CASE_COMMERCIAL, ...commercial };
@@ -55,7 +59,8 @@ export function OcclusionCommercialPart({
         : [];
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className={showOcclusion ? 'grid gap-5 lg:grid-cols-2' : 'grid gap-5'}>
+      {showOcclusion ? (
       <SectionCard title="Occlusion & treatment goals">
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField
@@ -333,48 +338,53 @@ export function OcclusionCommercialPart({
           />
         </label>
       </SectionCard>
+      ) : null}
 
       <SectionCard title="Commercial information">
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-ink">Treatment approach *</span>
-          <select
-            value={com.treatmentApproach}
-            onChange={(e) =>
-              onCommercialChange({
-                treatmentApproach: e.target
-                  .value as CaseCommercial['treatmentApproach'],
-                treatmentSubCategory: '',
-              })
-            }
-            className={fieldClassName(errors, 'commercial.treatmentApproach')}
-          >
-            <option value="">—</option>
-            {ALL_TREATMENT_APPROACHES.map((value) => (
-              <option key={value} value={value}>
-                {TREATMENT_APPROACH_LABELS[value]}
-              </option>
-            ))}
-          </select>
-          <FieldError errors={errors} name="commercial.treatmentApproach" />
-        </label>
+        {requireApproach ? (
+          <>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-ink">Treatment approach *</span>
+              <select
+                value={com.treatmentApproach}
+                onChange={(e) =>
+                  onCommercialChange({
+                    treatmentApproach: e.target
+                      .value as CaseCommercial['treatmentApproach'],
+                    treatmentSubCategory: '',
+                  })
+                }
+                className={fieldClassName(errors, 'commercial.treatmentApproach')}
+              >
+                <option value="">—</option>
+                {ALL_TREATMENT_APPROACHES.map((value) => (
+                  <option key={value} value={value}>
+                    {TREATMENT_APPROACH_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+              <FieldError errors={errors} name="commercial.treatmentApproach" />
+            </label>
 
-        {com.treatmentApproach ? (
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-ink">Sub-category *</span>
-            <select
-              value={com.treatmentSubCategory}
-              onChange={(e) => onCommercialChange({ treatmentSubCategory: e.target.value })}
-              className={fieldClassName(errors, 'commercial.treatmentSubCategory')}
-            >
-              <option value="">—</option>
-              {subcats.map((value) => (
-                <option key={value} value={value}>
-                  {TREATMENT_SUBCATEGORY_LABELS[value as TreatmentSubCategory]}
-                </option>
-              ))}
-            </select>
-            <FieldError errors={errors} name="commercial.treatmentSubCategory" />
-          </label>
+            {com.treatmentApproach ? (
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-ink">Sub-category *</span>
+                <select
+                  value={com.treatmentSubCategory}
+                  onChange={(e) => onCommercialChange({ treatmentSubCategory: e.target.value })}
+                  className={fieldClassName(errors, 'commercial.treatmentSubCategory')}
+                >
+                  <option value="">—</option>
+                  {subcats.map((value) => (
+                    <option key={value} value={value}>
+                      {TREATMENT_SUBCATEGORY_LABELS[value as TreatmentSubCategory]}
+                    </option>
+                  ))}
+                </select>
+                <FieldError errors={errors} name="commercial.treatmentSubCategory" />
+              </label>
+            ) : null}
+          </>
         ) : null}
 
         <label className="block space-y-1.5">
