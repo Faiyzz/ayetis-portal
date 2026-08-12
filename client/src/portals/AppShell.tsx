@@ -542,16 +542,6 @@ export function AppShell() {
   const dashboardPath = getDashboardPath(user.role);
   const canCreateCase = can(PERMISSIONS.CASE_CREATE);
   const canCreateUser = can(PERMISSIONS.USER_CREATE);
-  const canListUsers = can(PERMISSIONS.USER_LIST);
-  const canViewRoles = can(PERMISSIONS.ROLE_VIEW_PERMISSIONS);
-  const canViewActivity = can(PERMISSIONS.AUDIT_VIEW);
-  const canViewCases = canAny(
-    PERMISSIONS.CASE_VIEW_OWN,
-    PERMISSIONS.CASE_VIEW_ALL,
-    PERMISSIONS.CASE_VIEW_ASSIGNED,
-    PERMISSIONS.CASE_VIEW_ORG,
-    PERMISSIONS.CASE_VIEW_FACILITY,
-  );
   const canManageCorporate = canAny(
     PERMISSIONS.ORG_MANAGE_SELF,
     PERMISSIONS.FACILITY_MANAGE,
@@ -562,11 +552,6 @@ export function AppShell() {
     PERMISSIONS.CORPORATE_REPORT_VIEW,
     PERMISSIONS.CORPORATE_AUDIT_VIEW,
   );
-  const canViewComplaints = canAny(
-    PERMISSIONS.COMPLAINT_CREATE,
-    PERMISSIONS.COMPLAINT_VIEW,
-    PERMISSIONS.COMPLAINT_MANAGE,
-  );
 
   const navItems = useMemo(
     () =>
@@ -575,25 +560,11 @@ export function AppShell() {
         canCreateUser,
         canManageCorporate,
       }).filter((item) => {
-        if (item.id === 'cases') return canViewCases;
-        if (item.id === 'corporate') return canManageCorporate;
-        if (item.id === 'users') return canListUsers;
-        if (item.id === 'roles') return canViewRoles;
-        if (item.id === 'activity') return canViewActivity;
-        if (item.id === 'complaints') return canViewComplaints;
+        if (item.permission) return can(item.permission);
+        if (item.anyOf?.length) return canAny(...item.anyOf);
         return true;
       }),
-    [
-      dashboardPath,
-      canCreateCase,
-      canCreateUser,
-      canManageCorporate,
-      canViewCases,
-      canListUsers,
-      canViewRoles,
-      canViewActivity,
-      canViewComplaints,
-    ],
+    [dashboardPath, canCreateCase, canCreateUser, canManageCorporate, can, canAny],
   );
 
   function closeMobile() {

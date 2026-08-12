@@ -238,92 +238,60 @@ export async function seedSettingsData(): Promise<void> {
     { upsert: true },
   );
 
+  // Unique index is (type, code). Match on code so label renames (e.g. "Dr" → "Dr.")
+  // do not try to insert a second row with the same code.
+  async function upsertMasterList(
+    type: (typeof MASTER_LIST_TYPES)[keyof typeof MASTER_LIST_TYPES],
+    label: string,
+    codeSource: string,
+    sortOrder: number,
+  ) {
+    const code = slugCode(codeSource);
+    await MasterListItem.findOneAndUpdate(
+      { type, code },
+      {
+        $setOnInsert: {
+          type,
+          code,
+          isActive: true,
+        },
+        $set: {
+          label,
+          sortOrder,
+        },
+      },
+      { upsert: true },
+    );
+  }
+
   let sort = 0;
   for (const g of GENDER_OPTIONS) {
-    await MasterListItem.findOneAndUpdate(
-      { type: MASTER_LIST_TYPES.GENDER, label: g.label },
-      {
-        $setOnInsert: {
-          type: MASTER_LIST_TYPES.GENDER,
-          code: slugCode(g.value),
-          label: g.label,
-          sortOrder: sort++,
-          isActive: true,
-        },
-      },
-      { upsert: true },
-    );
+    await upsertMasterList(MASTER_LIST_TYPES.GENDER, g.label, g.value, sort++);
   }
 
-  const languages = [...URD_LANGUAGES];
   sort = 0;
-  for (const label of languages) {
-    await MasterListItem.findOneAndUpdate(
-      { type: MASTER_LIST_TYPES.LANGUAGE, label },
-      {
-        $setOnInsert: {
-          type: MASTER_LIST_TYPES.LANGUAGE,
-          code: slugCode(label),
-          label,
-          sortOrder: sort++,
-          isActive: true,
-        },
-      },
-      { upsert: true },
-    );
+  for (const label of URD_LANGUAGES) {
+    await upsertMasterList(MASTER_LIST_TYPES.LANGUAGE, label, label, sort++);
   }
 
-  const professions = [...URD_PROFESSIONS];
   sort = 0;
-  for (const label of professions) {
-    await MasterListItem.findOneAndUpdate(
-      { type: MASTER_LIST_TYPES.PROFESSION, label },
-      {
-        $setOnInsert: {
-          type: MASTER_LIST_TYPES.PROFESSION,
-          code: slugCode(label),
-          label,
-          sortOrder: sort++,
-          isActive: true,
-        },
-      },
-      { upsert: true },
-    );
+  for (const label of URD_PROFESSIONS) {
+    await upsertMasterList(MASTER_LIST_TYPES.PROFESSION, label, label, sort++);
   }
 
   sort = 0;
   for (const label of URD_PROFESSION_SPECIALIZATIONS) {
-    await MasterListItem.findOneAndUpdate(
-      { type: MASTER_LIST_TYPES.PROFESSION_SPECIALIZATION, label },
-      {
-        $setOnInsert: {
-          type: MASTER_LIST_TYPES.PROFESSION_SPECIALIZATION,
-          code: slugCode(label),
-          label,
-          sortOrder: sort++,
-          isActive: true,
-        },
-      },
-      { upsert: true },
+    await upsertMasterList(
+      MASTER_LIST_TYPES.PROFESSION_SPECIALIZATION,
+      label,
+      label,
+      sort++,
     );
   }
 
-  const titles = [...URD_ACADEMIC_TITLES];
   sort = 0;
-  for (const label of titles) {
-    await MasterListItem.findOneAndUpdate(
-      { type: MASTER_LIST_TYPES.ACADEMIC_TITLE, label },
-      {
-        $setOnInsert: {
-          type: MASTER_LIST_TYPES.ACADEMIC_TITLE,
-          code: slugCode(label),
-          label,
-          sortOrder: sort++,
-          isActive: true,
-        },
-      },
-      { upsert: true },
-    );
+  for (const label of URD_ACADEMIC_TITLES) {
+    await upsertMasterList(MASTER_LIST_TYPES.ACADEMIC_TITLE, label, label, sort++);
   }
 
   for (const tpl of DEFAULT_EMAIL_TEMPLATE_DEFS) {
