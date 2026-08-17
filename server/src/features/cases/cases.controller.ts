@@ -81,6 +81,24 @@ export async function updateCase(req: AuthenticatedRequest, res: Response, next:
   }
 }
 
+export async function updateDraftCase(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await casesService.updateDraftCase(
+      await actor(req),
+      req.params.caseId,
+      req.body,
+      getRequestAuditContext(req),
+    );
+    res.json({
+      success: true,
+      data,
+      message: req.body?.asDraft ? 'Draft updated' : `Case ${data.caseId} submitted`,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function setPriority(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const data = await casesService.setCasePriority(

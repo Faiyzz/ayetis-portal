@@ -1,20 +1,24 @@
 import {
   AUDIT_ACTIONS,
+  CASE_STATUSES,
   PAYMENT_PROVIDERS,
   PAYMENT_PROVIDER_LABELS,
   PAYMENT_SESSION_STATUSES,
   PAYMENT_STATUSES,
+  PERMISSIONS,
+  permissionsInclude,
   type CreateCaseInput,
   type PaymentProviderConfigDto,
   type PaymentProviderId,
   type PaymentSessionDto,
 } from '@ayetis/shared';
+import { Types } from 'mongoose';
 import {
   PaymentProviderConfig,
   PaymentSession,
   type IPaymentSession,
 } from '../../models/Commercial';
-import { Case } from '../../models/Case';
+import { Case, type ICase } from '../../models/Case';
 import { User } from '../../models/User';
 import { AppError } from '../../utils/AppError';
 import { env } from '../../config/env';
@@ -161,12 +165,63 @@ export async function upsertPaymentProvider(
 
 export async function createPaymentSession(
   userId: string,
-  createPayload: CreateCaseInput,
+  createPayload: CreateCaseInput & { draftId?: string; caseId?: string },
   actor: { id: string; email: string; role: string },
   audit: RequestAuditContext = {},
 ): Promise<PaymentSessionDto> {
   const planId = createPayload.commercial?.treatmentPlanId;
   if (!planId) throw new AppError('Treatment plan is required for payment', 400);
+
+  const rawPayload = createPayload as unknown as Record<string, unknown>;
+  const draftId = (rawPayload?.draftId as string) || (rawPayload?.caseId as string);
+
+  let draftCaseDoc: ICase | null = null;
+  if (draftId) {
+    const { findCase } = await import('../cases/cases.service');
+    draftCaseDoc = await findCase(draftId);
+    if (!draftCaseDoc) {
+      throw new AppError('Draft case not found', 404);
+    }
+    const isOwner = String(draftCaseDoc.doctorId) === actor.id;
+    const { resolvePermissionsForUserId } = await import('../users/users.service');
+    const userPerms = await resolvePermissionsForUserId(actor.id);
+    const canManageAll = permissionsInclude(userPerms, PERMISSIONS.CASE_UPDATE);
+    if (!isOwner && !canManageAll) {
+      throw new AppError('You can only initiate payment for your own draft cases', 403);
+    }
+    if (draftCaseDoc.status !== CASE_STATUSES.SAVED_FOR_SUBMISSION) {
+      throw new AppError('Only draft cases can be submitted through payment', 400);
+    }
+
+    // Check if there is already an active pending/awaiting session for this draft to reuse
+    const existingSession = await PaymentSession.findOne({
+      caseId: draftCaseDoc._id,
+      status: {
+        $in: [
+          PAYMENT_SESSION_STATUSES.PENDING,
+          PAYMENT_SESSION_STATUSES.AWAITING_CONFIRMATION,
+        ],
+      },
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (existingSession) {
+      const eligibility = await evaluateCreateEligibility({
+        userId,
+        treatmentPlanId: planId,
+        discountCode: createPayload.commercial?.discountCode,
+        isDemo: createPayload.isDemo,
+        caseCategory: createPayload.caseCategory,
+      });
+      existingSession.amount = eligibility.pricing.finalPayableAmount;
+      existingSession.currency = eligibility.pricing.currency;
+      existingSession.discountCode = eligibility.pricing.discountCode || undefined;
+      existingSession.treatmentPlanId = new Types.ObjectId(planId);
+      existingSession.createPayload = createPayload as unknown as Record<string, unknown>;
+      await existingSession.save();
+      return paymentSessionDto(existingSession);
+    }
+  }
 
   const eligibility = await evaluateCreateEligibility({
     userId,
@@ -193,8 +248,14 @@ export async function createPaymentSession(
     treatmentPlanId: planId,
     isDemo: Boolean(createPayload.isDemo),
     createPayload: createPayload as unknown as Record<string, unknown>,
+    caseId: draftCaseDoc ? draftCaseDoc._id : undefined,
     expiresAt,
   });
+
+  if (draftCaseDoc) {
+    draftCaseDoc.paymentSessionId = session._id;
+    await draftCaseDoc.save();
+  }
 
   await recordActivity({
     action: AUDIT_ACTIONS.PAYMENT_SESSION_CREATE,
@@ -204,7 +265,11 @@ export async function createPaymentSession(
     actorRole: actor.role,
     targetType: 'payment',
     targetId: session.id,
-    metadata: { amount: session.amount, currency: session.currency },
+    metadata: {
+      amount: session.amount,
+      currency: session.currency,
+      draftId: draftCaseDoc?.caseId,
+    },
     ipAddress: audit.ipAddress,
     userAgent: audit.userAgent,
   });
@@ -315,11 +380,22 @@ async function fulfillPaidSession(
   },
 ): Promise<PaymentSessionDto> {
   if (session.status === PAYMENT_SESSION_STATUSES.PAID && session.caseId) {
-    return paymentSessionDto(session);
+    const existingCase = await Case.findById(session.caseId);
+    if (existingCase && existingCase.status !== CASE_STATUSES.SAVED_FOR_SUBMISSION) {
+      return paymentSessionDto(session);
+    }
   }
 
   const payload = session.createPayload as unknown as CreateCaseInput;
-  const { createCase } = await import('../cases/cases.service');
+  const rawPayload = session.createPayload as Record<string, unknown>;
+  const draftId =
+    (rawPayload?.draftId as string) ||
+    (rawPayload?.caseId as string) ||
+    (session.caseId ? String(session.caseId) : undefined);
+
+  const { createCase, updateDraftCase, resolveCaseActor, findCase } = await import(
+    '../cases/cases.service'
+  );
 
   const user = await User.findById(session.userId);
   if (!user) throw new AppError('Session user not found', 404);
@@ -329,23 +405,56 @@ async function fulfillPaidSession(
     email: user.email,
     role: user.role,
   };
+  const caseActor = await resolveCaseActor(String(user._id));
 
-  const created = await createCase(
-    await (await import('../cases/cases.service')).resolveCaseActor(String(user._id)),
-    {
-      ...payload,
-      asDraft: false,
-      paymentSessionId: session.id,
-    },
-    opts.audit,
-  );
+  let caseDoc: ICase | null = null;
+  let caseIdStr: string = '';
 
-  const caseDoc = await Case.findOne({ caseId: created.caseId });
-  if (!caseDoc) throw new AppError('Created case not found', 500);
+  if (draftId) {
+    const existingDraft = await findCase(draftId);
+    if (existingDraft) {
+      if (existingDraft.status === CASE_STATUSES.SAVED_FOR_SUBMISSION) {
+        const updated = await updateDraftCase(
+          caseActor,
+          existingDraft.caseId,
+          {
+            ...payload,
+            asDraft: false,
+            paymentSessionId: session.id,
+          },
+          opts.audit,
+        );
+        caseIdStr = updated.caseId;
+        caseDoc = await Case.findOne({ caseId: caseIdStr });
+      } else if (
+        existingDraft.status === CASE_STATUSES.NEW_CASE &&
+        String(existingDraft.paymentSessionId) === session.id
+      ) {
+        caseDoc = existingDraft;
+        caseIdStr = existingDraft.caseId;
+      }
+    }
+  }
+
+  if (!caseDoc) {
+    const created = await createCase(
+      caseActor,
+      {
+        ...payload,
+        asDraft: false,
+        paymentSessionId: session.id,
+      },
+      opts.audit,
+    );
+    caseIdStr = created.caseId;
+    caseDoc = await Case.findOne({ caseId: caseIdStr });
+  }
+
+  if (!caseDoc) throw new AppError('Case document not found after payment fulfillment', 500);
 
   const docs = await issueInvoiceAndReceipt({
     caseId: caseDoc.id,
-    billedCaseIds: [created.caseId],
+    billedCaseIds: [caseDoc.caseId],
     paymentSessionId: session.id,
     customerUserId: String(user._id),
     customerEmail: user.email,
@@ -356,7 +465,7 @@ async function fulfillPaidSession(
       Number(payload.commercial?.discountAmount ?? 0),
     discountAmount: Number(payload.commercial?.discountAmount ?? 0),
     total: session.amount,
-    lineDescription: payload.commercial?.treatmentPlanName || `Case ${created.caseId}`,
+    lineDescription: payload.commercial?.treatmentPlanName || `Case ${caseDoc.caseId}`,
     provider: session.provider,
     providerReference: opts.providerReference || session.stripeSessionId || session.bankReference,
     markPaid: true,
@@ -393,13 +502,13 @@ async function fulfillPaidSession(
 
   await recordActivity({
     action: AUDIT_ACTIONS.PAYMENT_SESSION_PAID,
-    summary: `Payment session ${session.id} paid; case ${created.caseId} created`,
+    summary: `Payment session ${session.id} paid; case ${caseDoc.caseId} submitted`,
     actorId: actor.id,
     actorEmail: actor.email,
     actorRole: actor.role,
     targetType: 'payment',
     targetId: session.id,
-    metadata: { caseId: created.caseId, invoiceId: docs.invoice.id },
+    metadata: { caseId: caseDoc.caseId, invoiceId: docs.invoice.id },
     ipAddress: opts.audit?.ipAddress,
     userAgent: opts.audit?.userAgent,
   });

@@ -25,7 +25,7 @@ import {
   type SlaConfigDto,
   type SystemMessages,
 } from '@ayetis/shared';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
@@ -167,6 +167,8 @@ export function SettingsAdminPage() {
   const [countryRequests, setCountryRequests] = useState<CountryRequestDto[]>([]);
   const [regionForm, setRegionForm] = useState({ ...EMPTY_REGION });
   const [countryForm, setCountryForm] = useState({ ...EMPTY_COUNTRY });
+  const regionFormRef = useRef<HTMLFormElement>(null);
+  const countryFormRef = useRef<HTMLFormElement>(null);
   const [reviewForms, setReviewForms] = useState<
     Record<string, { regionId: string; dialCode: string; reviewNotes: string }>
   >({});
@@ -783,7 +785,7 @@ export function SettingsAdminPage() {
       {tab === 'regions' && canRegions ? (
         <div className="space-y-5">
           <div className="grid gap-5 lg:grid-cols-2">
-            <form onSubmit={saveRegion} className="space-y-3 rounded-xl border border-line bg-white p-4">
+            <form ref={regionFormRef} onSubmit={saveRegion} className="space-y-3 rounded-xl border border-line bg-white p-4">
               <h2 className="text-sm font-semibold text-ink">
                 {regionForm.id ? 'Edit region' : 'New region'}
               </h2>
@@ -809,10 +811,21 @@ export function SettingsAdminPage() {
                 />
                 Active
               </label>
-              <AuthButton loading={saving}>{regionForm.id ? 'Update' : 'Create'}</AuthButton>
+              <div className="flex gap-2">
+                <AuthButton loading={saving}>{regionForm.id ? 'Update' : 'Create'}</AuthButton>
+                {regionForm.id ? (
+                  <button
+                    type="button"
+                    className="rounded-xl border border-line px-4 py-2 text-sm font-medium text-muted hover:text-ink"
+                    onClick={() => setRegionForm({ ...EMPTY_REGION })}
+                  >
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
             </form>
 
-            <form onSubmit={saveCountry} className="space-y-3 rounded-xl border border-line bg-white p-4">
+            <form ref={countryFormRef} onSubmit={saveCountry} className="space-y-3 rounded-xl border border-line bg-white p-4">
               <h2 className="text-sm font-semibold text-ink">
                 {countryForm.id ? 'Edit country' : 'New country'}
               </h2>
@@ -859,7 +872,18 @@ export function SettingsAdminPage() {
                 />
                 Active
               </label>
-              <AuthButton loading={saving}>{countryForm.id ? 'Update' : 'Create'}</AuthButton>
+              <div className="flex gap-2">
+                <AuthButton loading={saving}>{countryForm.id ? 'Update' : 'Create'}</AuthButton>
+                {countryForm.id ? (
+                  <button
+                    type="button"
+                    className="rounded-xl border border-line px-4 py-2 text-sm font-medium text-muted hover:text-ink"
+                    onClick={() => setCountryForm({ ...EMPTY_COUNTRY })}
+                  >
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
             </form>
           </div>
 
@@ -887,14 +911,17 @@ export function SettingsAdminPage() {
                       <button
                         type="button"
                         className="font-medium text-brand-600"
-                        onClick={() =>
+                        onClick={() => {
                           setRegionForm({
                             id: region.id,
                             code: region.code,
                             name: region.name,
                             isActive: region.isActive,
-                          })
-                        }
+                          });
+                          setTimeout(() => {
+                            regionFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }, 0);
+                        }}
                       >
                         Edit
                       </button>
@@ -934,7 +961,7 @@ export function SettingsAdminPage() {
                       <button
                         type="button"
                         className="font-medium text-brand-600"
-                        onClick={() =>
+                        onClick={() => {
                           setCountryForm({
                             id: country.id,
                             code: country.code,
@@ -942,8 +969,11 @@ export function SettingsAdminPage() {
                             dialCode: country.dialCode ?? '',
                             regionId: country.regionId ?? '',
                             isActive: country.isActive,
-                          })
-                        }
+                          });
+                          setTimeout(() => {
+                            countryFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }, 0);
+                        }}
                       >
                         Edit
                       </button>

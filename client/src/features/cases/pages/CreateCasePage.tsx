@@ -22,7 +22,9 @@ import {
   validatePatientCore,
   validateProsthodonticSubmit,
   validateRequiredCaseFiles,
+  CASE_STATUSES,
   type CaseCategory,
+  type CaseDetailDto,
   type CaseType,
   type CreateCaseInput,
   type DoctorAssigneeDto,
@@ -31,13 +33,15 @@ import {
   type TreatmentPlanDto,
 } from '@ayetis/shared';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { useAuthStore } from '@/features/auth/store';
 import {
   createCase,
+  fetchCase,
   fetchDoctorAssignees,
+  updateDraftCase,
   uploadCaseFiles,
 } from '@/features/cases/api';
 import {
@@ -89,11 +93,14 @@ function formatBytes(bytes: number): string {
 }
 
 export function CreateCasePage() {
+  const { caseId } = useParams();
+  const isResume = Boolean(caseId);
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const isDoctor = user?.role === ROLES.DOCTOR;
   const needsDoctorPicker = Boolean(user && !isDoctor);
 
+  const [existingCase, setExistingCase] = useState<CaseDetailDto | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [form, setForm] = useState<CreateCaseInput>(() => ({
     patientName: '',
@@ -127,6 +134,62 @@ export function CreateCasePage() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!caseId) return;
+    let active = true;
+    async function loadDraft() {
+      setLoading(true);
+      try {
+        const data = await fetchCase(caseId!);
+        if (!active) return;
+        if (data.status !== CASE_STATUSES.SAVED_FOR_SUBMISSION) {
+          setError('This case is not in draft status.');
+          toast().warning('This case has already been submitted.');
+          navigate(`/app/cases/${caseId}`, { replace: true });
+          return;
+        }
+        setExistingCase(data);
+        const cat = (data.caseCategory || CASE_CATEGORIES.DIGITAL_ALIGNER) as CaseCategory;
+        setForm({
+          patientName: data.patientName,
+          patientAge: data.patientAge,
+          patientGender: data.patientGender,
+          patientDateOfBirth: data.patientDateOfBirth,
+          clinicName: data.clinicName,
+          practiceName: data.practiceName || data.clinicName,
+          country: data.country,
+          chiefComplaint: data.chiefComplaint,
+          caseCategory: cat,
+          caseType: (data.caseType as CaseType) ?? 'new',
+          treatmentSummary: data.treatmentSummary,
+          instructions: data.instructions,
+          treatmentInstructions: {
+            ...EMPTY_TREATMENT_INSTRUCTIONS,
+            ...data.treatmentInstructions,
+          },
+          recordsNumbering: { ...EMPTY_RECORDS_NUMBERING, ...(data.recordsNumbering ?? {}) },
+          clinicalPreferences: { ...EMPTY_CLINICAL_PREFERENCES, ...(data.clinicalPreferences ?? {}) },
+          occlusionGoals: { ...EMPTY_OCCLUSION_GOALS, ...(data.occlusionGoals ?? {}) },
+          prosthoDetails: { ...EMPTY_PROSTHO_DETAILS, ...(data.prosthoDetails ?? {}) },
+          implantDetails: { ...EMPTY_IMPLANT_DETAILS, ...(data.implantDetails ?? {}) },
+          commercial: { ...EMPTY_CASE_COMMERCIAL, ...(data.commercial ?? {}) },
+          priority: data.priority || CASE_PRIORITIES.NORMAL,
+          initialNote: '',
+          doctorId: data.doctorId || (isDoctor ? user?.id : ''),
+          asDraft: false,
+        });
+      } catch (err) {
+        if (active) setError(getErrorMessage(err, 'Unable to load draft'));
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void loadDraft();
+    return () => {
+      active = false;
+    };
+  }, [caseId, isDoctor, navigate, user?.id]);
 
   const category = (form.caseCategory || CASE_CATEGORIES.DIGITAL_ALIGNER) as CaseCategory;
   const isAligner = category === CASE_CATEGORIES.DIGITAL_ALIGNER;
@@ -239,10 +302,14 @@ export function CreateCasePage() {
       }
     }
     if (id === 'files') {
-      return validateRequiredCaseFiles(
-        category,
-        pendingFiles.map((file) => ({ name: file.name, category: fileCategory })),
-      );
+      const allFiles = [
+        ...(existingCase?.files ?? []).map((file) => ({
+          name: file.originalName || file.filename,
+          category: (file.category as FileCategory) || fileCategory || undefined,
+        })),
+        ...pendingFiles.map((file) => ({ name: file.name, category: fileCategory })),
+      ];
+      return validateRequiredCaseFiles(category, allFiles);
     }
     return {};
   }
@@ -343,8 +410,17 @@ export function CreateCasePage() {
           payload.isDemo = true;
         }
         if (!eligibility.allowedWithoutPayment) {
+          if (isResume && caseId) {
+            if (pendingFiles.length > 0) {
+              await uploadCaseFiles(caseId, pendingFiles, {
+                category: fileCategory || undefined,
+              });
+            }
+            await updateDraftCase(caseId, { ...payload, asDraft: true });
+          }
           const session = await createPaymentSession({
             ...payload,
+            ...(isResume && caseId ? { draftId: caseId, caseId } : {}),
             commercial: {
               ...commercial,
               unitPrice: eligibility.pricing.unitPrice,
@@ -363,22 +439,39 @@ export function CreateCasePage() {
         }
       }
 
-      const created = await createCase(payload);
-      if (pendingFiles.length > 0) {
-        await uploadCaseFiles(created.caseId, pendingFiles, {
-          category: fileCategory || undefined,
-        });
+      if (isResume && caseId) {
+        if (pendingFiles.length > 0) {
+          await uploadCaseFiles(caseId, pendingFiles, {
+            category: fileCategory || undefined,
+          });
+        }
+        const updated = await updateDraftCase(caseId, payload);
+        toast().success(
+          asDraft
+            ? 'Draft saved — you can continue this case later from the cases list'
+            : payload.isDemo
+              ? 'Demo case submitted'
+              : 'Case submitted',
+        );
+        navigate(asDraft ? '/app/cases' : `/app/cases/${updated.caseId}`);
+      } else {
+        const created = await createCase(payload);
+        if (pendingFiles.length > 0) {
+          await uploadCaseFiles(created.caseId, pendingFiles, {
+            category: fileCategory || undefined,
+          });
+        }
+        toast().success(
+          asDraft
+            ? 'Draft saved — you can continue this case later from the cases list'
+            : payload.isDemo
+              ? 'Demo case submitted'
+              : 'Case submitted',
+        );
+        navigate(asDraft ? '/app/cases' : `/app/cases/${created.caseId}`);
       }
-      toast().success(
-        asDraft
-          ? 'Draft saved — you can continue this case later from the cases list'
-          : payload.isDemo
-            ? 'Demo case submitted'
-            : 'Case submitted',
-      );
-      navigate(asDraft ? '/app/cases' : `/app/cases/${created.caseId}`);
     } catch (err) {
-      const message = getErrorMessage(err, 'Unable to create case');
+      const message = getErrorMessage(err, isResume ? 'Unable to save draft' : 'Unable to create case');
       setError(message);
       toast().error(message);
     } finally {
@@ -393,20 +486,25 @@ export function CreateCasePage() {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <PageHeader
-        eyebrow="Cases"
-        title="Digital Treatment Planning"
+        eyebrow={isResume ? `Draft ${caseId}` : 'Cases'}
+        title={isResume ? `Resume Draft — ${form.patientName || caseId}` : 'Digital Treatment Planning'}
         subtitle={
-          isAligner
-            ? 'Clinical case submission engine — Records, Clinical Preferences, Occlusion & Commercial.'
-            : isProstho
-              ? 'Prosthodontic planning — patient records, restoration chart, plan, and files.'
-              : isImplant
-                ? 'Implant planning — patient records, implant sites, plan, and CBCT/scans.'
-                : 'Create a case with patient details, clinical information, and files.'
+          isResume
+            ? `Review, complete required clinical sections, and submit draft case ${caseId}.`
+            : isAligner
+              ? 'Clinical case submission engine — Records, Clinical Preferences, Occlusion & Commercial.'
+              : isProstho
+                ? 'Prosthodontic planning — patient records, restoration chart, plan, and files.'
+                : isImplant
+                  ? 'Implant planning — patient records, implant sites, plan, and CBCT/scans.'
+                  : 'Create a case with patient details, clinical information, and files.'
         }
       >
-        <Link to="/app/cases" className="text-sm font-medium text-brand-600 hover:text-brand-700">
-          Back to cases
+        <Link
+          to={isResume ? `/app/cases/${caseId}` : '/app/cases'}
+          className="text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          {isResume ? '← Case detail' : 'Back to cases'}
         </Link>
       </PageHeader>
 
@@ -499,6 +597,31 @@ export function CreateCasePage() {
 
         {step.id === 'files' ? (
           <div className="space-y-4">
+            {existingCase && existingCase.files && existingCase.files.length > 0 ? (
+              <div className="space-y-2 rounded-xl border border-line bg-surface/50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+                  Attached files on draft ({existingCase.files.length})
+                </p>
+                <ul className="divide-y divide-line rounded-lg border border-line bg-white">
+                  {existingCase.files.map((file) => (
+                    <li
+                      key={file.id}
+                      className="flex items-center justify-between px-3.5 py-2 text-xs"
+                    >
+                      <span className="font-medium text-ink">
+                        {file.originalName || file.filename}
+                      </span>
+                      <span className="text-muted">
+                        {file.category
+                          ? FILE_CATEGORY_LABELS[file.category as FileCategory] || file.category
+                          : 'General'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-ink">File category</span>
               <select

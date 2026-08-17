@@ -363,6 +363,14 @@ export function CasesPage() {
                         >
                           {formatCaseIdLabel(item.caseId, item.status)}
                         </Link>
+                        {item.status === 'saved_for_submission' ? (
+                          <Link
+                            to={`/app/cases/${item.caseId}/resume`}
+                            className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 hover:bg-brand-100"
+                          >
+                            Resume
+                          </Link>
+                        ) : null}
                         {item.isDemo ? (
                           <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
                             Demo

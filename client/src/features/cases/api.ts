@@ -69,6 +69,14 @@ export async function updateCase(
   return data.data;
 }
 
+export async function updateDraftCase(
+  caseId: string,
+  payload: CreateCaseInput,
+): Promise<CaseDetailDto> {
+  const { data } = await api.patch(`/cases/${caseId}/draft`, payload);
+  return data.data;
+}
+
 export async function setCasePriority(
   caseId: string,
   payload: SetCasePriorityInput,
