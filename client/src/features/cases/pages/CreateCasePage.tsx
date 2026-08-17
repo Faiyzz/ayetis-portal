@@ -304,21 +304,21 @@ export function CreateCasePage() {
         toast().warning(message);
         return;
       }
-    } else if (!form.patientName.trim()) {
-      setError('Patient name is required to save a draft');
-      toast().warning('Patient name is required to save a draft');
-      return;
     }
 
     const summary =
       form.treatmentSummary.trim() ||
       form.chiefComplaint?.trim() ||
-      `${CASE_CATEGORY_LABELS[category]} — ${CASE_TYPE_LABELS[form.caseType as CaseType]}`;
+      (asDraft
+        ? ''
+        : `${CASE_CATEGORY_LABELS[category]} — ${CASE_TYPE_LABELS[form.caseType as CaseType]}`);
 
     const payload: CreateCaseInput = {
       ...form,
       practiceName: form.practiceName || form.clinicName || '',
       treatmentSummary: summary,
+      doctorId: form.doctorId?.trim() || undefined,
+      facilityId: form.facilityId?.trim() || undefined,
       asDraft,
     };
 
@@ -371,12 +371,12 @@ export function CreateCasePage() {
       }
       toast().success(
         asDraft
-          ? 'Case saved for submission'
+          ? 'Draft saved — you can continue this case later from the cases list'
           : payload.isDemo
             ? 'Demo case submitted'
             : 'Case submitted',
       );
-      navigate(`/app/cases/${created.caseId}`);
+      navigate(asDraft ? '/app/cases' : `/app/cases/${created.caseId}`);
     } catch (err) {
       const message = getErrorMessage(err, 'Unable to create case');
       setError(message);
@@ -556,8 +556,9 @@ export function CreateCasePage() {
               </span>
             </label>
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Submit starts the 15-minute cancel window and SLA clock. Save for Submission keeps the
-              case as a draft. Payable cases without prepaid/invoice billing require payment first.
+              Submit starts the 15-minute cancel window and SLA clock. Save as draft keeps what you
+              have filled so far with no validation. Payable cases without prepaid/invoice billing
+              require payment first.
             </p>
           </div>
         ) : null}
@@ -572,22 +573,20 @@ export function CreateCasePage() {
             Back
           </button>
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void submit(true)}
+              className="rounded-lg border border-line px-4 py-2 text-sm font-semibold disabled:opacity-40"
+            >
+              Save as draft
+            </button>
             {step.id === 'files' ? (
-              <>
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => void submit(true)}
-                  className="rounded-lg border border-line px-4 py-2 text-sm font-semibold disabled:opacity-40"
-                >
-                  Save for Submission
-                </button>
-                <AuthButton type="button" loading={loading} onClick={() => void submit(false)}>
-                  Submit case
-                </AuthButton>
-              </>
+              <AuthButton type="button" loading={loading} onClick={() => void submit(false)}>
+                Submit case
+              </AuthButton>
             ) : (
-              <AuthButton type="button" onClick={goNext}>
+              <AuthButton type="button" loading={loading} onClick={goNext}>
                 Continue
               </AuthButton>
             )}

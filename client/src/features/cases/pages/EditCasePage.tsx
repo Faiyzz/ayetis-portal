@@ -15,6 +15,7 @@ import {
   TOOTH_NUMBERING_SYSTEMS,
   firstFieldError,
   isCaseDeliveryLocked,
+  formatCaseIdLabel,
   validateDigitalAlignerPart1,
   validateDigitalAlignerPart3,
   validateImplantSubmit,
@@ -270,13 +271,14 @@ export function EditCasePage() {
     );
   }
 
+  const caseLabel = formatCaseIdLabel(caseId, form.status);
   const subtitle = isAligner
-    ? `Digital Treatment Planning form for ${caseId}`
+    ? `Digital Treatment Planning form for ${caseLabel}`
     : isProstho
-      ? `Prosthodontic planning for ${caseId}`
+      ? `Prosthodontic planning for ${caseLabel}`
       : isImplant
-        ? `Implant planning for ${caseId}`
-        : `Update case information for ${caseId}.`;
+        ? `Implant planning for ${caseLabel}`
+        : `Update case information for ${caseLabel}.`;
 
   return (
     <div className="w-full max-w-5xl space-y-5">

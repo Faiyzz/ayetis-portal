@@ -247,7 +247,7 @@ export const listCasesQuerySchema = z.object({
 
 export const createCaseSchema = z
   .object({
-    patientName: z.string().trim().min(1, 'Patient name is required').max(120),
+    patientName: z.string().trim().max(120).optional().default(''),
     patientAge: z.number().int().min(0).max(120).nullable().optional(),
     patientGender: z.string().trim().max(40).optional(),
     patientDateOfBirth: z.string().trim().max(40).nullable().optional(),
@@ -263,7 +263,7 @@ export const createCaseSchema = z
       .string()
       .optional()
       .refine((value) => !value || isCaseType(value), { message: 'Invalid case type' }),
-    treatmentSummary: z.string().trim().min(1, 'Treatment summary is required').max(2000),
+    treatmentSummary: z.string().trim().max(2000).optional().default(''),
     instructions: z.string().trim().max(5000).optional(),
     treatmentInstructions: treatmentInstructionsSchema,
     recordsNumbering: recordsNumberingSchema,
@@ -282,8 +282,14 @@ export const createCaseSchema = z
     asDraft: z.boolean().optional(),
     isDemo: z.boolean().optional(),
     paymentSessionId: z.string().trim().min(1).optional(),
-    doctorId: z.string().trim().min(1).optional(),
-    facilityId: z.string().trim().min(1).optional(),
+    doctorId: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z.string().trim().min(1).optional(),
+    ),
+    facilityId: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z.string().trim().min(1).optional(),
+    ),
   })
   .superRefine((value, ctx) => {
     if (value.asDraft) return;

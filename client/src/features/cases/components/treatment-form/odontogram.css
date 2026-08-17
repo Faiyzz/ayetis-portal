@@ -1,0 +1,10 @@
+.ayetis-odontogram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 380px;
+}
+
+.ayetis-odontogram.dark-theme svg {
+  background-color: transparent;
+}

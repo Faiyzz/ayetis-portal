@@ -41,6 +41,7 @@ export function ProsthodonticClinicalPart({
           system={system}
           selected={value.restorationTeeth}
           onToggle={(id) => onChange({ restorationTeeth: toggle(value.restorationTeeth, id) })}
+          onSelectedChange={(ids) => onChange({ restorationTeeth: ids })}
           modeLabel="Restoration"
         />
         <FieldError errors={errors} name="prosthoDetails.restorationTeeth" />
@@ -48,12 +49,14 @@ export function ProsthodonticClinicalPart({
           system={system}
           selected={value.abutmentTeeth}
           onToggle={(id) => onChange({ abutmentTeeth: toggle(value.abutmentTeeth, id) })}
+          onSelectedChange={(ids) => onChange({ abutmentTeeth: ids })}
           modeLabel="Abutments"
         />
         <ToothChart
           system={system}
           selected={value.ponticTeeth}
           onToggle={(id) => onChange({ ponticTeeth: toggle(value.ponticTeeth, id) })}
+          onSelectedChange={(ids) => onChange({ ponticTeeth: ids })}
           modeLabel="Pontics"
         />
       </SectionCard>

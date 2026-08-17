@@ -4,6 +4,7 @@ import {
   CASE_STATUS_LABELS,
   CASE_TYPE_LABELS,
   CASE_TYPES_BY_CATEGORY,
+  formatCaseIdLabel,
   type CaseCategory,
   type CaseListItemDto,
   type CaseType,
@@ -392,7 +393,7 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
                         to={`/app/cases/${item.caseId}`}
                         className="font-semibold text-brand-700"
                       >
-                        {item.caseId}
+                        {formatCaseIdLabel(item.caseId, item.status)}
                       </Link>
                     </td>
                     <td className="px-2 py-3 text-ink">{item.patientName}</td>

@@ -1,6 +1,7 @@
 import {
   CASE_PRIORITIES,
   EMPTY_TREATMENT_INSTRUCTIONS,
+  formatCaseIdLabel,
   isCaseDeliveryLocked,
   PERMISSIONS,
   type CaseDetailDto,
@@ -541,7 +542,7 @@ export function CaseDetailPage() {
             ← Cases
           </Link>
         }
-        title={caseData.caseId}
+        title={formatCaseIdLabel(caseData.caseId, caseData.status)}
         subtitle={caseData.treatmentSummary}
       />
 

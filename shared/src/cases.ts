@@ -37,8 +37,17 @@ export const CASE_STATUS_LABELS: Record<CaseStatus, string> = {
   [CASE_STATUSES.WAITING_FOR_APPROVAL]: 'Waiting for Approval',
   [CASE_STATUSES.APPROVED]: 'Approved',
   [CASE_STATUSES.CANCELLED]: 'Cancelled',
-  [CASE_STATUSES.SAVED_FOR_SUBMISSION]: 'Saved for Submission',
+  [CASE_STATUSES.SAVED_FOR_SUBMISSION]: 'Draft',
 };
+
+export function isCaseDraft(status: CaseStatus): boolean {
+  return status === CASE_STATUSES.SAVED_FOR_SUBMISSION;
+}
+
+/** Prefix draft cases so they are obvious in lists and headers. */
+export function formatCaseIdLabel(caseId: string, status?: CaseStatus | null): string {
+  return status && isCaseDraft(status) ? `Draft ${caseId}` : caseId;
+}
 
 /** Primary happy-path stages shown on the visual timeline (URD doctor lifecycle). */
 export const CASE_TIMELINE_STATUSES: CaseStatus[] = [

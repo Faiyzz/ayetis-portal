@@ -1308,9 +1308,16 @@ export async function createCase(
     facilityObjectId = new Types.ObjectId(actor.facilityId);
   }
 
-  if (doctor.organizationId && !facilityObjectId) {
+  if (!asDraft && doctor.organizationId && !facilityObjectId) {
     throw new AppError('Select a facility for this corporate case', 400);
   }
+
+  const patientName =
+    (input.patientName ?? '').trim() || (asDraft ? 'Untitled draft' : '');
+  const treatmentSummary =
+    (input.treatmentSummary ?? '').trim() ||
+    (input.chiefComplaint ?? '').trim() ||
+    (asDraft ? 'Draft' : '');
 
   const caseDoc = new Case({
     caseId,
@@ -1323,15 +1330,15 @@ export async function createCase(
     corporateCustomerId: doctor.corporateCustomerId || actor.corporateCustomerId || undefined,
     caseCategory: input.caseCategory ?? CASE_CATEGORIES.DIGITAL_ALIGNER,
     caseType: input.caseType ?? CASE_TYPES.NEW,
-    chiefComplaint: input.chiefComplaint?.trim() || input.treatmentSummary.trim(),
+    chiefComplaint: input.chiefComplaint?.trim() || treatmentSummary,
     practiceName: input.practiceName?.trim() || input.clinicName?.trim() || '',
     patientDateOfBirth: input.patientDateOfBirth ? new Date(input.patientDateOfBirth) : undefined,
-    patientName: input.patientName.trim(),
+    patientName,
     patientAge: input.patientAge ?? undefined,
     patientGender: input.patientGender?.trim() ?? '',
     clinicName: input.clinicName?.trim() ?? '',
     country: input.country?.trim() ?? '',
-    treatmentSummary: input.treatmentSummary.trim(),
+    treatmentSummary,
     instructions: input.instructions?.trim() ?? '',
     treatmentInstructions: normalizeTreatmentInstructions(input.treatmentInstructions),
     recordsNumbering: { ...EMPTY_RECORDS_NUMBERING, ...(input.recordsNumbering ?? {}) },
@@ -1366,7 +1373,7 @@ export async function createCase(
 
   pushHistory(caseDoc, {
     action: 'created',
-    summary: asDraft ? `Case ${caseId} saved for submission` : `Case ${caseId} submitted`,
+    summary: asDraft ? `Draft ${caseId} saved` : `Case ${caseId} submitted`,
     actor,
     metadata: {
       changes: [

@@ -84,6 +84,12 @@ export function ImplantClinicalPart({
               implantCount: next.length,
             });
           }}
+          onSelectedChange={(ids) =>
+            onChange({
+              implantSites: ids,
+              implantCount: ids.length,
+            })
+          }
           modeLabel="Implant site"
         />
         <FieldError errors={errors} name="implantDetails.implantSites" />

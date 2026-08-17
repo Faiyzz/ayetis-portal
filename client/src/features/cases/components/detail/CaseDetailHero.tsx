@@ -1,4 +1,5 @@
 import {
+  formatCaseIdLabel,
   type CaseDetailDto,
 } from '@ayetis/shared';
 import type { ReactNode } from 'react';
@@ -57,7 +58,9 @@ export function CaseDetailHero({
               {caseData.patientName}
             </h1>
             <p className="mt-1 text-sm text-muted">
-              <span className="font-medium text-ink">{caseData.caseId}</span>
+              <span className="font-medium text-ink">
+                {formatCaseIdLabel(caseData.caseId, caseData.status)}
+              </span>
               {caseData.treatmentSummary ? (
                 <>
                   <span className="mx-1.5 text-line">·</span>

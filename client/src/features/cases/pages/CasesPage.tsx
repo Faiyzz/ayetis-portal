@@ -6,8 +6,11 @@ import {
   CASE_CATEGORY_LABELS,
   CASE_PRIORITY_LABELS,
   CASE_STATUS_LABELS,
+  CASE_STATUSES,
   PAYMENT_STATUS_LABELS,
   PERMISSIONS,
+  formatCaseIdLabel,
+  isCaseDraft,
   type CaseCategory,
   type CaseListItemDto,
   type CasePriority,
@@ -26,11 +29,16 @@ import { getErrorMessage } from '@/lib/api';
 
 function StatusPill({ status }: { status: CaseStatus }) {
   const cancelled = status === 'cancelled';
+  const draft = isCaseDraft(status);
   return (
     <span
       className={[
         'inline-flex rounded-md px-2 py-1 text-xs font-medium',
-        cancelled ? 'bg-red-50 text-red-700' : 'bg-brand-50 text-brand-700',
+        cancelled
+          ? 'bg-red-50 text-red-700'
+          : draft
+            ? 'bg-amber-50 text-amber-800'
+            : 'bg-brand-50 text-brand-700',
       ].join(' ')}
     >
       {CASE_STATUS_LABELS[status]}
@@ -116,14 +124,14 @@ export function CasesPage() {
     return items.filter((item) => item.caseCategory === categoryTab);
   }, [items, categoryTab]);
 
-  async function load(nextPage = page) {
+  async function load(nextPage = page, nextStatus = status) {
     setLoading(true);
     try {
       const data = await fetchCases({
         page: nextPage,
         pageSize,
         q,
-        status,
+        status: nextStatus,
         priority,
         includeDeleted: can(PERMISSIONS.CASE_DELETE) ? includeDeleted : false,
         isDemo: demoOnly ? true : undefined,
@@ -224,6 +232,18 @@ export function CasesPage() {
           <label className="flex items-center gap-2 text-sm text-muted">
             <input
               type="checkbox"
+              checked={status === CASE_STATUSES.SAVED_FOR_SUBMISSION}
+              onChange={(e) => {
+                const next = e.target.checked ? CASE_STATUSES.SAVED_FOR_SUBMISSION : '';
+                setStatus(next);
+                void load(1, next);
+              }}
+            />
+            Drafts only
+          </label>
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
               checked={demoOnly}
               onChange={(e) => {
                 const next = e.target.checked;
@@ -317,7 +337,7 @@ export function CasesPage() {
                           to={`/app/cases/${item.caseId}`}
                           className="font-semibold text-brand-600 hover:text-brand-700"
                         >
-                          {item.caseId}
+                          {formatCaseIdLabel(item.caseId, item.status)}
                         </Link>
                         {item.isDemo ? (
                           <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
