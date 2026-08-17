@@ -147,6 +147,13 @@ export function caseFileDownloadUrl(caseId: string, fileId: string): string {
   return `/api/cases/${caseId}/files/${fileId}`;
 }
 
+export async function fetchCaseFileSignedUrl(caseId: string, fileId: string): Promise<string> {
+  const { data } = await api.get(`/cases/${caseId}/files/${fileId}/signed-url`);
+  const signed = data.data as { url: string };
+  if (signed.url.startsWith('http') || signed.url.startsWith('/api')) return signed.url;
+  return `/api${signed.url.startsWith('/') ? '' : '/'}${signed.url}`;
+}
+
 export async function downloadCaseFile(caseId: string, fileId: string, filename: string) {
   const { data } = await api.get(`/cases/${caseId}/files/${fileId}/signed-url`);
   const signed = data.data as { url: string };

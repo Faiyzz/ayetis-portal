@@ -2,6 +2,7 @@
 
 @theme {
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-clinical: "Inter", "DM Sans", ui-sans-serif, system-ui, sans-serif;
 
   --color-brand-50: #f1f5f9;
   --color-brand-100: #e2e8f0;
@@ -78,6 +79,27 @@ html[data-theme="dark"] .text-slate-500 {
 
 html[data-theme="dark"] .bg-emerald-50 {
   background-color: color-mix(in srgb, #059669 22%, var(--color-panel)) !important;
+}
+
+html[data-theme="dark"] .bg-teal-50,
+html[data-theme="dark"] .hover\:bg-teal-50:hover {
+  background-color: color-mix(in srgb, #0d9488 22%, var(--color-panel)) !important;
+}
+
+html[data-theme="dark"] .text-teal-700,
+html[data-theme="dark"] .text-teal-800,
+html[data-theme="dark"] .text-teal-900 {
+  color: #5eead4 !important;
+}
+
+html[data-theme="dark"] .bg-indigo-50,
+html[data-theme="dark"] .bg-violet-50 {
+  background-color: color-mix(in srgb, #6366f1 20%, var(--color-panel)) !important;
+}
+
+html[data-theme="dark"] .text-indigo-700,
+html[data-theme="dark"] .text-violet-700 {
+  color: #c4b5fd !important;
 }
 
 html[data-theme="dark"] .text-emerald-700,

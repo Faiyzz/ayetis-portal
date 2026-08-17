@@ -22,6 +22,17 @@ import {
   uploadCaseFiles,
 } from '@/features/cases/api';
 import { EmptyState } from '@/features/cases/components/detail/EmptyState';
+import { FilePreviewPane } from '@/features/cases/components/detail/clinical/FilePreviewPane';
+import {
+  IconCube,
+  IconFile,
+  IconFolder,
+  IconImage,
+} from '@/features/cases/components/detail/clinical/ClinicalIcons';
+import {
+  MEDIA_FILTERS,
+  type MediaFilterId,
+} from '@/features/cases/components/detail/clinical/clinicalUtils';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorCode, getErrorMessage } from '@/lib/api';
 
@@ -51,6 +62,14 @@ function groupByOriginalName(files: CaseFileDto[]) {
 function categoryIcon(category: FileCategory) {
   return (FILE_CATEGORY_LABELS[category] ?? category).slice(0, 3).toUpperCase();
 }
+
+const FILTER_ICONS: Record<MediaFilterId, typeof IconFolder> = {
+  all: IconFolder,
+  scans: IconCube,
+  photos: IconImage,
+  reports: IconFile,
+  other: IconFolder,
+};
 
 function StorageBadge({ tier }: { tier: FileStorageTier }) {
   if (tier === FILE_STORAGE_TIERS.HOT) return null;
@@ -172,7 +191,9 @@ export function CaseFilesPanel({
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState('');
-  const [filterCategory, setFilterCategory] = useState<FileCategory | ''>('');
+  const [mediaFilter, setMediaFilter] = useState<MediaFilterId>('all');
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [showUpload, setShowUpload] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -215,9 +236,12 @@ export function CaseFilesPanel({
   const groups = useMemo(() => {
     const all = groupByOriginalName(files);
     const q = search.trim().toLowerCase();
+    const filter = MEDIA_FILTERS.find((item) => item.id === mediaFilter);
     return all.filter((group) => {
       const latest = group.versions[0]!;
-      if (filterCategory && latest.category !== filterCategory) return false;
+      if (filter && filter.categories.length > 0 && !filter.categories.includes(latest.category)) {
+        return false;
+      }
       if (!q) return true;
       return (
         group.name.toLowerCase().includes(q) ||
@@ -225,7 +249,21 @@ export function CaseFilesPanel({
         latest.uploadedByName.toLowerCase().includes(q)
       );
     });
-  }, [files, search, filterCategory]);
+  }, [files, search, mediaFilter]);
+
+  const selectedFile = useMemo(() => {
+    const group = groups.find((g) => g.name === selectedName) ?? groups[0];
+    if (!group) return null;
+    if (selectedVersionId) {
+      return group.versions.find((v) => v.id === selectedVersionId) ?? group.versions[0]!;
+    }
+    return group.versions[0]!;
+  }, [groups, selectedName, selectedVersionId]);
+
+  function selectFile(name: string, fileId: string) {
+    setSelectedName(name);
+    setSelectedVersionId(fileId);
+  }
 
   function onPick(fileList: FileList | null) {
     if (!fileList) return;
@@ -339,10 +377,9 @@ export function CaseFilesPanel({
     <section className="overflow-hidden rounded-xl border border-line bg-white">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold text-ink">Patient files</h2>
+          <h2 className="text-sm font-semibold text-ink">Clinical files</h2>
           <p className="mt-0.5 text-sm text-muted">
-            ZIP/RAR/7Z archives auto-extract; STL members become scan files. Also attach HTML viewer
-            links. Unused files move to Glacier after the hot window; Restore starts a temporary copy.
+            Select a file to preview. Archives extract automatically; restore cold files before download.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -374,26 +411,14 @@ export function CaseFilesPanel({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search files…"
-          className="min-w-40 flex-1 rounded-lg border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+          className="min-w-40 flex-1 rounded-lg border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15"
         />
-        <select
-          value={filterCategory}
-          onChange={(e) => setFilterCategory((e.target.value || '') as FileCategory | '')}
-          className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-brand-500"
-        >
-          <option value="">All categories</option>
-          {ALL_FILE_CATEGORIES.map((value) => (
-            <option key={value} value={value}>
-              {FILE_CATEGORY_LABELS[value]}
-            </option>
-          ))}
-        </select>
         <div className="flex rounded-lg border border-line bg-white p-0.5">
           <button
             type="button"
             onClick={() => setViewMode('list')}
             className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-              viewMode === 'list' ? 'bg-brand-50 text-brand-700' : 'text-muted'
+              viewMode === 'list' ? 'bg-teal-50 text-teal-800' : 'text-muted'
             }`}
           >
             List
@@ -402,12 +427,39 @@ export function CaseFilesPanel({
             type="button"
             onClick={() => setViewMode('grid')}
             className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-              viewMode === 'grid' ? 'bg-brand-50 text-brand-700' : 'text-muted'
+              viewMode === 'grid' ? 'bg-teal-50 text-teal-800' : 'text-muted'
             }`}
           >
             Grid
           </button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 border-b border-line px-4 py-3">
+        {MEDIA_FILTERS.map((filter) => {
+          const Icon = FILTER_ICONS[filter.id];
+          const active = mediaFilter === filter.id;
+          const count =
+            filter.id === 'all'
+              ? files.length
+              : files.filter((f) => filter.categories.includes(f.category)).length;
+          return (
+            <button
+              key={filter.id}
+              type="button"
+              onClick={() => setMediaFilter(filter.id)}
+              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                active
+                  ? 'border-teal-200 bg-teal-50 text-teal-900'
+                  : 'border-line bg-white text-ink hover:border-teal-200'
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {filter.label}
+              <span className="tabular-nums text-xs font-medium text-muted">{count}</span>
+            </button>
+          );
+        })}
       </div>
 
       {showUpload && canUpload ? (
@@ -507,7 +559,8 @@ export function CaseFilesPanel({
         </div>
       ) : null}
 
-      <div className="p-4">
+      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.85fr)]">
+        <div className="min-w-0">
         {groups.length === 0 ? (
           <EmptyState
             title={files.length === 0 ? 'No files attached' : 'No matching files'}
@@ -534,11 +587,19 @@ export function CaseFilesPanel({
             }
           />
         ) : viewMode === 'grid' ? (
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-3 sm:grid-cols-2">
             {groups.map((group) => {
               const latest = group.versions[0]!;
               return (
-                <li key={group.name} className="rounded-xl border border-line p-3">
+                <li
+                  key={group.name}
+                  className={`cursor-pointer rounded-xl border p-3 transition ${
+                    selectedFile?.id === latest.id
+                      ? 'border-teal-300 bg-teal-50/40'
+                      : 'border-line'
+                  }`}
+                  onClick={() => selectFile(group.name, latest.id)}
+                >
                   <div className="flex h-20 items-center justify-center rounded-lg bg-surface text-xs font-bold tracking-wide text-brand-700">
                     {categoryIcon(latest.category)}
                   </div>
@@ -622,7 +683,12 @@ export function CaseFilesPanel({
                   const open = expandedHistory[group.name] ?? false;
                   return (
                     <Fragment key={group.name}>
-                      <tr className="border-b border-line">
+                      <tr
+                        className={`cursor-pointer border-b border-line ${
+                          selectedFile?.id === latest.id ? 'bg-teal-50/50' : ''
+                        }`}
+                        onClick={() => selectFile(group.name, latest.id)}
+                      >
                         <td className="px-2 py-2.5">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <p className="font-medium text-ink">{group.name}</p>
@@ -677,7 +743,13 @@ export function CaseFilesPanel({
                       </tr>
                       {hasHistory && open
                         ? group.versions.slice(1).map((file) => (
-                            <tr key={file.id} className="border-b border-line bg-surface/40">
+                            <tr
+                              key={file.id}
+                              className={`cursor-pointer border-b border-line bg-surface/40 ${
+                                selectedFile?.id === file.id ? 'bg-teal-50/50' : ''
+                              }`}
+                              onClick={() => selectFile(group.name, file.id)}
+                            >
                               <td className="px-2 py-2 pl-6 text-xs text-muted" colSpan={4}>
                                 <span className="inline-flex items-center gap-1.5">
                                   v{file.version} · {formatBytes(file.sizeBytes)} ·{' '}
@@ -709,6 +781,8 @@ export function CaseFilesPanel({
             </table>
           </div>
         )}
+        </div>
+        <FilePreviewPane caseId={caseId} file={selectedFile} />
       </div>
     </section>
   );

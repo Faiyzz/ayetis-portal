@@ -29,7 +29,6 @@ import {
   updateClarificationDraft,
   uploadClarificationAttachment,
 } from '@/features/clarifications/api';
-import { EmptyState } from '@/features/cases/components/detail/EmptyState';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
@@ -108,10 +107,20 @@ export function ClarificationsPanel({
     }
   }, [selected?.id]);
 
-  const doctorMessages =
-    selected?.messages.filter((m) => m.kind === CLARIFICATION_MESSAGE_KINDS.REPLY) ?? [];
-  const requestMessages =
-    selected?.messages.filter((m) => m.kind !== CLARIFICATION_MESSAGE_KINDS.REPLY) ?? [];
+  const threadMessages = useMemo(() => {
+    if (!selected) return [];
+    const opener = {
+      id: `open-${selected.id}`,
+      kind: 'request',
+      body: selected.requiredInfo,
+      authorName: selected.createdByName,
+      authorRole: selected.createdByRole,
+      createdAt: selected.createdAt,
+    };
+    return [opener, ...selected.messages].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+  }, [selected]);
 
   async function handleCreate(asDraft: boolean) {
     setCreating(true);
@@ -227,19 +236,14 @@ export function ClarificationsPanel({
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
-        <div>
-          <h2 className="text-sm font-semibold text-ink">View Clarification</h2>
-          <p className="mt-0.5 text-sm text-muted">
-            Role-specific requests · Client Clarification / Attachments / Doctor Response
-          </p>
-        </div>
+    <section className="overflow-hidden rounded-lg border border-line bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4">
+        <h2 className="text-base font-semibold text-ink">Clarifications</h2>
         {canCreate ? (
           <button
             type="button"
             onClick={() => setShowCreate((v) => !v)}
-            className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-300"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface"
           >
             {showCreate ? 'Cancel' : 'New request'}
           </button>
@@ -247,14 +251,14 @@ export function ClarificationsPanel({
       </div>
 
       {showCreate && canCreate ? (
-        <form className="space-y-3 border-b border-line bg-surface/40 px-4 py-4">
+        <form className="space-y-3 border-t border-line px-5 py-4">
           <div className="grid gap-3 sm:grid-cols-3">
-            <label className="block space-y-1.5 text-sm">
-              <span className="font-medium text-ink">Sender role</span>
+            <label className="block text-sm">
+              <span className="text-xs text-muted">Sender</span>
               <select
                 value={senderRole}
                 onChange={(e) => setSenderRole(e.target.value as ClarificationSenderRole)}
-                className="w-full rounded-xl border border-line bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2"
                 disabled={Boolean(resolveClarificationSenderRole(user?.role ?? ''))}
               >
                 {(Object.keys(CLARIFICATION_TYPES_BY_SENDER) as ClarificationSenderRole[]).map(
@@ -266,12 +270,12 @@ export function ClarificationsPanel({
                 )}
               </select>
             </label>
-            <label className="block space-y-1.5 text-sm">
-              <span className="font-medium text-ink">Type</span>
+            <label className="block text-sm">
+              <span className="text-xs text-muted">Type</span>
               <select
                 value={clarificationType}
                 onChange={(e) => setClarificationType(e.target.value)}
-                className="w-full rounded-xl border border-line bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2"
               >
                 {typeOptions.map((opt) => (
                   <option key={opt.type} value={opt.type}>
@@ -280,12 +284,12 @@ export function ClarificationsPanel({
                 ))}
               </select>
             </label>
-            <label className="block space-y-1.5 text-sm">
-              <span className="font-medium text-ink">Priority</span>
+            <label className="block text-sm">
+              <span className="text-xs text-muted">Priority</span>
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as ClarificationPriority)}
-                className="w-full rounded-xl border border-line bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2"
               >
                 {ALL_CLARIFICATION_PRIORITIES.map((value) => (
                   <option key={value} value={value}>
@@ -295,14 +299,6 @@ export function ClarificationsPanel({
               </select>
             </label>
           </div>
-          {typeOptions.find((t) => t.type === clarificationType)?.exampleTriggers?.length ? (
-            <p className="text-xs text-muted">
-              Example triggers:{' '}
-              {typeOptions
-                .find((t) => t.type === clarificationType)
-                ?.exampleTriggers.join(' · ')}
-            </p>
-          ) : null}
           <TextField
             label="Subject"
             required
@@ -310,23 +306,19 @@ export function ClarificationsPanel({
             onChange={(e) => setSubject(e.target.value)}
             placeholder="e.g. Missing upper arch STL"
           />
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-ink">Required information</span>
+          <label className="block">
+            <span className="text-xs text-muted">Required information</span>
             <textarea
               required
               rows={3}
               value={requiredInfo}
               onChange={(e) => setRequiredInfo(e.target.value)}
-              className="w-full rounded-xl border border-line px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm"
             />
           </label>
           <div className="flex flex-wrap gap-2">
-            <AuthButton
-              type="button"
-              loading={creating}
-              onClick={() => void handleCreate(false)}
-            >
-              Send to doctor
+            <AuthButton type="button" loading={creating} onClick={() => void handleCreate(false)}>
+              Send
             </AuthButton>
             <AuthButton
               type="button"
@@ -341,12 +333,12 @@ export function ClarificationsPanel({
       ) : null}
 
       {clarifications.length === 0 ? (
-        <div className="p-6">
-          <EmptyState title="No clarifications" description="Team requests will appear here." />
+        <div className="border-t border-line px-5 py-10">
+          <p className="text-sm text-muted">No clarification requests yet.</p>
         </div>
       ) : (
-        <div className="grid lg:grid-cols-[220px_1fr]">
-          <ul className="max-h-[32rem] overflow-y-auto border-b border-line lg:border-b-0 lg:border-r">
+        <div className="grid border-t border-line lg:grid-cols-[15rem_minmax(0,1fr)]">
+          <ul className="max-h-[36rem] overflow-y-auto lg:border-r lg:border-line">
             {clarifications.map((item) => {
               const active = item.id === selectedId;
               return (
@@ -354,20 +346,18 @@ export function ClarificationsPanel({
                   <button
                     type="button"
                     onClick={() => setSelectedId(item.id)}
-                    className={`w-full border-b border-line px-3 py-3 text-left ${
-                      active ? 'bg-brand-50/60' : 'hover:bg-surface'
+                    className={`w-full px-4 py-3 text-left ${
+                      active ? 'bg-surface' : 'hover:bg-surface/60'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-semibold text-ink line-clamp-2">{item.subject}</p>
+                      <p className="line-clamp-2 text-sm font-medium text-ink">{item.subject}</p>
                       {item.status !== 'resolved' && !item.isDraft ? (
-                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
                       ) : null}
                     </div>
-                    <p className="mt-1 text-[11px] text-muted">
-                      {CLARIFICATION_SENDER_ROLE_LABELS[item.senderRole]} ·{' '}
+                    <p className="mt-1 text-xs text-muted">
                       {CLARIFICATION_STATUS_LABELS[item.status]}
-                      {item.isDraft ? ' · Draft' : ''}
                     </p>
                   </button>
                 </li>
@@ -376,45 +366,33 @@ export function ClarificationsPanel({
           </ul>
 
           {selected ? (
-            <div className="grid gap-0 lg:grid-cols-3">
-              {/* Panel 1: Client Clarification */}
-              <div className="border-b border-line p-4 lg:border-b-0 lg:border-r">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Client Clarification
-                </h3>
-                <p className="mt-2 text-sm font-semibold text-ink">{selected.subject}</p>
-                <p className="mt-1 text-xs text-muted">
-                  {selected.clarificationTypeLabel} ·{' '}
-                  {CLARIFICATION_PRIORITY_LABELS[selected.priority]} ·{' '}
-                  {CLARIFICATION_SENDER_ROLE_LABELS[selected.senderRole]}
-                </p>
-                <p className="mt-3 whitespace-pre-wrap text-sm text-ink">{selected.requiredInfo}</p>
-                <div className="mt-4 space-y-2">
-                  {requestMessages.map((message) => (
-                    <div key={message.id} className="rounded-lg bg-surface/70 px-3 py-2 text-sm">
-                      <p className="text-xs text-muted">
-                        {message.authorName} ·{' '}
-                        {ROLE_LABELS[message.authorRole as Role] ?? message.authorRole}
-                      </p>
-                      <p className="mt-1 whitespace-pre-wrap">{message.body}</p>
-                    </div>
-                  ))}
+            <div className="flex min-h-[28rem] flex-col">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-ink">{selected.subject}</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {selected.clarificationTypeLabel}
+                    <span className="mx-1.5">·</span>
+                    {CLARIFICATION_PRIORITY_LABELS[selected.priority]}
+                    <span className="mx-1.5">·</span>
+                    {CLARIFICATION_STATUS_LABELS[selected.status]}
+                  </p>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
                   {selected.isDraft && canCreate ? (
                     <AuthButton
                       type="button"
                       loading={busyId === selected.id}
                       onClick={() => void handlePublish(selected.id)}
                     >
-                      Publish draft
+                      Publish
                     </AuthButton>
                   ) : null}
                   {canCreate &&
                   selected.escalationStatus !== CLARIFICATION_ESCALATION_STATUSES.ESCALATED ? (
                     <button
                       type="button"
-                      className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold"
+                      className="rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-surface hover:text-ink"
                       onClick={() => void handleEscalate(selected.id, true)}
                     >
                       Escalate
@@ -424,7 +402,7 @@ export function ClarificationsPanel({
                   selected.escalationStatus === CLARIFICATION_ESCALATION_STATUSES.ESCALATED ? (
                     <button
                       type="button"
-                      className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold"
+                      className="rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-surface hover:text-ink"
                       onClick={() => void handleEscalate(selected.id, false)}
                     >
                       De-escalate
@@ -433,48 +411,63 @@ export function ClarificationsPanel({
                   {canResolve && !selected.isDraft ? (
                     <button
                       type="button"
-                      className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-brand-700"
+                      className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface"
                       onClick={() => void handleResolve(selected.id)}
                     >
                       Resolve
                     </button>
                   ) : null}
                 </div>
-                <p className="mt-3 text-[11px] text-muted">
-                  Doctor read: {selected.doctorReadAt ? 'Yes' : 'No'} · Team read:{' '}
-                  {selected.teamReadAt ? 'Yes' : 'No'} · Escalation:{' '}
-                  {selected.escalationStatus}
-                </p>
               </div>
 
-              {/* Panel 2: Attachments */}
-              <div className="border-b border-line p-4 lg:border-b-0 lg:border-r">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Attachments
-                </h3>
-                {selected.attachments.length === 0 ? (
-                  <p className="mt-3 text-sm text-muted">No attachments yet.</p>
-                ) : (
-                  <ul className="mt-3 space-y-2">
-                    {selected.attachments.map((file) => (
-                      <li
-                        key={file.id}
-                        className="rounded-lg border border-line px-3 py-2 text-sm"
+              <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                {threadMessages.map((message) => {
+                  const isReply =
+                    'kind' in message &&
+                    message.kind === CLARIFICATION_MESSAGE_KINDS.REPLY;
+                  return (
+                    <div key={message.id} className="flex gap-3">
+                      <div
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+                          isReply ? 'bg-teal-50 text-teal-800' : 'bg-slate-100 text-slate-700'
+                        }`}
                       >
-                        <p className="font-medium text-ink">{file.originalName}</p>
-                        <p className="text-xs text-muted">
-                          {file.uploadedByName} · {Math.round(file.sizeBytes / 1024)} KB
+                        {initials(message.authorName)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-baseline gap-x-2">
+                          <p className="text-sm font-medium text-ink">{message.authorName}</p>
+                          <p className="text-xs text-muted">
+                            {ROLE_LABELS[message.authorRole as Role] ?? message.authorRole}
+                          </p>
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                          {message.body}
                         </p>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {selected.attachments.length > 0 ? (
+                  <ul className="space-y-1 border-t border-line pt-3">
+                    {selected.attachments.map((file) => (
+                      <li key={file.id} className="text-sm text-ink">
+                        {file.originalName}
+                        <span className="ml-2 text-xs text-muted">
+                          {Math.round(file.sizeBytes / 1024)} KB
+                        </span>
                       </li>
                     ))}
                   </ul>
-                )}
+                ) : null}
+
                 {!readOnly ? (
-                  <label className="mt-4 block">
-                    <span className="text-xs font-semibold text-brand-700">Upload file</span>
+                  <label className="block text-sm">
+                    <span className="text-xs font-medium text-ink">Attach file</span>
                     <input
                       type="file"
-                      className="mt-1 block w-full text-xs"
+                      className="mt-1 block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border file:border-line file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink"
                       onChange={(e) =>
                         void handleUpload(selected.id, e.target.files?.[0] ?? null)
                       }
@@ -483,57 +476,34 @@ export function ClarificationsPanel({
                 ) : null}
               </div>
 
-              {/* Panel 3: Doctor Response */}
-              <div className="p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Doctor Response
-                </h3>
-                <div className="mt-3 space-y-2">
-                  {doctorMessages.length === 0 ? (
-                    <p className="text-sm text-muted">No doctor response yet.</p>
-                  ) : (
-                    doctorMessages.map((message) => (
-                      <div key={message.id} className="flex gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-800">
-                          {initials(message.authorName)}
-                        </div>
-                        <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm">
-                          <p className="text-xs text-muted">{message.authorName}</p>
-                          <p className="mt-1 whitespace-pre-wrap">{message.body}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-                {canReply && selected.status !== 'resolved' && !selected.isDraft ? (
-                  <div className="mt-4 space-y-2">
-                    <textarea
-                      rows={4}
-                      value={responseDraft}
-                      onChange={(e) => setResponseDraft(e.target.value)}
-                      placeholder="Doctor response…"
-                      className="w-full rounded-xl border border-line px-3 py-2 text-sm"
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <AuthButton
-                        type="button"
-                        loading={busyId === selected.id}
-                        onClick={() => void handleReply(selected.id)}
-                      >
-                        Send response
-                      </AuthButton>
-                      <AuthButton
-                        type="button"
-                        variant="ghost"
-                        loading={busyId === selected.id}
-                        onClick={() => void handleSaveResponseDraft(selected.id)}
-                      >
-                        Save draft
-                      </AuthButton>
-                    </div>
+              {canReply && selected.status !== 'resolved' && !selected.isDraft ? (
+                <div className="border-t border-line px-5 py-3">
+                  <textarea
+                    rows={3}
+                    value={responseDraft}
+                    onChange={(e) => setResponseDraft(e.target.value)}
+                    placeholder="Write a reply…"
+                    className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-slate-400"
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <AuthButton
+                      type="button"
+                      loading={busyId === selected.id}
+                      onClick={() => void handleReply(selected.id)}
+                    >
+                      Send
+                    </AuthButton>
+                    <button
+                      type="button"
+                      className="text-sm text-muted hover:text-ink"
+                      disabled={busyId === selected.id}
+                      onClick={() => void handleSaveResponseDraft(selected.id)}
+                    >
+                      Save draft
+                    </button>
                   </div>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

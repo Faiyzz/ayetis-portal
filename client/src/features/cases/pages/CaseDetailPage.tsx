@@ -42,8 +42,9 @@ import { TreatmentInstructionsPanel } from '@/features/cases/components/Treatmen
 import { ActivityNotes } from '@/features/cases/components/detail/ActivityNotes';
 import {
   CaseDetailActionButton,
-  CaseDetailHero,
-} from '@/features/cases/components/detail/CaseDetailHero';
+  CaseClinicalHeader,
+  CaseMoreMenu,
+} from '@/features/cases/components/detail/clinical/CaseClinicalHeader';
 import { CaseDetailTabs } from '@/features/cases/components/detail/CaseDetailTabs';
 import { CaseOverviewTab } from '@/features/cases/components/detail/CaseOverviewTab';
 import { toast } from '@/features/notifications/toastStore';
@@ -390,7 +391,7 @@ export function CaseDetailPage() {
             </Link>
           }
           title={caseId || 'Case'}
-          subtitle="Loading case…"
+          subtitle="Loading clinical dashboard…"
         />
         <p className="text-sm text-muted">Loading case…</p>
       </>
@@ -527,77 +528,129 @@ export function CaseDetailPage() {
     </div>
   );
 
+  const canCancelCase =
+    ((can(PERMISSIONS.CASE_UPDATE) || can(PERMISSIONS.CASE_DELETE)) ||
+      (user?.id === caseData.doctorId &&
+        caseData.status === 'new_case' &&
+        (caseData.cancelWindowRemainingSeconds ?? 0) > 0)) &&
+    !editsLocked &&
+    !isCancelled;
+
+  const showApprove =
+    showDoctorDelivery && caseData.status === 'waiting_for_approval' && !editsLocked;
+  const showAssign = canValidateOrAssign && !editsLocked;
+  const showEdit = can(PERMISSIONS.CASE_UPDATE) && !editsLocked;
+
   return (
-    <div className="w-full">
+    <div className="font-clinical space-y-5">
       <a
         href="#case-tab-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-brand-700 focus:shadow"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-teal-800 focus:shadow"
       >
         Skip to case content
       </a>
 
       <PageHeader
         eyebrow={
-          <Link to="/app/cases" className="hover:text-brand-700">
+          <Link to="/app/cases" className="hover:text-teal-800">
             ← Cases
           </Link>
         }
-        title={formatCaseIdLabel(caseData.caseId, caseData.status)}
-        subtitle={caseData.treatmentSummary}
+        title={caseData.patientName}
+        subtitle={formatCaseIdLabel(caseData.caseId, caseData.status)}
       />
 
-      <div className="sticky top-0 z-10 border-b border-line bg-white/95 backdrop-blur">
-        <div className="px-5 sm:px-6 lg:px-8">
-          <CaseDetailHero
-            caseData={caseData}
-            onJumpToTab={selectTab}
-            actions={
-              <>
-                {can(PERMISSIONS.CASE_SET_PRIORITY) && !editsLocked ? (
-                  <CaseDetailActionButton
-                    tone={isUrgent ? 'urgent' : 'default'}
-                    disabled={priorityBusy}
-                    onClick={() => void handlePriorityToggle()}
-                  >
-                    {priorityBusy ? 'Updating…' : isUrgent ? 'Clear urgent' : 'Mark urgent'}
-                  </CaseDetailActionButton>
-                ) : null}
-                {can(PERMISSIONS.CASE_UPDATE) && !editsLocked ? (
-                  <CaseDetailActionButton to={`/app/cases/${caseData.caseId}/edit`}>
-                    Edit
-                  </CaseDetailActionButton>
-                ) : null}
-                {canValidateOrAssign && !editsLocked ? (
-                  <CaseDetailActionButton onClick={openAssignment}>
-                    Assign / validate
-                  </CaseDetailActionButton>
-                ) : null}
-                {((can(PERMISSIONS.CASE_UPDATE) || can(PERMISSIONS.CASE_DELETE)) ||
-                  (user?.id === caseData.doctorId &&
-                    caseData.status === 'new_case' &&
-                    (caseData.cancelWindowRemainingSeconds ?? 0) > 0)) &&
-                !editsLocked &&
-                !isCancelled ? (
-                  <CaseDetailActionButton tone="warning" onClick={() => void handleCancel()}>
-                    Cancel case
-                    {(caseData.cancelWindowRemainingSeconds ?? 0) > 0
-                      ? ` (${Math.ceil((caseData.cancelWindowRemainingSeconds ?? 0) / 60)}m left)`
-                      : ''}
-                  </CaseDetailActionButton>
-                ) : null}
-                {can(PERMISSIONS.CASE_DELETE) && !caseData.isDeleted ? (
-                  <CaseDetailActionButton tone="danger" onClick={() => void handleDelete()}>
-                    Soft delete
-                  </CaseDetailActionButton>
-                ) : null}
-              </>
-            }
-          />
-          <CaseDetailTabs tabs={sections} activeId={activeTab} onChange={selectTab} />
-        </div>
+      <CaseClinicalHeader
+        caseData={caseData}
+        actions={
+          <>
+            {showApprove ? (
+              <CaseDetailActionButton
+                tone="primary"
+                onClick={() => {
+                  setWorkFocus('delivery');
+                  selectTab('work');
+                }}
+              >
+                Approve Plan
+              </CaseDetailActionButton>
+            ) : showAssign ? (
+              <CaseDetailActionButton tone="primary" onClick={openAssignment}>
+                Assign / validate
+              </CaseDetailActionButton>
+            ) : showEdit ? (
+              <CaseDetailActionButton
+                tone="primary"
+                to={`/app/cases/${caseData.caseId}/edit`}
+              >
+                Edit
+              </CaseDetailActionButton>
+            ) : null}
+            {showEdit && (showApprove || showAssign) ? (
+              <CaseDetailActionButton to={`/app/cases/${caseData.caseId}/edit`}>
+                Edit
+              </CaseDetailActionButton>
+            ) : null}
+            <CaseMoreMenu
+              items={[
+                ...(!editsLocked && !isCancelled
+                  ? [
+                      {
+                        id: 'refinement',
+                        label: 'Request refinement',
+                        onClick: () => selectTab('communication'),
+                      },
+                      {
+                        id: 'checkin',
+                        label: 'Schedule check-in',
+                        onClick: () => selectTab('communication'),
+                      },
+                    ]
+                  : []),
+                ...(can(PERMISSIONS.CASE_SET_PRIORITY) && !editsLocked
+                  ? [
+                      {
+                        id: 'urgent',
+                        label: isUrgent ? 'Clear urgent' : 'Mark urgent',
+                        onClick: () => void handlePriorityToggle(),
+                        disabled: priorityBusy,
+                      },
+                    ]
+                  : []),
+                ...(canCancelCase
+                  ? [
+                      {
+                        id: 'cancel',
+                        label:
+                          (caseData.cancelWindowRemainingSeconds ?? 0) > 0
+                            ? `Cancel case (${Math.ceil((caseData.cancelWindowRemainingSeconds ?? 0) / 60)}m left)`
+                            : 'Cancel case',
+                        onClick: () => void handleCancel(),
+                        tone: 'warning' as const,
+                      },
+                    ]
+                  : []),
+                ...(can(PERMISSIONS.CASE_DELETE) && !caseData.isDeleted
+                  ? [
+                      {
+                        id: 'delete',
+                        label: 'Soft delete',
+                        onClick: () => void handleDelete(),
+                        tone: 'danger' as const,
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </>
+        }
+      />
+
+      <div className="sticky top-0 z-10 -mx-4 border-b border-line bg-surface/95 px-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <CaseDetailTabs tabs={sections} activeId={activeTab} onChange={selectTab} />
       </div>
 
-      <div id="case-tab-content" className="px-5 pt-5 sm:px-6 lg:px-8">
+      <div id="case-tab-content">
         {TAB_IDS.map((tabId) => {
           if (tabId === 'work' && !showWorkTab) return null;
           const selected = activeTab === tabId;
@@ -636,6 +689,21 @@ export function CaseDetailPage() {
                       canAssign={can(PERMISSIONS.CASE_ASSIGN) && !editsLocked}
                       canValidate={can(PERMISSIONS.CASE_VALIDATE) && !editsLocked}
                       canSetPriority={can(PERMISSIONS.CASE_SET_PRIORITY) && !editsLocked}
+                      canAddNote={!editsLocked}
+                      savingNote={savingNote}
+                      onAddNote={async (body) => {
+                        setSavingNote(true);
+                        try {
+                          const updated = await addCaseNote(caseData.caseId, { body });
+                          setCaseData(updated);
+                          toast().success('Note added');
+                        } catch (err) {
+                          toast().error(getErrorMessage(err, 'Unable to add note'));
+                          throw err;
+                        } finally {
+                          setSavingNote(false);
+                        }
+                      }}
                     />
                   ) : null}
 
@@ -682,7 +750,7 @@ export function CaseDetailPage() {
                   ) : null}
 
                   {tabId === 'communication' ? (
-                    <div className="grid gap-5 xl:grid-cols-2">
+                    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
                       <ClarificationsPanel
                         caseId={caseData.caseId}
                         clarifications={caseData.clarifications}

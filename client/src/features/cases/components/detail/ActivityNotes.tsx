@@ -1,7 +1,5 @@
 import type { CaseNoteDto } from '@ayetis/shared';
 import { useState, type FormEvent } from 'react';
-import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
-import { EmptyState } from './EmptyState';
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -12,16 +10,15 @@ function initials(name: string) {
 
 function relativeTime(iso: string) {
   const then = new Date(iso).getTime();
-  const now = Date.now();
-  const diff = Math.max(0, now - then);
-  const mins = Math.floor(diff / 60000);
+  const diff = Math.max(0, Date.now() - then);
+  const mins = Math.floor(diff / 60_000);
   if (mins < 1) return 'Just now';
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleString();
+  return new Date(iso).toLocaleDateString();
 }
 
 export function ActivityNotes({
@@ -46,71 +43,57 @@ export function ActivityNotes({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-white">
-      <div className="border-b border-line px-4 py-3">
-        <h3 className="text-sm font-semibold text-ink">Activity notes</h3>
-        <p className="mt-0.5 text-sm text-muted">
-          Team comments and special requirements for this case.
-        </p>
+    <section className="flex max-h-[40rem] flex-col overflow-hidden rounded-lg border border-line bg-white">
+      <div className="px-5 py-4">
+        <h2 className="text-base font-semibold text-ink">Notes</h2>
       </div>
 
-      <div className="space-y-4 p-4">
-        {canAdd ? (
-          <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-line bg-surface/40 p-3">
-            <TextField
-              label="Add note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Case note or special instruction…"
-            />
-            <div className="max-w-xs">
-              <AuthButton loading={saving} disabled={!note.trim()}>
-                Add note
-              </AuthButton>
-            </div>
-          </form>
-        ) : null}
-
-        {notes.length === 0 ? (
-          <EmptyState
-            title="No notes yet"
-            description="Add a note when you need to leave context for the team—special requirements, handoff details, or follow-ups."
-            icon={
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 6h8M8 10h8M8 14h5M6 3h12a2 2 0 012 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 012-2z" />
-              </svg>
-            }
+      {canAdd ? (
+        <form onSubmit={handleSubmit} className="border-t border-line px-5 py-3">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            placeholder="Add a note…"
+            className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-slate-400"
           />
+          <button
+            type="submit"
+            disabled={saving || !note.trim()}
+            className="mt-2 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Post'}
+          </button>
+        </form>
+      ) : null}
+
+      <ul className="flex-1 space-y-4 overflow-y-auto border-t border-line px-5 py-4">
+        {notes.length === 0 ? (
+          <li className="text-sm text-muted">No notes yet.</li>
         ) : (
-          <ul className="space-y-3">
-            {[...notes].reverse().map((item) => (
-              <li key={item.id} className="flex gap-3">
-                <div
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700"
-                  aria-hidden
-                >
-                  {initials(item.authorName)}
+          [...notes].reverse().map((item) => (
+            <li key={item.id} className="flex gap-3">
+              <div
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-700"
+                aria-hidden
+              >
+                {initials(item.authorName)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium text-ink">{item.authorName}</p>
+                  <time className="shrink-0 text-xs text-muted" dateTime={item.createdAt}>
+                    {relativeTime(item.createdAt)}
+                  </time>
                 </div>
-                <div className="min-w-0 flex-1 rounded-lg border border-line bg-surface/30 px-3.5 py-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p className="text-sm font-semibold text-ink">{item.authorName}</p>
-                    <time
-                      className="text-xs text-muted"
-                      dateTime={item.createdAt}
-                      title={new Date(item.createdAt).toLocaleString()}
-                    >
-                      {relativeTime(item.createdAt)}
-                    </time>
-                  </div>
-                  <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">
-                    {item.body}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                  {item.body}
+                </p>
+              </div>
+            </li>
+          ))
         )}
-      </div>
-    </div>
+      </ul>
+    </section>
   );
 }

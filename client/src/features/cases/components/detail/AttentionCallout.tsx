@@ -21,37 +21,23 @@ export function buildAttentionItems(
   const items: AttentionItem[] = [];
   const deliveryLocked = isCaseDeliveryLocked(caseData.status);
 
-  if (caseData.status === 'in_process') {
+  if (caseData.openClarificationCount > 0) {
+    const count = caseData.openClarificationCount;
     items.push({
-      id: 'waiting-clarification',
-      title: 'Waiting for clarification',
-      detail: 'This case is blocked until the doctor provides the requested information.',
+      id: 'clarifications',
+      title:
+        count > 0
+          ? `${count} open clarification${count === 1 ? '' : 's'}`
+          : 'Waiting for clarification',
+      detail: 'Production is waiting on a reply.',
       tone: 'warning',
       action: opts?.onOpenCommunication ? (
         <button
           type="button"
           onClick={opts.onOpenCommunication}
-          className="text-xs font-semibold text-amber-900 underline"
+          className="text-sm font-medium text-amber-900 underline"
         >
           Open communication
-        </button>
-      ) : undefined,
-    });
-  }
-
-  if (caseData.openClarificationCount > 0) {
-    items.push({
-      id: 'open-clarifications',
-      title: `${caseData.openClarificationCount} open clarification${caseData.openClarificationCount === 1 ? '' : 's'}`,
-      detail: 'Review and reply so production can continue.',
-      tone: 'warning',
-      action: opts?.onOpenCommunication ? (
-        <button
-          type="button"
-          onClick={opts.onOpenCommunication}
-          className="text-xs font-semibold text-amber-900 underline"
-        >
-          View threads
         </button>
       ) : undefined,
     });
@@ -131,29 +117,26 @@ const toneStyles = {
 
 export function AttentionCallout({ items }: { items: AttentionItem[] }) {
   if (items.length === 0) {
-    return (
-      <div className="rounded-xl border border-line bg-white px-4 py-4">
-        <p className="text-sm font-semibold text-ink">All clear</p>
-        <p className="mt-1 text-sm text-muted">Nothing requires attention right now.</p>
-      </div>
-    );
+    return null;
   }
 
+  const item = items[0]!;
+
   return (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">Needs attention</p>
-      <ul className="space-y-2">
-        {items.map((item) => (
-          <li
-            key={item.id}
-            className={`rounded-r-lg border border-line border-l-4 px-3.5 py-3 ${toneStyles[item.tone]}`}
-          >
-            <p className="text-sm font-semibold text-ink">{item.title}</p>
-            <p className="mt-0.5 text-sm leading-relaxed text-muted">{item.detail}</p>
-            {item.action ? <div className="mt-2">{item.action}</div> : null}
-          </li>
-        ))}
-      </ul>
+    <div
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border border-l-4 px-4 py-3 ${toneStyles[item.tone]}`}
+    >
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-ink">{item.title}</p>
+        {items.length > 1 ? (
+          <p className="mt-0.5 text-sm text-muted">
+            +{items.length - 1} more · {item.detail}
+          </p>
+        ) : (
+          <p className="mt-0.5 text-sm text-muted">{item.detail}</p>
+        )}
+      </div>
+      {item.action}
     </div>
   );
 }
