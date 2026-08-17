@@ -7,17 +7,19 @@ import {
   PAYMENT_PROVIDER_LABELS,
   PERMISSIONS,
   PRICE_SUBJECT_TYPES,
+  PAYMENT_SESSION_STATUSES,
   type BillingArrangement,
   type CustomerPriceOverrideDto,
   type DiscountCodeDto,
   type InvoiceDto,
   type PaymentProviderConfigDto,
+  type PaymentSessionDto,
   type PrepaidLedgerEntryDto,
   type PriceSubjectType,
   type TreatmentPlanDto,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
@@ -27,6 +29,8 @@ import {
   fetchDiscountCodes,
   fetchInvoices,
   fetchPaymentProviders,
+  fetchPaymentSessions,
+  confirmPaymentSession,
   generateBatchInvoices,
   fetchPrepaidLedger,
   fetchTreatmentPlans,
@@ -45,6 +49,7 @@ type Tab =
   | 'discounts'
   | 'billing'
   | 'providers'
+  | 'payments'
   | 'invoices';
 
 const EMPTY_PLAN = {
@@ -71,6 +76,7 @@ const EMPTY_DISCOUNT = {
 
 export function CommercialAdminPage() {
   const { can } = usePermissions();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canPlans = can(PERMISSIONS.TREATMENT_PLAN_MANAGE);
   const canDiscounts = can(PERMISSIONS.DISCOUNT_CODE_MANAGE);
   const canPrices = can(PERMISSIONS.CUSTOMER_PRICE_MANAGE);
@@ -90,13 +96,19 @@ export function CommercialAdminPage() {
           ? 'billing'
           : canProviders
             ? 'providers'
-            : 'invoices';
+            : canManageInvoices
+              ? 'payments'
+              : 'invoices';
 
-  const [tab, setTab] = useState<Tab>(firstTab);
+  const requestedTab = searchParams.get('tab');
+  const [tab, setTab] = useState<Tab>(
+    requestedTab === 'payments' && canManageInvoices ? 'payments' : firstTab,
+  );
   const [plans, setPlans] = useState<TreatmentPlanDto[]>([]);
   const [discounts, setDiscounts] = useState<DiscountCodeDto[]>([]);
   const [prices, setPrices] = useState<CustomerPriceOverrideDto[]>([]);
   const [providers, setProviders] = useState<PaymentProviderConfigDto[]>([]);
+  const [sessions, setSessions] = useState<PaymentSessionDto[]>([]);
   const [invoices, setInvoices] = useState<InvoiceDto[]>([]);
   const [ledger, setLedger] = useState<PrepaidLedgerEntryDto[]>([]);
   const [planForm, setPlanForm] = useState({ ...EMPTY_PLAN, id: '' as string });
@@ -126,24 +138,30 @@ export function CommercialAdminPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [batching, setBatching] = useState(false);
+  const [confirmingId, setConfirmingId] = useState('');
   const [error, setError] = useState('');
 
   async function load() {
     setLoading(true);
     setError('');
     try {
-      const [planList, discountList, priceList, providerList, invoiceList] = await Promise.all([
-        canPlans || canPrices ? fetchTreatmentPlans(false) : Promise.resolve([]),
-        canDiscounts ? fetchDiscountCodes() : Promise.resolve([]),
-        canPrices ? fetchCustomerPrices() : Promise.resolve([]),
-        canProviders || canInvoices ? fetchPaymentProviders() : Promise.resolve([]),
-        canInvoices ? fetchInvoices() : Promise.resolve([]),
-      ]);
+      const [planList, discountList, priceList, providerList, invoiceList, sessionList] =
+        await Promise.all([
+          canPlans || canPrices ? fetchTreatmentPlans(false) : Promise.resolve([]),
+          canDiscounts ? fetchDiscountCodes() : Promise.resolve([]),
+          canPrices ? fetchCustomerPrices() : Promise.resolve([]),
+          canProviders || canInvoices ? fetchPaymentProviders() : Promise.resolve([]),
+          canInvoices ? fetchInvoices() : Promise.resolve([]),
+          canManageInvoices
+            ? fetchPaymentSessions({ status: PAYMENT_SESSION_STATUSES.AWAITING_CONFIRMATION })
+            : Promise.resolve([]),
+        ]);
       setPlans(planList);
       setDiscounts(discountList);
       setPrices(priceList);
       setProviders(providerList);
       setInvoices(invoiceList);
+      setSessions(sessionList);
     } catch (err) {
       const message = getErrorMessage(err, 'Unable to load commercial data');
       setError(message);
@@ -312,6 +330,7 @@ export function CommercialAdminPage() {
     { id: 'discounts', label: 'Discount codes', show: canDiscounts },
     { id: 'billing', label: 'Billing & prepaid', show: canBilling || canPrepaid },
     { id: 'providers', label: 'Payment providers', show: canProviders },
+    { id: 'payments', label: 'Bank payments', show: canManageInvoices },
     { id: 'invoices', label: 'Invoices', show: canInvoices },
   ];
 
@@ -339,7 +358,14 @@ export function CommercialAdminPage() {
             <button
               key={t.id}
               type="button"
-              onClick={() => setTab(t.id)}
+              onClick={() => {
+                setTab(t.id);
+                if (t.id === 'payments') {
+                  setSearchParams({ tab: 'payments' }, { replace: true });
+                } else if (searchParams.get('tab')) {
+                  setSearchParams({}, { replace: true });
+                }
+              }}
               className={[
                 'rounded-lg px-3.5 py-2 text-sm font-semibold',
                 tab === t.id ? 'bg-brand-500 text-white' : 'border border-line text-ink',
@@ -844,6 +870,77 @@ export function CommercialAdminPage() {
             </table>
           </section>
         </div>
+      ) : null}
+
+      {tab === 'payments' && canManageInvoices ? (
+        <section className="overflow-hidden rounded-xl border border-line bg-white">
+          <div className="border-b border-line px-4 py-3">
+            <h2 className="text-sm font-semibold text-ink">Awaiting confirmation</h2>
+            <p className="mt-0.5 text-sm text-muted">
+              Bank transfers with a submitted reference. Confirming receipt creates the case and
+              marks payment as paid.
+            </p>
+          </div>
+          {sessions.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-muted">No payments waiting for confirmation.</p>
+          ) : (
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-surface text-muted">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Customer</th>
+                  <th className="px-4 py-3 font-medium">Amount</th>
+                  <th className="px-4 py-3 font-medium">Reference</th>
+                  <th className="px-4 py-3 font-medium">Submitted</th>
+                  <th className="px-4 py-3 font-medium" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {sessions.map((session) => (
+                  <tr key={session.id}>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-ink">
+                        {session.customerName || '—'}
+                      </p>
+                      <p className="text-xs text-muted">{session.customerEmail || session.id}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {session.currency} {session.amount.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {session.bankReference || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted">
+                      {new Date(session.createdAt).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        disabled={!session.bankReference || confirmingId === session.id}
+                        className="text-sm font-semibold text-brand-600 disabled:opacity-40"
+                        onClick={() => {
+                          void (async () => {
+                            setConfirmingId(session.id);
+                            try {
+                              await confirmPaymentSession(session.id);
+                              toast().success('Payment confirmed');
+                              await load();
+                            } catch (err) {
+                              toast().error(getErrorMessage(err, 'Unable to confirm payment'));
+                            } finally {
+                              setConfirmingId('');
+                            }
+                          })();
+                        }}
+                      >
+                        {confirmingId === session.id ? 'Confirming…' : 'Confirm receipt'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
       ) : null}
 
       {tab === 'invoices' && canInvoices ? (

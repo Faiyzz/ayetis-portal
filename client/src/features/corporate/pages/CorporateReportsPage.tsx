@@ -3,11 +3,15 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert } from '@/features/auth/components/AuthUI';
+import { AdminOrgPicker, SelectOrganizationEmpty } from '@/features/corporate/AdminOrgPicker';
 import { fetchCorporateInsights } from '@/features/corporate/api';
+import { useCorporateOrgId, useIsMainAdmin } from '@/features/corporate/orgContext';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
 export function CorporateReportsPage() {
+  const isMainAdmin = useIsMainAdmin();
+  const orgId = useCorporateOrgId();
   const [data, setData] = useState<CorporateInsightsDto | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -15,8 +19,14 @@ export function CorporateReportsPage() {
   useEffect(() => {
     void (async () => {
       setLoading(true);
+      setError('');
+      setData(null);
+      if (isMainAdmin && !orgId) {
+        setLoading(false);
+        return;
+      }
       try {
-        setData(await fetchCorporateInsights());
+        setData(await fetchCorporateInsights(orgId));
       } catch (err) {
         const message = getErrorMessage(err, 'Unable to load corporate report');
         setError(message);
@@ -25,20 +35,26 @@ export function CorporateReportsPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [isMainAdmin, orgId]);
 
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="Corporate"
+        eyebrow={isMainAdmin ? 'Admin' : 'Corporate'}
         title="Organization report"
-        subtitle="Case volume, SLA, facility, and doctor performance for your company."
+        subtitle={
+          isMainAdmin
+            ? 'Case volume, SLA, facility, and doctor performance for this company.'
+            : 'Case volume, SLA, facility, and doctor performance for your company.'
+        }
       >
         <Link to="/app/corporate/audit" className="text-sm font-medium text-brand-600">
           Activity audit
         </Link>
       </PageHeader>
+      {isMainAdmin ? <AdminOrgPicker /> : null}
       {error ? <Alert>{error}</Alert> : null}
+      {isMainAdmin && !orgId ? <SelectOrganizationEmpty /> : null}
       {loading ? <p className="text-sm text-muted">Loading…</p> : null}
       {data ? (
         <>

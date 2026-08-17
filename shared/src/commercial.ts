@@ -146,6 +146,8 @@ export interface PaymentSessionDto {
   receiptId: string | null;
   createdAt: string;
   expiresAt: string | null;
+  customerEmail?: string | null;
+  customerName?: string | null;
 }
 
 export interface ResolvedCasePricing {

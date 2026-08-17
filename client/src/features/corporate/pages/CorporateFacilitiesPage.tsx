@@ -7,7 +7,9 @@ import {
 import { useEffect, useState, type FormEvent } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { AdminOrgPicker, SelectOrganizationEmpty } from '@/features/corporate/AdminOrgPicker';
 import * as corporateApi from '@/features/corporate/api';
+import { useCorporateOrgId, useIsMainAdmin } from '@/features/corporate/orgContext';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
@@ -23,14 +25,20 @@ const EMPTY = {
 };
 
 export function CorporateFacilitiesPage() {
+  const isMainAdmin = useIsMainAdmin();
+  const orgId = useCorporateOrgId();
   const [items, setItems] = useState<FacilityDto[]>([]);
   const [error, setError] = useState('');
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
 
   async function load() {
+    if (isMainAdmin && !orgId) {
+      setItems([]);
+      return;
+    }
     try {
-      setItems(await corporateApi.fetchFacilities());
+      setItems(await corporateApi.fetchFacilities(orgId));
     } catch (err) {
       setError(getErrorMessage(err, 'Unable to load facilities'));
     }
@@ -38,23 +46,27 @@ export function CorporateFacilitiesPage() {
 
   useEffect(() => {
     void load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId]);
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError('');
     try {
-      await corporateApi.createFacility({
-        name: form.name,
-        country: form.country,
-        state: form.state || undefined,
-        city: form.city || undefined,
-        address: form.address || undefined,
-        timezone: form.timezone || undefined,
-        contactPhone: form.contactPhone || undefined,
-        contactEmail: form.contactEmail || undefined,
-      });
+      await corporateApi.createFacility(
+        {
+          name: form.name,
+          country: form.country,
+          state: form.state || undefined,
+          city: form.city || undefined,
+          address: form.address || undefined,
+          timezone: form.timezone || undefined,
+          contactPhone: form.contactPhone || undefined,
+          contactEmail: form.contactEmail || undefined,
+        },
+        orgId,
+      );
       setForm(EMPTY);
       toast().success('Facility created');
       await load();
@@ -78,11 +90,17 @@ export function CorporateFacilitiesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Corporate"
+        eyebrow={isMainAdmin ? 'Admin' : 'Corporate'}
         title="Facilities"
-        subtitle="Create and manage branches for your organization."
+        subtitle={
+          isMainAdmin
+            ? 'Create and manage branches for this company.'
+            : 'Create and manage branches for your organization.'
+        }
       />
+      {isMainAdmin ? <AdminOrgPicker /> : null}
       {error ? <Alert>{error}</Alert> : null}
+      {isMainAdmin && !orgId ? <SelectOrganizationEmpty /> : null}
 
       <form
         onSubmit={onCreate}
@@ -141,7 +159,7 @@ export function CorporateFacilitiesPage() {
           onChange={(e) => setForm((f) => ({ ...f, contactEmail: e.target.value }))}
         />
         <div className="sm:col-span-2">
-          <AuthButton type="submit" disabled={saving}>
+          <AuthButton type="submit" disabled={saving || (isMainAdmin && !orgId)}>
             {saving ? 'Creating…' : 'Create facility'}
           </AuthButton>
         </div>

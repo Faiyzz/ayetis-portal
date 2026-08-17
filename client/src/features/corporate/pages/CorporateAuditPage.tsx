@@ -3,11 +3,15 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { AdminOrgPicker, SelectOrganizationEmpty } from '@/features/corporate/AdminOrgPicker';
 import { fetchCorporateAudit } from '@/features/corporate/api';
+import { useCorporateOrgId, useIsMainAdmin } from '@/features/corporate/orgContext';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
 export function CorporateAuditPage() {
+  const isMainAdmin = useIsMainAdmin();
+  const orgId = useCorporateOrgId();
   const [items, setItems] = useState<ActivityLogDto[]>([]);
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState('');
@@ -17,10 +21,22 @@ export function CorporateAuditPage() {
   const [company, setCompany] = useState('');
 
   async function load(nextPage = page) {
+    if (isMainAdmin && !orgId) {
+      setItems([]);
+      setTotal(0);
+      setCompany('');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const data = await fetchCorporateAudit({ page: nextPage, pageSize: 25, q });
+      const data = await fetchCorporateAudit({
+        page: nextPage,
+        pageSize: 25,
+        q,
+        organizationId: orgId,
+      });
       setItems(data.items);
       setTotal(data.total);
       setPage(data.page);
@@ -37,12 +53,12 @@ export function CorporateAuditPage() {
   useEffect(() => {
     void load(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [orgId]);
 
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="Corporate"
+        eyebrow={isMainAdmin ? 'Admin' : 'Corporate'}
         title="Organization audit"
         subtitle={company ? `Activity for ${company}` : 'Company-scoped activity log.'}
       >
@@ -50,7 +66,9 @@ export function CorporateAuditPage() {
           Reports
         </Link>
       </PageHeader>
+      {isMainAdmin ? <AdminOrgPicker /> : null}
       {error ? <Alert>{error}</Alert> : null}
+      {isMainAdmin && !orgId ? <SelectOrganizationEmpty /> : null}
       <form
         onSubmit={(e: FormEvent) => {
           e.preventDefault();

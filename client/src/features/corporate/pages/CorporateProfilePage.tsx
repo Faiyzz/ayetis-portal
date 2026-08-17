@@ -1,12 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { AdminOrgPicker, SelectOrganizationEmpty } from '@/features/corporate/AdminOrgPicker';
 import * as corporateApi from '@/features/corporate/api';
+import { useCorporateOrgId, useIsMainAdmin } from '@/features/corporate/orgContext';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 import type { OrganizationDto } from '@ayetis/shared';
 
 export function CorporateProfilePage() {
+  const isMainAdmin = useIsMainAdmin();
+  const orgId = useCorporateOrgId();
   const [org, setOrg] = useState<OrganizationDto | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -22,8 +26,11 @@ export function CorporateProfilePage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      setError('');
+      setOrg(null);
+      if (isMainAdmin && !orgId) return;
       try {
-        const data = await corporateApi.fetchOrganization();
+        const data = await corporateApi.fetchOrganization(orgId);
         if (cancelled) return;
         setOrg(data);
         setForm({
@@ -42,24 +49,27 @@ export function CorporateProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isMainAdmin, orgId]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError('');
     try {
-      const updated = await corporateApi.updateOrganization({
-        companyName: form.companyName,
-        country: form.country,
-        address: {
-          street: form.street,
-          city: form.city,
-          state: form.state,
+      const updated = await corporateApi.updateOrganization(
+        {
+          companyName: form.companyName,
           country: form.country,
-          postalCode: form.postalCode,
+          address: {
+            street: form.street,
+            city: form.city,
+            state: form.state,
+            country: form.country,
+            postalCode: form.postalCode,
+          },
         },
-      });
+        orgId,
+      );
       setOrg(updated);
       setForm({
         companyName: updated.companyName,
@@ -80,15 +90,20 @@ export function CorporateProfilePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Corporate"
+        eyebrow={isMainAdmin ? 'Admin' : 'Corporate'}
         title="Company profile"
         subtitle={
           org
             ? `Customer ID ${org.corporateCustomerId}`
-            : 'Update company name and address for your organization.'
+            : isMainAdmin
+              ? 'Update company name and address for this organization.'
+              : 'Update company name and address for your organization.'
         }
       />
+      {isMainAdmin ? <AdminOrgPicker /> : null}
       {error ? <Alert>{error}</Alert> : null}
+      {isMainAdmin && !orgId ? <SelectOrganizationEmpty /> : null}
+      {isMainAdmin && !orgId ? null : (
       <form onSubmit={onSubmit} className="max-w-xl space-y-4 rounded-xl border border-line bg-white p-5">
         <TextField
           label="Company name"
@@ -132,10 +147,11 @@ export function CorporateProfilePage() {
             onChange={(e) => setForm((f) => ({ ...f, postalCode: e.target.value }))}
           />
         </div>
-        <AuthButton type="submit" disabled={saving}>
+        <AuthButton type="submit" disabled={saving || (isMainAdmin && !orgId)}>
           {saving ? 'Saving…' : 'Save profile'}
         </AuthButton>
       </form>
+      )}
     </div>
   );
 }

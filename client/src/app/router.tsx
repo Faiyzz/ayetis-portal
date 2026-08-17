@@ -163,7 +163,6 @@ export function AppRouter() {
                   PERMISSIONS.EMPLOYEE_MANAGE,
                   PERMISSIONS.SUBACCOUNT_MANAGE,
                   PERMISSIONS.CASE_VIEW_ORG,
-                  PERMISSIONS.CASE_VIEW_ALL,
                   PERMISSIONS.CORPORATE_REPORT_VIEW,
                   PERMISSIONS.CORPORATE_AUDIT_VIEW,
                 ]}

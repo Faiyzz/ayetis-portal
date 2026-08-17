@@ -206,6 +206,13 @@ export async function submitBankReference(
   return data.data;
 }
 
+export async function fetchPaymentSessions(params?: {
+  status?: string;
+}): Promise<PaymentSessionDto[]> {
+  const { data } = await api.get('/commercial/payment-sessions', { params });
+  return data.data;
+}
+
 export async function confirmPaymentSession(
   sessionId: string,
   opts?: { mockStripe?: boolean },

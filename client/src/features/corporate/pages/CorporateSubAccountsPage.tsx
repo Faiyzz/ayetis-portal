@@ -1,25 +1,22 @@
 import {
   ACCOUNT_STATUS_LABELS,
-  ROLES,
   type FacilityDto,
-  type OrganizationDto,
   type PublicUser,
 } from '@ayetis/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
-import { useAuthStore } from '@/features/auth/store';
+import { AdminOrgPicker, SelectOrganizationEmpty } from '@/features/corporate/AdminOrgPicker';
 import * as corporateApi from '@/features/corporate/api';
+import { useCorporateOrgId, useIsMainAdmin } from '@/features/corporate/orgContext';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
 export function CorporateSubAccountsPage() {
-  const user = useAuthStore((s) => s.user);
-  const isMainAdmin = user?.role === ROLES.ADMIN;
+  const isMainAdmin = useIsMainAdmin();
+  const orgId = useCorporateOrgId() ?? '';
   const [items, setItems] = useState<PublicUser[]>([]);
   const [facilities, setFacilities] = useState<FacilityDto[]>([]);
-  const [organizations, setOrganizations] = useState<OrganizationDto[]>([]);
-  const [orgId, setOrgId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -33,32 +30,19 @@ export function CorporateSubAccountsPage() {
     facilityId: '',
   });
 
-  async function load(selectedOrg?: string) {
+  async function load() {
     try {
-      if (isMainAdmin) {
-        const orgs = await corporateApi.fetchOrganizations();
-        setOrganizations(orgs);
-        const useOrg = selectedOrg || orgId || orgs[0]?.id || '';
-        if (!orgId && useOrg) setOrgId(useOrg);
-        if (!useOrg) {
-          setItems([]);
-          setFacilities([]);
-          return;
-        }
-        const [subs, facs] = await Promise.all([
-          corporateApi.fetchSubAccounts(useOrg),
-          corporateApi.fetchFacilities(useOrg),
-        ]);
-        setItems(subs);
-        setFacilities(facs);
-      } else {
-        const [subs, facs] = await Promise.all([
-          corporateApi.fetchSubAccounts(),
-          corporateApi.fetchFacilities(),
-        ]);
-        setItems(subs);
-        setFacilities(facs);
+      if (isMainAdmin && !orgId) {
+        setItems([]);
+        setFacilities([]);
+        return;
       }
+      const [subs, facs] = await Promise.all([
+        corporateApi.fetchSubAccounts(isMainAdmin ? orgId : undefined),
+        corporateApi.fetchFacilities(isMainAdmin ? orgId : undefined),
+      ]);
+      setItems(subs);
+      setFacilities(facs);
     } catch (err) {
       setError(getErrorMessage(err, 'Unable to load sub-accounts'));
     }
@@ -67,7 +51,7 @@ export function CorporateSubAccountsPage() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [orgId]);
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
@@ -99,7 +83,7 @@ export function CorporateSubAccountsPage() {
         remarks: '',
         facilityId: '',
       });
-      await load(orgId);
+      await load();
     } catch (err) {
       setError(getErrorMessage(err, 'Unable to create sub-account'));
     } finally {
@@ -116,26 +100,8 @@ export function CorporateSubAccountsPage() {
       />
       {error ? <Alert>{error}</Alert> : null}
 
-      {isMainAdmin ? (
-        <label className="block max-w-md text-sm">
-          <span className="mb-1.5 block font-medium text-ink">Organization</span>
-          <select
-            className="w-full rounded-lg border border-line bg-white px-3 py-2"
-            value={orgId}
-            onChange={(e) => {
-              const next = e.target.value;
-              setOrgId(next);
-              void load(next);
-            }}
-          >
-            {organizations.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.companyName} ({o.corporateCustomerId})
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
+      {isMainAdmin ? <AdminOrgPicker /> : null}
+      {isMainAdmin && !orgId ? <SelectOrganizationEmpty /> : null}
 
       <form
         onSubmit={onCreate}

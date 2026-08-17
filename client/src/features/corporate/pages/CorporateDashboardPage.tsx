@@ -2,12 +2,22 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert } from '@/features/auth/components/AuthUI';
+import { AdminOrgPicker } from '@/features/corporate/AdminOrgPicker';
 import * as corporateApi from '@/features/corporate/api';
+import {
+  useAdminOrgStore,
+  useCorporateOrgId,
+  useIsMainAdmin,
+} from '@/features/corporate/orgContext';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
-import type { CorporateDashboardDto } from '@ayetis/shared';
+import type { CorporateDashboardDto, OrganizationDto } from '@ayetis/shared';
 
 export function CorporateDashboardPage() {
+  const isMainAdmin = useIsMainAdmin();
+  const orgId = useCorporateOrgId();
+  const setOrganizationId = useAdminOrgStore((s) => s.setOrganizationId);
+  const [orgs, setOrgs] = useState<OrganizationDto[]>([]);
   const [data, setData] = useState<CorporateDashboardDto | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -16,8 +26,15 @@ export function CorporateDashboardPage() {
     let cancelled = false;
     async function load() {
       setLoading(true);
+      setError('');
+      setData(null);
       try {
-        const result = await corporateApi.fetchCorporateDashboard();
+        if (isMainAdmin && !orgId) {
+          const list = await corporateApi.fetchOrganizations();
+          if (!cancelled) setOrgs(list);
+          return;
+        }
+        const result = await corporateApi.fetchCorporateDashboard(orgId);
         if (!cancelled) setData(result);
       } catch (err) {
         if (!cancelled) {
@@ -32,18 +49,59 @@ export function CorporateDashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isMainAdmin, orgId]);
+
+  const subtitle = isMainAdmin
+    ? orgId
+      ? 'Facilities, employees, sub-accounts, and open cases for this company.'
+      : 'Select a corporation to manage facilities, employees, and sub-accounts.'
+    : 'Facilities, employees, sub-accounts, and open cases for your organization.';
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Corporate"
-        title={data?.organization.companyName ?? 'Corporate home'}
-        subtitle="Facilities, employees, sub-accounts, and open cases for your organization."
+        eyebrow={isMainAdmin ? 'Admin' : 'Corporate'}
+        title={
+          isMainAdmin && !orgId
+            ? 'Organizations'
+            : (data?.organization.companyName ?? 'Corporate home')
+        }
+        subtitle={subtitle}
       />
+
+      {isMainAdmin ? <AdminOrgPicker /> : null}
 
       {error ? <Alert>{error}</Alert> : null}
       {loading ? <p className="text-sm text-muted">Loading…</p> : null}
+
+      {isMainAdmin && !orgId && !loading ? (
+        orgs.length === 0 ? (
+          <p className="rounded-xl border border-line bg-white px-5 py-8 text-sm text-muted">
+            No organizations yet.
+          </p>
+        ) : (
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {orgs.map((org) => (
+              <li key={org.id}>
+                <button
+                  type="button"
+                  onClick={() => setOrganizationId(org.id)}
+                  className="w-full rounded-xl border border-line bg-white px-5 py-4 text-left transition hover:border-brand-300"
+                >
+                  <p className="font-semibold text-ink">
+                    {org.companyName || 'Unnamed company'}
+                  </p>
+                  <p className="mt-1 text-sm text-muted">{org.corporateCustomerId}</p>
+                  <p className="mt-2 text-xs uppercase tracking-wide text-muted">
+                    {org.status}
+                    {org.country ? ` · ${org.country}` : ''}
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )
+      ) : null}
 
       {data ? (
         <>

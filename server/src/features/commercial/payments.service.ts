@@ -212,6 +212,29 @@ export async function createPaymentSession(
   return paymentSessionDto(session);
 }
 
+export async function listPaymentSessions(query: { status?: string } = {}) {
+  const filter: Record<string, unknown> = {};
+  if (query.status) filter.status = query.status;
+  const items = await PaymentSession.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(100)
+    .populate({ path: 'userId', select: 'email firstName lastName' });
+
+  return items.map((doc) => {
+    const user = doc.userId as unknown as {
+      email?: string;
+      firstName?: string;
+      lastName?: string;
+    } | null;
+    const name = user ? `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() : '';
+    return {
+      ...paymentSessionDto(doc),
+      customerEmail: user?.email ?? null,
+      customerName: name || null,
+    };
+  });
+}
+
 export async function getPaymentSession(
   sessionId: string,
   requesterId: string,

@@ -11,6 +11,7 @@ import {
   PERMISSIONS,
   formatCaseIdLabel,
   isCaseDraft,
+  isCaseStatus,
   type CaseCategory,
   type CaseListItemDto,
   type CasePriority,
@@ -103,7 +104,10 @@ export function CasesPage() {
     }
   }
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState<CaseStatus | ''>('');
+  const [status, setStatus] = useState<CaseStatus | ''>(() => {
+    const fromUrl = searchParams.get('status');
+    return fromUrl && isCaseStatus(fromUrl) ? fromUrl : '';
+  });
   const [priority, setPriority] = useState<CasePriority | ''>('');
   const [categoryTab, setCategoryTab] = useState<CaseCategory | 'all'>('all');
   const [includeDeleted, setIncludeDeleted] = useState(false);
@@ -229,6 +233,26 @@ export function CasesPage() {
           </select>
         </label>
         <div className="flex flex-col justify-end gap-2">
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={status === CASE_STATUSES.NEW_CASE}
+              onChange={(e) => {
+                const next = e.target.checked ? CASE_STATUSES.NEW_CASE : '';
+                setStatus(next);
+                setSearchParams(
+                  next
+                    ? { status: next, ...(demoOnly ? { isDemo: 'true' } : {}) }
+                    : demoOnly
+                      ? { isDemo: 'true' }
+                      : {},
+                  { replace: true },
+                );
+                void load(1, next);
+              }}
+            />
+            New cases only
+          </label>
           <label className="flex items-center gap-2 text-sm text-muted">
             <input
               type="checkbox"

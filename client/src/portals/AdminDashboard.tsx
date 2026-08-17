@@ -1,7 +1,11 @@
 import {
   ALL_DEPARTMENT_TYPES,
+  CASE_STATUSES,
   DELETE_REQUEST_STATUS_LABELS,
   DEPARTMENT_TYPE_LABELS,
+  PAYMENT_SESSION_STATUSES,
+  PERMISSIONS,
+  REGISTRATION_STATUSES,
   type DeleteRequestDto,
   type DepartmentDto,
 } from '@ayetis/shared';
@@ -10,6 +14,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { dialog } from '@/components/dialog';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { fetchRegistrations } from '@/features/auth/api';
+import { usePermissions } from '@/features/auth/permissions';
+import { fetchCases } from '@/features/cases/api';
+import { fetchPaymentSessions } from '@/features/commercial/api';
 import { ComplaintsWorkspace } from '@/features/complaints/pages/ComplaintsPage';
 import { toast } from '@/features/notifications/toastStore';
 import api, { getErrorMessage } from '@/lib/api';
@@ -23,7 +31,7 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
       <PageHeader
         eyebrow="Admin portal"
         title={`Welcome, ${firstName}`}
-        subtitle="Manage users, departments, complaints, priorities, and deletion approvals."
+        subtitle="Review new cases, confirm bank payments, manage users, and approve deletions."
       />
 
       <div className="flex flex-wrap gap-2 border-b border-line pb-px">
@@ -53,12 +61,16 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
       </div>
 
       {tab === 'overview' ? (
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <>
+          <NeedsAttentionPanel />
+          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[
             ['Users', '/app/users', 'Add, remove, or transfer accounts'],
+            ['Registrations', '/app/registrations', 'Approve verified signup requests'],
             ['Permissions', '/app/roles', 'Roles matrix, teams, assignment rules'],
-            ['Cases', '/app/cases', 'Reassign cases and set urgent priority'],
+            ['Cases', '/app/cases?status=new_case', 'Review new cases, reassign, set urgent'],
             ['Demo cases', '/app/cases?isDemo=true', 'Tracked demo case pipeline'],
+            ['Bank payments', '/app/commercial?tab=payments', 'Confirm bank transfer receipts'],
             ['Commercial', '/app/commercial', 'Pricing, billing, providers, invoices'],
             ['Settings', '/app/settings', 'Master data, branding, privacy, emails'],
             ['Departments', '/app/admin?tab=departments', 'Org structure and team transfers'],
@@ -75,6 +87,7 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
             </Link>
           ))}
         </section>
+        </>
       ) : null}
 
       {tab === 'departments' ? <DepartmentsPanel /> : null}
@@ -83,6 +96,93 @@ export function AdminDashboard({ firstName }: { firstName: string }) {
       ) : null}
       {tab === 'deletions' ? <DeletionsPanel /> : null}
     </div>
+  );
+}
+
+function NeedsAttentionPanel() {
+  const { can } = usePermissions();
+  const [newCases, setNewCases] = useState<number | null>(null);
+  const [registrations, setRegistrations] = useState<number | null>(null);
+  const [payments, setPayments] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [casesRes, regsRes, sessions] = await Promise.all([
+          fetchCases({ page: 1, pageSize: 1, status: CASE_STATUSES.NEW_CASE }),
+          can(PERMISSIONS.REGISTRATION_LIST)
+            ? fetchRegistrations({
+                page: 1,
+                pageSize: 1,
+                status: REGISTRATION_STATUSES.PENDING_APPROVAL,
+              })
+            : Promise.resolve({ total: 0 }),
+          can(PERMISSIONS.INVOICE_MANAGE)
+            ? fetchPaymentSessions({ status: PAYMENT_SESSION_STATUSES.AWAITING_CONFIRMATION })
+            : Promise.resolve([]),
+        ]);
+        if (cancelled) return;
+        setNewCases(casesRes.total);
+        setRegistrations(regsRes.total);
+        setPayments(sessions.length);
+      } catch {
+        if (!cancelled) {
+          setNewCases(0);
+          setRegistrations(0);
+          setPayments(0);
+        }
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const cards = [
+    {
+      label: 'New cases',
+      value: newCases,
+      to: '/app/cases?status=new_case',
+      hint: 'Start validation on the case',
+    },
+    {
+      label: 'Pending registrations',
+      value: registrations,
+      to: '/app/registrations',
+      hint: 'Approve verified signups',
+    },
+    {
+      label: 'Bank payments',
+      value: payments,
+      to: '/app/commercial?tab=payments',
+      hint: 'Confirm transfer receipts',
+    },
+  ];
+
+  return (
+    <section className="rounded-xl border border-line bg-white p-5">
+      <h2 className="text-sm font-semibold text-ink">Needs attention</h2>
+      <p className="mt-1 text-sm text-muted">
+        New submissions, signups, and bank transfers waiting for Main Admin.
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        {cards.map((card) => (
+          <Link
+            key={card.label}
+            to={card.to}
+            className="rounded-lg border border-line px-4 py-3 hover:border-brand-300"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{card.label}</p>
+            <p className="mt-1 text-2xl font-semibold text-ink">
+              {card.value === null ? '—' : card.value}
+            </p>
+            <p className="mt-1 text-xs text-muted">{card.hint}</p>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 

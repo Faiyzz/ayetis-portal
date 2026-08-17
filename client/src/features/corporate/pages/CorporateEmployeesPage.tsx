@@ -8,11 +8,15 @@ import {
 import { useEffect, useState, type FormEvent } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { AdminOrgPicker, SelectOrganizationEmpty } from '@/features/corporate/AdminOrgPicker';
 import * as corporateApi from '@/features/corporate/api';
+import { useCorporateOrgId, useIsMainAdmin } from '@/features/corporate/orgContext';
 import { toast } from '@/features/notifications/toastStore';
 import { getErrorMessage } from '@/lib/api';
 
 export function CorporateEmployeesPage() {
+  const isMainAdmin = useIsMainAdmin();
+  const orgId = useCorporateOrgId();
   const [employees, setEmployees] = useState<PublicUser[]>([]);
   const [facilities, setFacilities] = useState<FacilityDto[]>([]);
   const [error, setError] = useState('');
@@ -28,10 +32,15 @@ export function CorporateEmployeesPage() {
   });
 
   async function load() {
+    if (isMainAdmin && !orgId) {
+      setEmployees([]);
+      setFacilities([]);
+      return;
+    }
     try {
       const [emps, facs] = await Promise.all([
-        corporateApi.fetchEmployees(),
-        corporateApi.fetchFacilities(),
+        corporateApi.fetchEmployees(orgId),
+        corporateApi.fetchFacilities(orgId),
       ]);
       setEmployees(emps);
       setFacilities(facs);
@@ -46,22 +55,25 @@ export function CorporateEmployeesPage() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [orgId]);
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError('');
     try {
-      const result = await corporateApi.createEmployee({
-        firstName: form.firstName,
-        lastName: form.lastName,
-        email: form.email,
-        mobile: form.mobile || undefined,
-        country: form.country || undefined,
-        facilityId: form.facilityId,
-        role: form.role,
-      });
+      const result = await corporateApi.createEmployee(
+        {
+          firstName: form.firstName,
+          lastName: form.lastName,
+          email: form.email,
+          mobile: form.mobile || undefined,
+          country: form.country || undefined,
+          facilityId: form.facilityId,
+          role: form.role,
+        },
+        orgId,
+      );
       toast().success(
         'Employee created. Temporary password emailed.',
         result.temporaryPassword,
@@ -95,11 +107,13 @@ export function CorporateEmployeesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Corporate"
+        eyebrow={isMainAdmin ? 'Admin' : 'Corporate'}
         title="Employees"
         subtitle="Create facility employees with auto Employee IDs and temporary passwords."
       />
+      {isMainAdmin ? <AdminOrgPicker /> : null}
       {error ? <Alert>{error}</Alert> : null}
+      {isMainAdmin && !orgId ? <SelectOrganizationEmpty /> : null}
 
       <form
         onSubmit={onCreate}
@@ -173,7 +187,7 @@ export function CorporateEmployeesPage() {
           onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
         />
         <div className="sm:col-span-2">
-          <AuthButton type="submit" disabled={saving || facilities.length === 0}>
+          <AuthButton type="submit" disabled={saving || facilities.length === 0 || (isMainAdmin && !orgId)}>
             {saving ? 'Creating…' : 'Create employee'}
           </AuthButton>
         </div>

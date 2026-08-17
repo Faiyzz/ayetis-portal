@@ -1,4 +1,4 @@
-import { getDashboardPath, PERMISSIONS, ROLE_LABELS, type Permission, type Role } from '@ayetis/shared';
+import { getDashboardPath, PERMISSIONS, ROLE_LABELS, ROLES, type Permission, type Role } from '@ayetis/shared';
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { PageHeaderProvider } from '@/components/PageHeader';
@@ -139,6 +139,7 @@ function buildNavItems(
   options: {
     canCreateCase: boolean;
     canCreateUser: boolean;
+    canListRegistrations: boolean;
     canManageCorporate: boolean;
   },
 ): NavItem[] {
@@ -173,6 +174,16 @@ function buildNavItems(
         (pathname.startsWith('/app/users/') && !pathname.startsWith('/app/users/create')),
     },
   ];
+
+  if (options.canListRegistrations) {
+    userChildren.push({
+      id: 'registrations',
+      label: 'Registrations',
+      to: '/app/registrations',
+      icon: <IconList className="h-3.5 w-3.5" />,
+      isActive: (pathname) => pathname.startsWith('/app/registrations'),
+    });
+  }
 
   if (options.canCreateUser) {
     userChildren.push({
@@ -220,7 +231,6 @@ function buildNavItems(
               PERMISSIONS.EMPLOYEE_MANAGE,
               PERMISSIONS.SUBACCOUNT_MANAGE,
               PERMISSIONS.CASE_VIEW_ORG,
-              PERMISSIONS.CASE_VIEW_ALL,
               PERMISSIONS.CORPORATE_REPORT_VIEW,
               PERMISSIONS.CORPORATE_AUDIT_VIEW,
             ],
@@ -278,7 +288,8 @@ function buildNavItems(
       to: '/app/users',
       icon: <IconUsers />,
       permission: PERMISSIONS.USER_LIST,
-      isActive: (pathname) => pathname.startsWith('/app/users'),
+      isActive: (pathname) =>
+        pathname.startsWith('/app/users') || pathname.startsWith('/app/registrations'),
       children: userChildren,
     },
     {
@@ -542,29 +553,32 @@ export function AppShell() {
   const dashboardPath = getDashboardPath(user.role);
   const canCreateCase = can(PERMISSIONS.CASE_CREATE);
   const canCreateUser = can(PERMISSIONS.USER_CREATE);
-  const canManageCorporate = canAny(
-    PERMISSIONS.ORG_MANAGE_SELF,
-    PERMISSIONS.FACILITY_MANAGE,
-    PERMISSIONS.EMPLOYEE_MANAGE,
-    PERMISSIONS.SUBACCOUNT_MANAGE,
-    PERMISSIONS.CASE_VIEW_ORG,
-    PERMISSIONS.CASE_VIEW_ALL,
-    PERMISSIONS.CORPORATE_REPORT_VIEW,
-    PERMISSIONS.CORPORATE_AUDIT_VIEW,
-  );
+  const canListRegistrations = can(PERMISSIONS.REGISTRATION_LIST);
+  const canManageCorporate =
+    user.role === ROLES.ADMIN ||
+    canAny(
+      PERMISSIONS.ORG_MANAGE_SELF,
+      PERMISSIONS.FACILITY_MANAGE,
+      PERMISSIONS.EMPLOYEE_MANAGE,
+      PERMISSIONS.SUBACCOUNT_MANAGE,
+      PERMISSIONS.CASE_VIEW_ORG,
+      PERMISSIONS.CORPORATE_REPORT_VIEW,
+      PERMISSIONS.CORPORATE_AUDIT_VIEW,
+    );
 
   const navItems = useMemo(
     () =>
       buildNavItems(dashboardPath, {
         canCreateCase,
         canCreateUser,
+        canListRegistrations,
         canManageCorporate,
       }).filter((item) => {
         if (item.permission) return can(item.permission);
         if (item.anyOf?.length) return canAny(...item.anyOf);
         return true;
       }),
-    [dashboardPath, canCreateCase, canCreateUser, canManageCorporate, can, canAny],
+    [dashboardPath, canCreateCase, canCreateUser, canListRegistrations, canManageCorporate, can, canAny],
   );
 
   function closeMobile() {

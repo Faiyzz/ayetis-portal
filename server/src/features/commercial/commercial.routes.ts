@@ -3,6 +3,7 @@ import {
   ALL_PAYMENT_PROVIDERS,
   PERMISSIONS,
   PRICE_SUBJECT_TYPES,
+  PAYMENT_SESSION_STATUSES,
   isCaseCategory,
   isBillingArrangement,
 } from '@ayetis/shared';
@@ -409,6 +410,22 @@ router.post(
         { id: req.user!.id, email: req.user!.email, role: req.user!.role },
         getRequestAuditContext(req),
       );
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/payment-sessions',
+  requirePermission(PERMISSIONS.INVOICE_MANAGE),
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const rawStatus = typeof req.query.status === 'string' ? req.query.status : '';
+      const allowed = Object.values(PAYMENT_SESSION_STATUSES) as string[];
+      const status = allowed.includes(rawStatus) ? rawStatus : undefined;
+      const data = await payments.listPaymentSessions({ status });
       res.json({ success: true, data });
     } catch (error) {
       next(error);
