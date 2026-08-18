@@ -199,17 +199,33 @@ function pushHistory(
   } as ICase['history'][number]);
 }
 
+function nestedToPlain<T extends Record<string, unknown>>(value: unknown, empty: T): T {
+  if (!value || typeof value !== 'object') return { ...empty };
+  const rec = value as { toObject?: (opts?: object) => Record<string, unknown> };
+  const raw =
+    typeof rec.toObject === 'function'
+      ? rec.toObject({ flattenMaps: true, versionKey: false })
+      : { ...(value as Record<string, unknown>) };
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(raw)) {
+    if (key.startsWith('$') || key === '_id' || key === '__v' || key === '_doc') continue;
+    cleaned[key] = val;
+  }
+  return { ...empty, ...cleaned };
+}
+
 function normalizeTreatmentInstructions(
   input?: Partial<TreatmentInstructions> | null,
 ): TreatmentInstructions {
+  const plain = nestedToPlain(input, { ...EMPTY_TREATMENT_INSTRUCTIONS });
   return {
-    arches: (input?.arches as TreatmentInstructions['arches']) || '',
-    applianceType: input?.applianceType?.trim() ?? '',
-    treatmentGoal: input?.treatmentGoal?.trim() ?? '',
-    biteDetails: input?.biteDetails?.trim() ?? '',
-    retainers: input?.retainers?.trim() ?? '',
-    specialRequirements: input?.specialRequirements?.trim() ?? '',
-    additionalNotes: input?.additionalNotes?.trim() ?? '',
+    arches: (plain.arches as TreatmentInstructions['arches']) || '',
+    applianceType: plain.applianceType?.trim() ?? '',
+    treatmentGoal: plain.treatmentGoal?.trim() ?? '',
+    biteDetails: plain.biteDetails?.trim() ?? '',
+    retainers: plain.retainers?.trim() ?? '',
+    specialRequirements: plain.specialRequirements?.trim() ?? '',
+    additionalNotes: plain.additionalNotes?.trim() ?? '',
   };
 }
 
@@ -534,34 +550,15 @@ async function toDetail(
       : null,
     instructions: caseDoc.instructions,
     country: caseDoc.country,
-    treatmentInstructions: {
-      ...EMPTY_TREATMENT_INSTRUCTIONS,
-      ...(caseDoc.treatmentInstructions ?? {}),
-    },
-    recordsNumbering: {
-      ...EMPTY_RECORDS_NUMBERING,
-      ...(caseDoc.recordsNumbering ?? {}),
-    },
-    clinicalPreferences: {
+    treatmentInstructions: normalizeTreatmentInstructions(caseDoc.treatmentInstructions),
+    recordsNumbering: nestedToPlain(caseDoc.recordsNumbering, { ...EMPTY_RECORDS_NUMBERING }),
+    clinicalPreferences: nestedToPlain(caseDoc.clinicalPreferences, {
       ...EMPTY_CLINICAL_PREFERENCES,
-      ...(caseDoc.clinicalPreferences ?? {}),
-    },
-    occlusionGoals: {
-      ...EMPTY_OCCLUSION_GOALS,
-      ...(caseDoc.occlusionGoals ?? {}),
-    },
-    prosthoDetails: {
-      ...EMPTY_PROSTHO_DETAILS,
-      ...(caseDoc.prosthoDetails ?? {}),
-    },
-    implantDetails: {
-      ...EMPTY_IMPLANT_DETAILS,
-      ...(caseDoc.implantDetails ?? {}),
-    },
-    commercial: {
-      ...EMPTY_CASE_COMMERCIAL,
-      ...(caseDoc.commercial ?? {}),
-    },
+    }),
+    occlusionGoals: nestedToPlain(caseDoc.occlusionGoals, { ...EMPTY_OCCLUSION_GOALS }),
+    prosthoDetails: nestedToPlain(caseDoc.prosthoDetails, { ...EMPTY_PROSTHO_DETAILS }),
+    implantDetails: nestedToPlain(caseDoc.implantDetails, { ...EMPTY_IMPLANT_DETAILS }),
+    commercial: nestedToPlain(caseDoc.commercial, { ...EMPTY_CASE_COMMERCIAL }),
     payment: toPaymentDto(caseDoc),
     cancelReason: caseDoc.cancelReason ?? null,
     deletedAt: caseDoc.deletedAt ? caseDoc.deletedAt.toISOString() : null,
@@ -1533,7 +1530,8 @@ export async function updateCase(
       ...input.treatmentInstructions,
     });
     if (JSON.stringify(previous) !== JSON.stringify(next)) {
-      caseDoc.treatmentInstructions = next;
+      caseDoc.set('treatmentInstructions', next);
+      caseDoc.markModified('treatmentInstructions');
       changes.push({
         field: 'treatmentInstructions',
         label: 'Treatment instructions',
@@ -3464,7 +3462,8 @@ export async function updateTreatmentInstructions(
 
   const previous = normalizeTreatmentInstructions(caseDoc.treatmentInstructions);
   const next = normalizeTreatmentInstructions({ ...previous, ...input });
-  caseDoc.treatmentInstructions = next;
+  caseDoc.set('treatmentInstructions', next);
+  caseDoc.markModified('treatmentInstructions');
 
   pushHistory(caseDoc, {
     action: 'treatment_instructions_updated',
