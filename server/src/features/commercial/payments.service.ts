@@ -386,134 +386,174 @@ async function fulfillPaidSession(
     }
   }
 
-  const payload = session.createPayload as unknown as CreateCaseInput;
-  const rawPayload = session.createPayload as Record<string, unknown>;
-  const draftId =
-    (rawPayload?.draftId as string) ||
-    (rawPayload?.caseId as string) ||
-    (session.caseId ? String(session.caseId) : undefined);
-
-  const { createCase, updateDraftCase, resolveCaseActor, findCase } = await import(
-    '../cases/cases.service'
+  const now = new Date();
+  const lockExpiry = new Date(now.getTime() - 30000);
+  const claimed = await PaymentSession.findOneAndUpdate(
+    {
+      _id: session._id,
+      $or: [
+        { isFulfilling: { $ne: true }, status: { $ne: PAYMENT_SESSION_STATUSES.PAID } },
+        { isFulfilling: true, fulfillingAt: { $lt: lockExpiry }, status: { $ne: PAYMENT_SESSION_STATUSES.PAID } },
+      ],
+    },
+    {
+      $set: { isFulfilling: true, fulfillingAt: now },
+    },
+    { new: true },
   );
 
-  const user = await User.findById(session.userId);
-  if (!user) throw new AppError('Session user not found', 404);
-
-  const actor = opts.actor ?? {
-    id: String(user._id),
-    email: user.email,
-    role: user.role,
-  };
-  const caseActor = await resolveCaseActor(String(user._id));
-
-  let caseDoc: ICase | null = null;
-  let caseIdStr: string = '';
-
-  if (draftId) {
-    const existingDraft = await findCase(draftId);
-    if (existingDraft) {
-      if (existingDraft.status === CASE_STATUSES.SAVED_FOR_SUBMISSION) {
-        const updated = await updateDraftCase(
-          caseActor,
-          existingDraft.caseId,
-          {
-            ...payload,
-            asDraft: false,
-            paymentSessionId: session.id,
-          },
-          opts.audit,
-        );
-        caseIdStr = updated.caseId;
-        caseDoc = await Case.findOne({ caseId: caseIdStr });
-      } else if (
-        existingDraft.status === CASE_STATUSES.NEW_CASE &&
-        String(existingDraft.paymentSessionId) === session.id
-      ) {
-        caseDoc = existingDraft;
-        caseIdStr = existingDraft.caseId;
+  if (!claimed) {
+    for (let i = 0; i < 30; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const current = await PaymentSession.findById(session._id);
+      if (current && current.status === PAYMENT_SESSION_STATUSES.PAID && current.caseId) {
+        return paymentSessionDto(current);
       }
+    }
+    const finalSession = await PaymentSession.findById(session._id);
+    if (finalSession && finalSession.status === PAYMENT_SESSION_STATUSES.PAID) {
+      return paymentSessionDto(finalSession);
     }
   }
 
-  if (!caseDoc) {
-    const created = await createCase(
-      caseActor,
-      {
-        ...payload,
-        asDraft: false,
-        paymentSessionId: session.id,
-      },
-      opts.audit,
+  try {
+    const payload = session.createPayload as unknown as CreateCaseInput;
+    const rawPayload = session.createPayload as Record<string, unknown>;
+    const draftId =
+      (rawPayload?.draftId as string) ||
+      (rawPayload?.caseId as string) ||
+      (session.caseId ? String(session.caseId) : undefined);
+
+    const { createCase, updateDraftCase, resolveCaseActor, findCase } = await import(
+      '../cases/cases.service'
     );
-    caseIdStr = created.caseId;
-    caseDoc = await Case.findOne({ caseId: caseIdStr });
+
+    const user = await User.findById(session.userId);
+    if (!user) throw new AppError('Session user not found', 404);
+
+    const actor = opts.actor ?? {
+      id: String(user._id),
+      email: user.email,
+      role: user.role,
+    };
+    const caseActor = await resolveCaseActor(String(user._id));
+
+    let caseDoc: ICase | null = null;
+    let caseIdStr: string = '';
+
+    if (draftId) {
+      const existingDraft = await findCase(draftId);
+      if (existingDraft) {
+        if (existingDraft.status === CASE_STATUSES.SAVED_FOR_SUBMISSION) {
+          const updated = await updateDraftCase(
+            caseActor,
+            existingDraft.caseId,
+            {
+              ...payload,
+              asDraft: false,
+              paymentSessionId: session.id,
+            },
+            opts.audit,
+          );
+          caseIdStr = updated.caseId;
+          caseDoc = await Case.findOne({ caseId: caseIdStr });
+        } else if (
+          existingDraft.status === CASE_STATUSES.NEW_CASE &&
+          String(existingDraft.paymentSessionId) === session.id
+        ) {
+          caseDoc = existingDraft;
+          caseIdStr = existingDraft.caseId;
+        }
+      }
+    }
+
+    if (!caseDoc) {
+      const created = await createCase(
+        caseActor,
+        {
+          ...payload,
+          asDraft: false,
+          paymentSessionId: session.id,
+        },
+        opts.audit,
+      );
+      caseIdStr = created.caseId;
+      caseDoc = await Case.findOne({ caseId: caseIdStr });
+    }
+
+    if (!caseDoc) throw new AppError('Case document not found after payment fulfillment', 500);
+
+    const docs = await issueInvoiceAndReceipt({
+      caseId: caseDoc.id,
+      billedCaseIds: [caseDoc.caseId],
+      paymentSessionId: session.id,
+      customerUserId: String(user._id),
+      customerEmail: user.email,
+      customerName: `${user.firstName} ${user.lastName}`.trim(),
+      currency: session.currency,
+      subtotal:
+        Number(payload.commercial?.unitPrice ?? session.amount) +
+        Number(payload.commercial?.discountAmount ?? 0),
+      discountAmount: Number(payload.commercial?.discountAmount ?? 0),
+      total: session.amount,
+      lineDescription: payload.commercial?.treatmentPlanName || `Case ${caseDoc.caseId}`,
+      provider: session.provider,
+      providerReference: opts.providerReference || session.stripeSessionId || session.bankReference,
+      markPaid: true,
+      actor,
+      audit: opts.audit,
+    });
+
+    if (session.discountCode) {
+      await redeemDiscountCode(session.discountCode);
+    }
+
+    caseDoc.payment = {
+      ...caseDoc.payment,
+      status: PAYMENT_STATUSES.PAID,
+      currency: session.currency,
+      amountDue: session.amount,
+      amountPaid: session.amount,
+      invoiceNumber: docs.invoice.invoiceNumber,
+      notes: caseDoc.payment?.notes ?? '',
+    };
+    caseDoc.invoiceId = docs.invoice.id as never;
+    caseDoc.paymentSessionId = session._id;
+    await caseDoc.save();
+
+    session.status = PAYMENT_SESSION_STATUSES.PAID;
+    session.isFulfilling = false;
+    session.fulfillingAt = undefined;
+    session.paidAt = new Date();
+    session.caseId = caseDoc._id;
+    session.invoiceId = docs.invoice.id as never;
+    session.receiptId = docs.receipt?.id as never;
+    if (opts.providerReference) {
+      session.stripePaymentIntentId = opts.providerReference;
+    }
+    await session.save();
+
+    await recordActivity({
+      action: AUDIT_ACTIONS.PAYMENT_SESSION_PAID,
+      summary: `Payment session ${session.id} paid; case ${caseDoc.caseId} submitted`,
+      actorId: actor.id,
+      actorEmail: actor.email,
+      actorRole: actor.role,
+      targetType: 'payment',
+      targetId: session.id,
+      metadata: { caseId: caseDoc.caseId, invoiceId: docs.invoice.id },
+      ipAddress: opts.audit?.ipAddress,
+      userAgent: opts.audit?.userAgent,
+    });
+
+    return paymentSessionDto(session);
+  } catch (error) {
+    await PaymentSession.updateOne(
+      { _id: session._id, isFulfilling: true },
+      { $set: { isFulfilling: false } },
+    ).catch(() => undefined);
+    throw error;
   }
-
-  if (!caseDoc) throw new AppError('Case document not found after payment fulfillment', 500);
-
-  const docs = await issueInvoiceAndReceipt({
-    caseId: caseDoc.id,
-    billedCaseIds: [caseDoc.caseId],
-    paymentSessionId: session.id,
-    customerUserId: String(user._id),
-    customerEmail: user.email,
-    customerName: `${user.firstName} ${user.lastName}`.trim(),
-    currency: session.currency,
-    subtotal:
-      Number(payload.commercial?.unitPrice ?? session.amount) +
-      Number(payload.commercial?.discountAmount ?? 0),
-    discountAmount: Number(payload.commercial?.discountAmount ?? 0),
-    total: session.amount,
-    lineDescription: payload.commercial?.treatmentPlanName || `Case ${caseDoc.caseId}`,
-    provider: session.provider,
-    providerReference: opts.providerReference || session.stripeSessionId || session.bankReference,
-    markPaid: true,
-    actor,
-    audit: opts.audit,
-  });
-
-  if (session.discountCode) {
-    await redeemDiscountCode(session.discountCode);
-  }
-
-  caseDoc.payment = {
-    ...caseDoc.payment,
-    status: PAYMENT_STATUSES.PAID,
-    currency: session.currency,
-    amountDue: session.amount,
-    amountPaid: session.amount,
-    invoiceNumber: docs.invoice.invoiceNumber,
-    notes: caseDoc.payment?.notes ?? '',
-  };
-  caseDoc.invoiceId = docs.invoice.id as never;
-  caseDoc.paymentSessionId = session._id;
-  await caseDoc.save();
-
-  session.status = PAYMENT_SESSION_STATUSES.PAID;
-  session.paidAt = new Date();
-  session.caseId = caseDoc._id;
-  session.invoiceId = docs.invoice.id as never;
-  session.receiptId = docs.receipt?.id as never;
-  if (opts.providerReference) {
-    session.stripePaymentIntentId = opts.providerReference;
-  }
-  await session.save();
-
-  await recordActivity({
-    action: AUDIT_ACTIONS.PAYMENT_SESSION_PAID,
-    summary: `Payment session ${session.id} paid; case ${caseDoc.caseId} submitted`,
-    actorId: actor.id,
-    actorEmail: actor.email,
-    actorRole: actor.role,
-    targetType: 'payment',
-    targetId: session.id,
-    metadata: { caseId: caseDoc.caseId, invoiceId: docs.invoice.id },
-    ipAddress: opts.audit?.ipAddress,
-    userAgent: opts.audit?.userAgent,
-  });
-
-  return paymentSessionDto(session);
 }
 
 export async function confirmPaymentSession(

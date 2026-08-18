@@ -9,7 +9,9 @@
     "dev:client": "npm run dev -w client",
     "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
     "seed": "npm run seed -w server",
-    "uat:assert": "npm run uat:assert -w server"
+    "uat:assert": "npm run uat:assert -w server",
+    "test:concurrency": "npm run test:concurrency -w server",
+    "test": "npm run uat:assert -w server && npm run test:concurrency -w server"
   },
   "workspaces": [
     "shared",

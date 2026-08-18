@@ -1611,7 +1611,19 @@ export async function updateDraftCase(
   if (input.practiceName !== undefined) {
     caseDoc.practiceName = input.practiceName?.trim() || input.clinicName?.trim() || caseDoc.clinicName || '';
   }
-  if (input.country !== undefined) caseDoc.country = input.country?.trim() ?? '';
+
+  const geo = await resolveCountryGeo({
+    countryId: input.countryId || (caseDoc.countryId ? String(caseDoc.countryId) : undefined),
+    countryName: input.country !== undefined ? input.country : caseDoc.country,
+  });
+  caseDoc.country = geo.country;
+  caseDoc.countryId = geo.countryId;
+  caseDoc.regionId = geo.regionId;
+
+  if (input.priority !== undefined && input.priority) {
+    caseDoc.priority = input.priority;
+  }
+
   if (input.caseCategory !== undefined) caseDoc.caseCategory = input.caseCategory ?? caseDoc.caseCategory;
   if (input.caseType !== undefined) caseDoc.caseType = input.caseType ?? caseDoc.caseType;
   if (input.chiefComplaint !== undefined) caseDoc.chiefComplaint = input.chiefComplaint?.trim() ?? '';
@@ -1785,14 +1797,14 @@ export async function updateDraftCase(
     await createNotificationsForUsers(intakeStaffIds, {
       type: NOTIFICATION_TYPES.CASE_SUBMITTED,
       title: `New case submitted: ${caseDoc.caseId}`,
-      body: `${caseDoc.doctorName} submitted ${caseDoc.patientName} for review.`,
+      body: `${staffDoctorLabel(caseDoc)} submitted ${caseDoc.patientName} for review.`,
       link: `/app/cases/${caseDoc.caseId}`,
       caseId: caseDoc.caseId,
     });
     await emailUsers(intakeStaffIds, {
       subject: `New case submitted: ${caseDoc.caseId}`,
       headline: 'New case submitted',
-      message: `${caseDoc.doctorName} submitted a new case for ${caseDoc.patientName}.`,
+      message: `${staffDoctorLabel(caseDoc)} submitted a new case for ${caseDoc.patientName}.`,
       caseId: caseDoc.caseId,
       patientName: caseDoc.patientName,
     });
