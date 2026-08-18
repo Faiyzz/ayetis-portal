@@ -5,8 +5,6 @@ import {
   PAYMENT_PROVIDER_LABELS,
   PAYMENT_SESSION_STATUSES,
   PAYMENT_STATUSES,
-  PERMISSIONS,
-  permissionsInclude,
   type CreateCaseInput,
   type PaymentProviderConfigDto,
   type PaymentProviderId,
@@ -182,13 +180,9 @@ export async function createPaymentSession(
     if (!draftCaseDoc) {
       throw new AppError('Draft case not found', 404);
     }
-    const isOwner = String(draftCaseDoc.doctorId) === actor.id;
-    const { resolvePermissionsForUserId } = await import('../users/users.service');
-    const userPerms = await resolvePermissionsForUserId(actor.id);
-    const canManageAll = permissionsInclude(userPerms, PERMISSIONS.CASE_UPDATE);
-    if (!isOwner && !canManageAll) {
-      throw new AppError('You can only initiate payment for your own draft cases', 403);
-    }
+    const { resolveCaseActor, assertCanResumeDraft } = await import('../cases/cases.service');
+    const caseActor = await resolveCaseActor(actor.id);
+    assertCanResumeDraft(caseActor, draftCaseDoc);
     if (draftCaseDoc.status !== CASE_STATUSES.SAVED_FOR_SUBMISSION) {
       throw new AppError('Only draft cases can be submitted through payment', 400);
     }
@@ -414,6 +408,7 @@ async function fulfillPaidSession(
     if (finalSession && finalSession.status === PAYMENT_SESSION_STATUSES.PAID) {
       return paymentSessionDto(finalSession);
     }
+    throw new AppError('Payment is already being processed. Retry shortly.', 409);
   }
 
   try {

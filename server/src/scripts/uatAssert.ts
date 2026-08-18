@@ -69,6 +69,13 @@ function run() {
   assert(PERMISSIONS.CORPORATE_REPORT_VIEW, 'CORPORATE_REPORT_VIEW missing');
   assert(PERMISSIONS.CORPORATE_AUDIT_VIEW, 'CORPORATE_AUDIT_VIEW missing');
 
+  const catalog = notificationCatalog();
+  assert(catalog.length >= 15, 'Notification catalog is too small');
+  assert(
+    catalog.some((item) => item.type === 'sla_breach' && item.emailTemplateKey === 'sla_breach'),
+    'SLA breach catalog mapping missing',
+  );
+
   // Doctor Name Privacy & Redaction rules (Review Comment 2)
   const doctorUserId = 'user_doc_123';
   const otherUserId = 'user_coord_456';

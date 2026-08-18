@@ -801,6 +801,20 @@ function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
   throw new AppError('You do not have permission to view this case', 403);
 }
 
+export function assertCanResumeDraft(actor: CaseActor, caseDoc: ICase) {
+  assertCanViewCase(actor, caseDoc);
+
+  const isOwner = String(caseDoc.doctorId) === actor.id;
+  const canCreate = permissionsInclude(actor.permissions, PERMISSIONS.CASE_CREATE);
+  const canUpdate = permissionsInclude(actor.permissions, PERMISSIONS.CASE_UPDATE);
+  const isAdmin =
+    actor.role === ROLES.ADMIN || Boolean(actor.roles?.includes(ROLES.ADMIN));
+
+  if (!isOwner && !canCreate && !canUpdate && !isAdmin) {
+    throw new AppError('You do not have permission to resume this draft', 403);
+  }
+}
+
 function assertCanUploadFiles(actor: CaseActor, caseDoc: ICase) {
   assertCanViewCase(actor, caseDoc);
 
@@ -1571,14 +1585,13 @@ export async function updateDraftCase(
     throw new AppError('Only draft cases can be edited or submitted through the draft workflow', 400);
   }
 
-  const isOwner = String(caseDoc.doctorId) === actor.id;
-  const canManageAll = permissionsInclude(actor.permissions, PERMISSIONS.CASE_UPDATE);
-
-  if (!isOwner && !canManageAll) {
-    throw new AppError('You can only edit your own draft cases', 403);
-  }
+  assertCanResumeDraft(actor, caseDoc);
 
   const asDraft = Boolean(input.asDraft);
+  if (!asDraft) {
+    const { assertCanSubmitWork } = await import('../users/users.service');
+    await assertCanSubmitWork(actor.id);
+  }
   const now = new Date();
 
   const doctor = await User.findById(caseDoc.doctorId);
@@ -1621,7 +1634,14 @@ export async function updateDraftCase(
   caseDoc.regionId = geo.regionId;
 
   if (input.priority !== undefined && input.priority) {
-    caseDoc.priority = input.priority;
+    let nextPriority = input.priority;
+    if (
+      nextPriority === CASE_PRIORITIES.URGENT &&
+      !permissionsInclude(actor.permissions, PERMISSIONS.CASE_SET_PRIORITY)
+    ) {
+      nextPriority = caseDoc.priority;
+    }
+    caseDoc.priority = nextPriority;
   }
 
   if (input.caseCategory !== undefined) caseDoc.caseCategory = input.caseCategory ?? caseDoc.caseCategory;
