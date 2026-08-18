@@ -1612,9 +1612,16 @@ export async function updateDraftCase(
     caseDoc.practiceName = input.practiceName?.trim() || input.clinicName?.trim() || caseDoc.clinicName || '';
   }
 
+  const countryProvided = input.country !== undefined;
+  const isCountryChanged =
+    countryProvided &&
+    (input.country ?? '').trim().toLowerCase() !== (caseDoc.country ?? '').trim().toLowerCase();
+
   const geo = await resolveCountryGeo({
-    countryId: input.countryId || (caseDoc.countryId ? String(caseDoc.countryId) : undefined),
-    countryName: input.country !== undefined ? input.country : caseDoc.country,
+    countryId: isCountryChanged
+      ? input.countryId
+      : input.countryId || (caseDoc.countryId ? String(caseDoc.countryId) : undefined),
+    countryName: countryProvided ? input.country : caseDoc.country,
   });
   caseDoc.country = geo.country;
   caseDoc.countryId = geo.countryId;
