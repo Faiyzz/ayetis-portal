@@ -801,6 +801,20 @@ function assertCanViewCase(actor: CaseActor, caseDoc: ICase) {
   throw new AppError('You do not have permission to view this case', 403);
 }
 
+export function assertCanResumeDraft(actor: CaseActor, caseDoc: ICase) {
+  assertCanViewCase(actor, caseDoc);
+
+  const isOwner = String(caseDoc.doctorId) === actor.id;
+  const canCreate = permissionsInclude(actor.permissions, PERMISSIONS.CASE_CREATE);
+  const canUpdate = permissionsInclude(actor.permissions, PERMISSIONS.CASE_UPDATE);
+  const isAdmin =
+    actor.role === ROLES.ADMIN || Boolean(actor.roles?.includes(ROLES.ADMIN));
+
+  if (!isOwner && !canCreate && !canUpdate && !isAdmin) {
+    throw new AppError('You do not have permission to resume this draft', 403);
+  }
+}
+
 function assertCanUploadFiles(actor: CaseActor, caseDoc: ICase) {
   assertCanViewCase(actor, caseDoc);
 
@@ -1229,7 +1243,7 @@ export async function getCaseById(actor: CaseActor, caseIdOrMongoId: string) {
   return await toDetail(caseDoc, actor);
 }
 
-async function findCase(caseIdOrMongoId: string) {
+export async function findCase(caseIdOrMongoId: string) {
   const filter = Types.ObjectId.isValid(caseIdOrMongoId)
     ? { $or: [{ _id: caseIdOrMongoId }, { caseId: caseIdOrMongoId }] }
     : { caseId: caseIdOrMongoId };
@@ -1548,6 +1562,273 @@ export async function createCase(
     caseId,
     patientName: caseDoc.patientName,
   });
+
+  return await toDetail(caseDoc, actor);
+}
+
+export async function updateDraftCase(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: CreateCaseInput,
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  if (!caseDoc) {
+    throw new AppError('Case not found', 404);
+  }
+
+  if (caseDoc.isDeleted) {
+    throw new AppError('Cannot edit a deleted case', 400);
+  }
+
+  if (caseDoc.status !== CASE_STATUSES.SAVED_FOR_SUBMISSION) {
+    throw new AppError('Only draft cases can be edited or submitted through the draft workflow', 400);
+  }
+
+  assertCanResumeDraft(actor, caseDoc);
+
+  const asDraft = Boolean(input.asDraft);
+  if (!asDraft) {
+    const { assertCanSubmitWork } = await import('../users/users.service');
+    await assertCanSubmitWork(actor.id);
+  }
+  const now = new Date();
+
+  const doctor = await User.findById(caseDoc.doctorId);
+  if (!doctor || !doctor.isActive) {
+    throw new AppError('Active doctor not found for this case', 404);
+  }
+
+  if (doctor.accountStatus !== 'active') {
+    throw new AppError('Doctor account is not active', 403);
+  }
+
+  const patientName =
+    (input.patientName ?? '').trim() ||
+    caseDoc.patientName?.trim() ||
+    (asDraft ? 'Untitled draft' : 'Patient');
+  const treatmentSummary =
+    (input.treatmentSummary ?? '').trim() ||
+    (input.chiefComplaint ?? '').trim() ||
+    caseDoc.treatmentSummary?.trim() ||
+    (asDraft ? 'Draft' : 'Case summary');
+
+  caseDoc.patientName = patientName;
+  caseDoc.treatmentSummary = treatmentSummary;
+  if (input.patientAge !== undefined) caseDoc.patientAge = input.patientAge ?? undefined;
+  if (input.patientGender !== undefined) caseDoc.patientGender = input.patientGender?.trim() ?? '';
+  if (input.patientDateOfBirth !== undefined) {
+    caseDoc.patientDateOfBirth = input.patientDateOfBirth ? new Date(input.patientDateOfBirth) : undefined;
+  }
+  if (input.clinicName !== undefined) caseDoc.clinicName = input.clinicName?.trim() ?? '';
+  if (input.practiceName !== undefined) {
+    caseDoc.practiceName = input.practiceName?.trim() || input.clinicName?.trim() || caseDoc.clinicName || '';
+  }
+
+  const geo = await resolveCountryGeo({
+    countryId: input.countryId || (caseDoc.countryId ? String(caseDoc.countryId) : undefined),
+    countryName: input.country !== undefined ? input.country : caseDoc.country,
+  });
+  caseDoc.country = geo.country;
+  caseDoc.countryId = geo.countryId;
+  caseDoc.regionId = geo.regionId;
+
+  if (input.priority !== undefined && input.priority) {
+    let nextPriority = input.priority;
+    if (
+      nextPriority === CASE_PRIORITIES.URGENT &&
+      !permissionsInclude(actor.permissions, PERMISSIONS.CASE_SET_PRIORITY)
+    ) {
+      nextPriority = caseDoc.priority;
+    }
+    caseDoc.priority = nextPriority;
+  }
+
+  if (input.caseCategory !== undefined) caseDoc.caseCategory = input.caseCategory ?? caseDoc.caseCategory;
+  if (input.caseType !== undefined) caseDoc.caseType = input.caseType ?? caseDoc.caseType;
+  if (input.chiefComplaint !== undefined) caseDoc.chiefComplaint = input.chiefComplaint?.trim() ?? '';
+  if (input.instructions !== undefined) caseDoc.instructions = input.instructions?.trim() ?? '';
+
+  if (input.treatmentInstructions !== undefined) {
+    caseDoc.treatmentInstructions = normalizeTreatmentInstructions(input.treatmentInstructions);
+  }
+  if (input.recordsNumbering !== undefined) {
+    caseDoc.recordsNumbering = { ...EMPTY_RECORDS_NUMBERING, ...(input.recordsNumbering ?? {}) };
+  }
+  if (input.clinicalPreferences !== undefined) {
+    caseDoc.clinicalPreferences = { ...EMPTY_CLINICAL_PREFERENCES, ...(input.clinicalPreferences ?? {}) };
+  }
+  if (input.occlusionGoals !== undefined) {
+    caseDoc.occlusionGoals = { ...EMPTY_OCCLUSION_GOALS, ...(input.occlusionGoals ?? {}) };
+  }
+  if (input.prosthoDetails !== undefined) {
+    caseDoc.prosthoDetails = { ...EMPTY_PROSTHO_DETAILS, ...(input.prosthoDetails ?? {}) };
+  }
+  if (input.implantDetails !== undefined) {
+    caseDoc.implantDetails = { ...EMPTY_IMPLANT_DETAILS, ...(input.implantDetails ?? {}) };
+  }
+
+  let facilityObjectId = caseDoc.facilityId;
+  if (input.facilityId) {
+    const { Facility } = await import('../../models/Facility');
+    const facility = await Facility.findById(input.facilityId);
+    if (!facility) throw new AppError('Facility not found', 404);
+    facilityObjectId = facility._id;
+  }
+  if (!asDraft && doctor.organizationId && !facilityObjectId) {
+    throw new AppError('Select a facility for this corporate case', 400);
+  }
+  caseDoc.facilityId = facilityObjectId;
+
+  const {
+    evaluateCreateEligibility,
+    resolveCasePricing,
+    debitPrepaidForCase,
+    redeemDiscountCode,
+  } = await import('../commercial/pricingBilling.service');
+  const { DEMO_CASE_MESSAGES } = await import('@ayetis/shared');
+
+  let isDemo = Boolean(input.isDemo ?? caseDoc.isDemo);
+  let resolvedCommercial = { ...EMPTY_CASE_COMMERCIAL, ...(input.commercial ?? caseDoc.commercial ?? {}) };
+  let paymentStatus: string = caseDoc.payment?.status || PAYMENT_STATUSES.NOT_BILLED;
+  let eligibilityReason: string | null = null;
+
+  if (!asDraft && resolvedCommercial.treatmentPlanId) {
+    const pricing = await resolveCasePricing({
+      treatmentPlanId: resolvedCommercial.treatmentPlanId,
+      discountCode: resolvedCommercial.discountCode,
+      customerUserId: String(doctor._id),
+      organizationId: doctor.organizationId ? String(doctor.organizationId) : null,
+      caseCategory: caseDoc.caseCategory,
+    });
+    if (pricing.isFreeDemoPlan) isDemo = true;
+    resolvedCommercial = {
+      ...resolvedCommercial,
+      treatmentPlanId: pricing.treatmentPlanId,
+      treatmentPlanName: pricing.treatmentPlanName,
+      unitPrice: pricing.unitPrice,
+      discountCode: pricing.discountCode ?? '',
+      discountAmount: pricing.discountAmount,
+      finalPayableAmount: isDemo ? 0 : pricing.finalPayableAmount,
+      currency: pricing.currency,
+    };
+
+    if (!input.paymentSessionId) {
+      const eligibility = await evaluateCreateEligibility({
+        userId: String(doctor._id),
+        treatmentPlanId: pricing.treatmentPlanId,
+        discountCode: pricing.discountCode,
+        isDemo,
+        caseCategory: caseDoc.caseCategory,
+      });
+      eligibilityReason = eligibility.reason;
+      if (!eligibility.allowedWithoutPayment) {
+        throw new AppError(
+          'Payment is required before this case can be submitted. Create a payment session first.',
+          402,
+        );
+      }
+      if (eligibility.reason === 'invoice_schedule') {
+        paymentStatus = PAYMENT_STATUSES.PENDING;
+      } else if (eligibility.reason === 'prepaid' || eligibility.reason === 'zero_amount' || eligibility.reason === 'demo') {
+        paymentStatus = eligibility.reason === 'prepaid' ? PAYMENT_STATUSES.PAID : PAYMENT_STATUSES.WAIVED;
+      }
+    } else {
+      paymentStatus = PAYMENT_STATUSES.PAID;
+    }
+  }
+
+  caseDoc.commercial = resolvedCommercial;
+  caseDoc.isDemo = isDemo;
+  if (input.paymentSessionId) {
+    caseDoc.paymentSessionId = new Types.ObjectId(input.paymentSessionId);
+  }
+
+  if (caseDoc.payment) {
+    caseDoc.payment.currency = resolvedCommercial.currency || caseDoc.payment.currency || 'USD';
+    caseDoc.payment.amountDue = resolvedCommercial.finalPayableAmount ?? resolvedCommercial.unitPrice ?? caseDoc.payment.amountDue;
+    caseDoc.payment.status = paymentStatus as never;
+    if (paymentStatus === PAYMENT_STATUSES.PAID && caseDoc.payment.amountPaid == null) {
+      caseDoc.payment.amountPaid = resolvedCommercial.finalPayableAmount ?? 0;
+    }
+  }
+
+  if (!asDraft) {
+    const slaHours = isDemo
+      ? DEMO_CASE_MESSAGES.slaBusinessHours
+      : await resolveSlaHoursForUser(doctor);
+    caseDoc.status = CASE_STATUSES.NEW_CASE;
+    caseDoc.submittedAt = now;
+    caseDoc.slaHours = slaHours;
+    caseDoc.slaDeadlineAt = computeSlaDeadline(now, slaHours);
+
+    pushHistory(caseDoc, {
+      action: 'status_changed',
+      summary: `Case ${caseDoc.caseId} submitted`,
+      actor,
+      metadata: {
+        changes: [
+          {
+            field: 'status',
+            label: CASE_FIELD_LABELS.status,
+            from: CASE_STATUSES.SAVED_FOR_SUBMISSION,
+            to: CASE_STATUSES.NEW_CASE,
+          },
+        ] satisfies CaseHistoryChange[],
+      },
+    });
+
+    if (eligibilityReason === 'prepaid') {
+      await debitPrepaidForCase(String(doctor._id), caseDoc.id, actor.email);
+    }
+    if (resolvedCommercial.discountCode && !input.paymentSessionId) {
+      await redeemDiscountCode(resolvedCommercial.discountCode);
+    }
+  } else {
+    pushHistory(caseDoc, {
+      action: 'updated',
+      summary: `Draft ${caseDoc.caseId} updated`,
+      actor,
+    });
+  }
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: asDraft ? AUDIT_ACTIONS.CASE_UPDATE : AUDIT_ACTIONS.CASE_CREATE,
+    summary: `${actor.email} ${asDraft ? 'updated draft' : 'submitted'} case ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    metadata: { mongoId: caseDoc.id, patientName: caseDoc.patientName, isDemo },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  if (!asDraft) {
+    const intakeStaffIds = await findUserIdsByRoles([
+      ROLES.COORDINATOR,
+      ROLES.SUPERVISOR,
+      ROLES.ADMIN,
+    ]);
+    await createNotificationsForUsers(intakeStaffIds, {
+      type: NOTIFICATION_TYPES.CASE_SUBMITTED,
+      title: `New case submitted: ${caseDoc.caseId}`,
+      body: `${staffDoctorLabel(caseDoc)} submitted ${caseDoc.patientName} for review.`,
+      link: `/app/cases/${caseDoc.caseId}`,
+      caseId: caseDoc.caseId,
+    });
+    await emailUsers(intakeStaffIds, {
+      subject: `New case submitted: ${caseDoc.caseId}`,
+      headline: 'New case submitted',
+      message: `${staffDoctorLabel(caseDoc)} submitted a new case for ${caseDoc.patientName}.`,
+      caseId: caseDoc.caseId,
+      patientName: caseDoc.patientName,
+    });
+  }
 
   return await toDetail(caseDoc, actor);
 }

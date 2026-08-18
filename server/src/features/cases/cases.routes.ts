@@ -205,6 +205,13 @@ router.patch(
   casesController.updateCase,
 );
 
+router.patch(
+  '/:caseId/draft',
+  requireAnyPermission(PERMISSIONS.CASE_CREATE, PERMISSIONS.CASE_UPDATE),
+  validate(createCaseSchema),
+  casesController.updateDraftCase,
+);
+
 router.post(
   '/:caseId/priority',
   requirePermission(PERMISSIONS.CASE_SET_PRIORITY),

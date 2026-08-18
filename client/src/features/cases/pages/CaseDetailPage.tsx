@@ -540,10 +540,15 @@ export function CaseDetailPage() {
     !editsLocked &&
     !isCancelled;
 
+  const isDraft = caseData.status === 'saved_for_submission';
+  const isOwner = user?.id === caseData.doctorId || user?.email === caseData.doctorEmail;
+  const canResumeDraft =
+    isDraft && (isOwner || can(PERMISSIONS.CASE_CREATE) || can(PERMISSIONS.CASE_UPDATE));
+
   const showApprove =
     showDoctorDelivery && caseData.status === 'waiting_for_approval' && !editsLocked;
   const showAssign = canValidateOrAssign && !editsLocked;
-  const showEdit = can(PERMISSIONS.CASE_UPDATE) && !editsLocked;
+  const showEdit = can(PERMISSIONS.CASE_UPDATE) && !editsLocked && !isDraft;
 
   return (
     <div className="font-clinical space-y-5">
@@ -568,7 +573,14 @@ export function CaseDetailPage() {
         caseData={caseData}
         actions={
           <>
-            {showApprove ? (
+            {canResumeDraft ? (
+              <CaseDetailActionButton
+                tone="primary"
+                to={`/app/cases/${caseData.caseId}/resume`}
+              >
+                Resume draft
+              </CaseDetailActionButton>
+            ) : showApprove ? (
               <CaseDetailActionButton
                 tone="primary"
                 onClick={() => {
@@ -597,7 +609,7 @@ export function CaseDetailPage() {
             ) : null}
             <CaseMoreMenu
               items={[
-                ...(!editsLocked && !isCancelled
+                ...(!editsLocked && !isCancelled && !isDraft
                   ? [
                       {
                         id: 'refinement',

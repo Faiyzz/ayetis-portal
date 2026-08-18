@@ -25,6 +25,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
+import { useAuthStore } from '@/features/auth/store';
 import { fetchCases } from '@/features/cases/api';
 import { SlaProgressBar } from '@/features/cases/components/SlaProgressBar';
 import { toast } from '@/features/notifications/toastStore';
@@ -87,6 +88,12 @@ function ClarificationButton({
 
 export function CasesPage() {
   const { can, canAny } = usePermissions();
+  const user = useAuthStore((s) => s.user);
+  const canResumeDrafts =
+    can(PERMISSIONS.CASE_CREATE) ||
+    can(PERMISSIONS.CASE_VIEW_ALL) ||
+    can(PERMISSIONS.CASE_VIEW_ORG) ||
+    can(PERMISSIONS.CASE_VIEW_FACILITY);
   const [searchParams, setSearchParams] = useSearchParams();
   const isDoctorView =
     can(PERMISSIONS.CASE_VIEW_OWN) &&
@@ -408,6 +415,15 @@ export function CasesPage() {
                         >
                           {formatCaseIdLabel(item.caseId, item.status)}
                         </Link>
+                        {item.status === 'saved_for_submission' &&
+                        (user?.id === item.doctorId || canResumeDrafts) ? (
+                          <Link
+                            to={`/app/cases/${item.caseId}/resume`}
+                            className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 hover:bg-brand-100"
+                          >
+                            Resume
+                          </Link>
+                        ) : null}
                         {item.isDemo ? (
                           <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
                             Demo

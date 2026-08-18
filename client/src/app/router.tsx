@@ -79,6 +79,16 @@ export function AppRouter() {
           <Route
             element={
               <RequireAnyPermission
+                permissions={[PERMISSIONS.CASE_CREATE, PERMISSIONS.CASE_UPDATE]}
+              />
+            }
+          >
+            <Route path="cases/:caseId/resume" element={<CreateCasePage />} />
+          </Route>
+
+          <Route
+            element={
+              <RequireAnyPermission
                 permissions={[
                   PERMISSIONS.CASE_VIEW_OWN,
                   PERMISSIONS.CASE_VIEW_ALL,

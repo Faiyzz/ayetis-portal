@@ -15,6 +15,9 @@ import {
   URD_PROFESSION_SPECIALIZATIONS,
   notificationCatalog,
   regionCodeForCountry,
+  canViewDoctorName,
+  formatDoctorDisplay,
+  ROLES,
 } from '@ayetis/shared';
 
 function assert(condition: unknown, message: string) {
@@ -71,6 +74,41 @@ function run() {
   assert(
     catalog.some((item) => item.type === 'sla_breach' && item.emailTemplateKey === 'sla_breach'),
     'SLA breach catalog mapping missing',
+  );
+
+  // Doctor Name Privacy & Redaction rules (Review Comment 2)
+  const doctorUserId = 'user_doc_123';
+  const otherUserId = 'user_coord_456';
+  const docInfo = { doctorUserId, doctorName: 'Dr. John Smith', doctorId: 'DOC-10294' };
+
+  assert(canViewDoctorName(ROLES.ADMIN, otherUserId, doctorUserId) === true, 'Admin must view doctor name');
+  assert(canViewDoctorName(ROLES.DOCTOR, doctorUserId, doctorUserId) === true, 'Doctor must view own name');
+  assert(canViewDoctorName(ROLES.DOCTOR, otherUserId, doctorUserId) === false, 'Doctor must not view another doctor name');
+  assert(canViewDoctorName(ROLES.COORDINATOR, otherUserId, doctorUserId) === false, 'Coordinator must not view doctor name');
+  assert(canViewDoctorName(ROLES.DESIGNER, otherUserId, doctorUserId) === false, 'Designer must not view doctor name');
+  assert(canViewDoctorName(ROLES.QC, otherUserId, doctorUserId) === false, 'QC must not view doctor name');
+  assert(canViewDoctorName(ROLES.SUPERVISOR, otherUserId, doctorUserId) === false, 'Supervisor must not view doctor name');
+  assert(canViewDoctorName(ROLES.ORTHODONTIST, otherUserId, doctorUserId) === false, 'Orthodontist must not view doctor name');
+
+  assert(
+    formatDoctorDisplay(ROLES.ADMIN, otherUserId, docInfo) === 'Dr. John Smith',
+    'Admin should see real doctor name',
+  );
+  assert(
+    formatDoctorDisplay(ROLES.DOCTOR, doctorUserId, docInfo) === 'Dr. John Smith',
+    'Doctor should see own real name',
+  );
+  assert(
+    formatDoctorDisplay(ROLES.COORDINATOR, otherUserId, docInfo) === 'DOC-10294',
+    'Coordinator must see doctorDisplayId',
+  );
+  assert(
+    formatDoctorDisplay(ROLES.DESIGNER, otherUserId, docInfo) === 'DOC-10294',
+    'Designer must see doctorDisplayId',
+  );
+  assert(
+    formatDoctorDisplay(ROLES.QC, otherUserId, { doctorUserId, doctorName: 'Dr. John Smith', doctorId: undefined }) === 'Doctor',
+    'Fallback for staff when display ID missing must be Doctor',
   );
 
   console.log('UAT assert passed');

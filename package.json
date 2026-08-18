@@ -12,6 +12,7 @@
     "uat:assert": "npm run uat:assert -w server",
     "test": "npm run test -w shared && npm run test -w server && npm run test -w client",
     "test:coverage": "npm run test:coverage -w shared && npm run test:coverage -w server && npm run test:coverage -w client"
+
   },
   "workspaces": [
     "shared",

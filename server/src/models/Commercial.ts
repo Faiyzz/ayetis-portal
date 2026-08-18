@@ -115,6 +115,8 @@ export interface IPaymentSession extends Document {
   bankReference?: string;
   stripeSessionId?: string;
   stripePaymentIntentId?: string;
+  isFulfilling?: boolean;
+  fulfillingAt?: Date;
   caseId?: Types.ObjectId;
   invoiceId?: Types.ObjectId;
   receiptId?: Types.ObjectId;
@@ -144,6 +146,8 @@ const paymentSessionSchema = new Schema<IPaymentSession>(
     bankReference: { type: String, trim: true },
     stripeSessionId: { type: String, index: true },
     stripePaymentIntentId: { type: String },
+    isFulfilling: { type: Boolean, default: false, index: true },
+    fulfillingAt: { type: Date },
     caseId: { type: Schema.Types.ObjectId, ref: 'Case' },
     invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },
     receiptId: { type: Schema.Types.ObjectId, ref: 'PaymentReceipt' },
@@ -187,7 +191,7 @@ const invoiceSchema = new Schema<IInvoice>(
     caseId: { type: Schema.Types.ObjectId, ref: 'Case', index: true },
     batchedCaseIds: { type: [{ type: Schema.Types.ObjectId, ref: 'Case' }], default: [] },
     billedCaseIds: { type: [String], default: [] },
-    paymentSessionId: { type: Schema.Types.ObjectId, ref: 'PaymentSession' },
+    paymentSessionId: { type: Schema.Types.ObjectId, ref: 'PaymentSession', index: true },
     customerUserId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     customerEmail: { type: String, required: true },
     customerName: { type: String, required: true },

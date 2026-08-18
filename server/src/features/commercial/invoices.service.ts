@@ -170,6 +170,17 @@ export async function issueInvoiceAndReceipt(input: {
   actor?: { id?: string; email?: string; role?: string };
   audit?: RequestAuditContext;
 }): Promise<{ invoice: InvoiceDto; receipt: PaymentReceiptDto | null }> {
+  if (input.paymentSessionId) {
+    const existingInvoice = await Invoice.findOne({ paymentSessionId: input.paymentSessionId });
+    if (existingInvoice) {
+      const existingReceipt = await PaymentReceipt.findOne({ invoiceId: existingInvoice._id });
+      return {
+        invoice: invoiceDto(existingInvoice),
+        receipt: existingReceipt ? receiptDto(existingReceipt) : null,
+      };
+    }
+  }
+
   const invoiceNumber = await generateInvoiceNumber();
   const issuedAt = new Date();
   const status = input.markPaid ? 'paid' : 'issued';
