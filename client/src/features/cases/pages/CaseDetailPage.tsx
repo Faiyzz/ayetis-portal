@@ -542,7 +542,8 @@ export function CaseDetailPage() {
 
   const isDraft = caseData.status === 'saved_for_submission';
   const isOwner = user?.id === caseData.doctorId || user?.email === caseData.doctorEmail;
-  const canResumeDraft = isDraft && (isOwner || can(PERMISSIONS.CASE_UPDATE));
+  const canResumeDraft =
+    isDraft && (isOwner || can(PERMISSIONS.CASE_CREATE) || can(PERMISSIONS.CASE_UPDATE));
 
   const showApprove =
     showDoctorDelivery && caseData.status === 'waiting_for_approval' && !editsLocked;

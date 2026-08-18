@@ -1,0 +1,66 @@
+import path from 'path';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      '@ayetis/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+    },
+  },
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+    setupFiles: ['src/test/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      include: [
+        'src/utils/**/*.ts',
+        'src/middleware/auth.ts',
+        'src/middleware/errorHandler.ts',
+        'src/middleware/validate.ts',
+        'src/jobs/caseLifecycle.job.ts',
+        'src/jobs/slaMonitor.job.ts',
+        'src/features/auth/auth.schemas.ts',
+        'src/features/auth/auth.service.ts',
+        'src/features/notifications/notifications.service.ts',
+        'src/features/clarifications/clarifications.schemas.ts',
+        'src/features/corporate/corporate.schemas.ts',
+        'src/features/registrations/registrations.schemas.ts',
+        'src/features/users/users.schemas.ts',
+      ],
+      exclude: [
+        'src/**/*.test.ts',
+        'src/test/**',
+        'src/index.ts',
+        'src/app.ts',
+        'src/config/database.ts',
+        'src/scripts/**',
+        'src/**/migrate*.ts',
+        'src/**/*.routes.ts',
+        'src/**/*.controller.ts',
+        'src/models/**',
+        'src/services/storage.service.ts',
+        'src/services/archiveExtract.service.ts',
+        'src/services/email/**',
+        'src/services/fileLifecycle.service.ts',
+        'src/jobs/fileColdStorage.job.ts',
+        'src/features/commercial/paymentProviders.ts',
+        'src/features/commercial/invoices.service.ts',
+        'src/features/commercial/payments.service.ts',
+        'src/features/complaints/**',
+        'src/features/deletions/**',
+        'src/features/departments/**',
+        'src/features/supervisor/**',
+        'src/features/rbac/**',
+        'src/middleware/uploads.ts',
+      ],
+      thresholds: {
+        statements: 70,
+        branches: 70,
+        functions: 70,
+        lines: 70,
+      },
+    },
+  },
+});
