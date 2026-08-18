@@ -6,6 +6,7 @@ import {
   FACILITY_STATUSES,
   formatEmployeeId,
   formatSubAccountId,
+  formatDoctorDisplay,
   isFacilityStatus,
   PERMISSIONS,
   ROLES,
@@ -692,7 +693,7 @@ export async function getCorporateInsights(
     organizationId: orgObjectId,
     isDeleted: { $ne: true },
   }).select(
-    'status facilityId doctorId doctorName doctorDecision slaDeadlineAt createdAt',
+    'status facilityId doctorId doctorName doctorDisplayId doctorDecision slaDeadlineAt createdAt',
   );
 
   const now = new Date();
@@ -734,7 +735,11 @@ export async function getCorporateInsights(
     }
     const did = String(caseDoc.doctorId);
     const doctor = byDoctorMap.get(did) ?? {
-      doctorName: caseDoc.doctorName,
+      doctorName: formatDoctorDisplay(actor.role, actor.id, {
+        doctorUserId: did,
+        doctorName: caseDoc.doctorName,
+        doctorId: caseDoc.doctorDisplayId,
+      }),
       count: 0,
       approved: 0,
       modifications: 0,

@@ -83,15 +83,18 @@ export interface DoctorDisplayInput {
 
 /**
  * Doctor Name is visible only to Main Admin and the doctor themselves.
- * All other roles see Doctor ID only.
+ * All other roles see the generated Doctor ID only.
  */
 export function canViewDoctorName(
   viewerRole: Role,
   viewerId: string,
   doctorUserId: string,
+  viewerRoles?: readonly string[],
 ): boolean {
-  if (viewerRole === ROLES.ADMIN) return true;
-  if (viewerRole === ROLES.DOCTOR && viewerId === doctorUserId) return true;
+  if (viewerRole === ROLES.ADMIN || viewerRoles?.includes(ROLES.ADMIN)) return true;
+  const isDoctor =
+    viewerRole === ROLES.DOCTOR || Boolean(viewerRoles?.includes(ROLES.DOCTOR));
+  if (isDoctor && viewerId === doctorUserId) return true;
   return false;
 }
 
@@ -99,11 +102,12 @@ export function formatDoctorDisplay(
   viewerRole: Role,
   viewerId: string,
   doctor: DoctorDisplayInput,
+  viewerRoles?: readonly string[],
 ): string {
-  if (canViewDoctorName(viewerRole, viewerId, doctor.doctorUserId)) {
+  if (canViewDoctorName(viewerRole, viewerId, doctor.doctorUserId, viewerRoles)) {
     return doctor.doctorName;
   }
-  return doctor.doctorId || doctor.doctorUserId;
+  return doctor.doctorId || 'Doctor';
 }
 
 export interface RegistrationRequestDto {

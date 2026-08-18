@@ -11,8 +11,10 @@ import {
   NOTIFICATION_TYPES,
   PERMISSIONS,
   ROLE_LABELS,
+  ROLES,
   clarificationTypeLabel,
   computeClarificationButtonState,
+  formatDoctorDisplay,
   isValidClarificationType,
   permissionsInclude,
   resolveClarificationSenderRole,
@@ -67,7 +69,26 @@ function roleLabel(role: string) {
   return ROLE_LABELS[role as Role] ?? role;
 }
 
-function toDto(doc: IClarification): ClarificationDto {
+function doctorAuthorLabel(
+  viewer: { id: string; role: string } | undefined,
+  authorId: string,
+  authorName: string,
+  authorRole: string,
+  doctorDisplayId?: string | null,
+) {
+  if (authorRole !== ROLES.DOCTOR) return authorName;
+  return formatDoctorDisplay((viewer?.role ?? ROLES.COORDINATOR) as Role, viewer?.id ?? '', {
+    doctorUserId: authorId,
+    doctorName: authorName,
+    doctorId: doctorDisplayId ?? null,
+  });
+}
+
+function toDto(
+  doc: IClarification,
+  viewer?: { id: string; role: string },
+  doctorDisplayId?: string | null,
+): ClarificationDto {
   const senderRole = (doc.senderRole || 'coordinator') as ClarificationSenderRole;
   const clarificationType = doc.clarificationType || 'missing_records';
   return {
@@ -83,14 +104,26 @@ function toDto(doc: IClarification): ClarificationDto {
     priority: doc.priority ?? CLARIFICATION_PRIORITIES.NORMAL,
     isDraft: Boolean(doc.isDraft),
     createdById: String(doc.createdById),
-    createdByName: doc.createdByName,
+    createdByName: doctorAuthorLabel(
+      viewer,
+      String(doc.createdById),
+      doc.createdByName,
+      doc.createdByRole,
+      doctorDisplayId,
+    ),
     createdByRole: doc.createdByRole,
     messages: doc.messages.map((message) => ({
       id: String(message._id),
       kind: message.kind,
       body: message.body,
       authorId: String(message.authorId),
-      authorName: message.authorName,
+      authorName: doctorAuthorLabel(
+        viewer,
+        String(message.authorId),
+        message.authorName,
+        message.authorRole,
+        doctorDisplayId,
+      ),
       authorRole: message.authorRole,
       createdAt: message.createdAt.toISOString(),
     })),
@@ -186,15 +219,15 @@ export async function listClarificationsForCase(
   const items = await Clarification.find({ caseMongoId: caseDoc._id }).sort({
     createdAt: -1,
   });
-  return items.filter((doc) => canSeeDraft(actor, doc)).map(toDto);
+  return items.filter((doc) => canSeeDraft(actor, doc)).map((doc) => toDto(doc, actor, caseDoc.doctorDisplayId));
 }
 
 export async function getClarification(actor: ClarificationActor, clarificationId: string) {
   const doc = await Clarification.findById(clarificationId);
   if (!doc) throw new AppError('Clarification not found', 404);
-  await findCaseForActor(actor, doc.caseId);
+  const caseDoc = await findCaseForActor(actor, doc.caseId);
   if (!canSeeDraft(actor, doc)) throw new AppError('Clarification not found', 404);
-  return toDto(doc);
+  return toDto(doc, actor, caseDoc.doctorDisplayId);
 }
 
 export async function createClarification(
@@ -273,7 +306,7 @@ export async function createClarification(
       ipAddress: audit?.ipAddress,
       userAgent: audit?.userAgent,
     });
-    return toDto(clarification);
+    return toDto(clarification, actor, caseDoc.doctorDisplayId);
   }
 
   const previousStatus = caseDoc.status;
@@ -310,7 +343,7 @@ export async function createClarification(
     userAgent: audit?.userAgent,
   });
 
-  return toDto(clarification);
+  return toDto(clarification, actor, caseDoc.doctorDisplayId);
 }
 
 async function notifyDoctorClarification(
@@ -366,7 +399,7 @@ export async function updateClarificationDraft(
 ) {
   const clarification = await Clarification.findById(clarificationId);
   if (!clarification) throw new AppError('Clarification not found', 404);
-  await findCaseForActor(actor, clarification.caseId);
+  const caseDoc = await findCaseForActor(actor, clarification.caseId);
 
   const isCreator = String(clarification.createdById) === actor.id;
   const isDoctorOwner =
@@ -415,7 +448,7 @@ export async function updateClarificationDraft(
     ipAddress: audit?.ipAddress,
     userAgent: audit?.userAgent,
   });
-  return toDto(clarification);
+  return toDto(clarification, actor, caseDoc.doctorDisplayId);
 }
 
 export async function publishClarificationDraft(
@@ -487,7 +520,7 @@ export async function publishClarificationDraft(
     userAgent: audit?.userAgent,
   });
 
-  return toDto(clarification);
+  return toDto(clarification, actor, caseDoc.doctorDisplayId);
 }
 
 export async function replyToClarification(
@@ -606,7 +639,7 @@ export async function replyToClarification(
             caseId: caseDoc.caseId,
             patientName: caseDoc.patientName,
             subject: clarification.subject,
-            doctorName: caseDoc.doctorName,
+            doctorName: caseDoc.doctorDisplayId || 'Doctor',
             replyPreview: trimmed,
             portalUrl,
           }),
@@ -641,7 +674,7 @@ export async function replyToClarification(
     userAgent: audit?.userAgent,
   });
 
-  return toDto(clarification);
+  return toDto(clarification, actor, caseDoc.doctorDisplayId);
 }
 
 export async function resolveClarification(
@@ -660,7 +693,7 @@ export async function resolveClarification(
   const caseDoc = await findCaseForActor(actor, clarification.caseId);
 
   if (clarification.status === CLARIFICATION_STATUSES.RESOLVED) {
-    return toDto(clarification);
+    return toDto(clarification, actor, caseDoc.doctorDisplayId);
   }
 
   clarification.status = CLARIFICATION_STATUSES.RESOLVED;
@@ -704,7 +737,7 @@ export async function resolveClarification(
     userAgent: audit?.userAgent,
   });
 
-  return toDto(clarification);
+  return toDto(clarification, actor, caseDoc.doctorDisplayId);
 }
 
 export async function markClarificationRead(
@@ -736,7 +769,7 @@ export async function markClarificationRead(
     ipAddress: audit?.ipAddress,
     userAgent: audit?.userAgent,
   });
-  return toDto(clarification);
+  return toDto(clarification, actor, caseDoc.doctorDisplayId);
 }
 
 export async function escalateClarification(
@@ -753,7 +786,7 @@ export async function escalateClarification(
   }
   const clarification = await Clarification.findById(clarificationId);
   if (!clarification) throw new AppError('Clarification not found', 404);
-  await findCaseForActor(actor, clarification.caseId);
+  const caseDoc = await findCaseForActor(actor, clarification.caseId);
 
   const escalate = input.escalate !== false;
   if (escalate) {
@@ -780,7 +813,7 @@ export async function escalateClarification(
     ipAddress: audit?.ipAddress,
     userAgent: audit?.userAgent,
   });
-  return toDto(clarification);
+  return toDto(clarification, actor, caseDoc.doctorDisplayId);
 }
 
 export async function uploadClarificationAttachment(
@@ -791,7 +824,7 @@ export async function uploadClarificationAttachment(
 ) {
   const clarification = await Clarification.findById(clarificationId);
   if (!clarification) throw new AppError('Clarification not found', 404);
-  await findCaseForActor(actor, clarification.caseId);
+  const caseDoc = await findCaseForActor(actor, clarification.caseId);
 
   const saved = await persistUploadedFile({
     caseId: `clarification-${clarification.id}`,
@@ -828,7 +861,7 @@ export async function uploadClarificationAttachment(
     userAgent: audit?.userAgent,
   });
 
-  return toDto(clarification);
+  return toDto(clarification, actor, caseDoc.doctorDisplayId);
 }
 
 export async function resolveClarificationActor(userId: string): Promise<ClarificationActor> {
@@ -873,12 +906,13 @@ export async function getClarificationButtonStateForCase(
 
 export async function listClarificationDtosForCase(
   caseMongoId: Types.ObjectId,
-  viewerId?: string,
+  viewer?: { id: string; role: string },
+  options?: { doctorDisplayId?: string | null },
 ) {
   const items = await Clarification.find({ caseMongoId }).sort({ createdAt: -1 });
   return items
-    .filter((doc) => !doc.isDraft || (viewerId && String(doc.createdById) === viewerId))
-    .map(toDto);
+    .filter((doc) => !doc.isDraft || (viewer && String(doc.createdById) === viewer.id))
+    .map((doc) => toDto(doc, viewer, options?.doctorDisplayId));
 }
 
 export async function getClarificationReport(): Promise<ClarificationReportDto> {

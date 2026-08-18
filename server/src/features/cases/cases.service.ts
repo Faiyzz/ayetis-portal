@@ -68,6 +68,7 @@ import {
   labelForMonthKey,
   monthRangeUtc,
   formatDoctorDisplay,
+  canViewDoctorName,
   permissionsInclude,
   quarterRangeUtc,
   recentMonthOptions,
@@ -178,6 +179,52 @@ export interface CaseActor {
 
 function actorName(actor: CaseActor) {
   return `${actor.firstName} ${actor.lastName}`.trim();
+}
+
+type DoctorViewer = { id: string; role: string; roles?: string[] };
+
+function doctorNameForViewer(
+  caseDoc: Pick<ICase, 'doctorId' | 'doctorName' | 'doctorDisplayId'>,
+  viewer?: DoctorViewer,
+): string {
+  if (!viewer) return caseDoc.doctorDisplayId || 'Doctor';
+  return formatDoctorDisplay(
+    viewer.role as Role,
+    viewer.id,
+    {
+      doctorUserId: String(caseDoc.doctorId),
+      doctorName: caseDoc.doctorName,
+      doctorId: caseDoc.doctorDisplayId,
+    },
+    viewer.roles,
+  );
+}
+
+function doctorEmailForViewer(
+  caseDoc: Pick<ICase, 'doctorId' | 'doctorEmail'>,
+  viewer?: DoctorViewer,
+): string {
+  if (
+    !viewer ||
+    !canViewDoctorName(viewer.role as Role, viewer.id, String(caseDoc.doctorId), viewer.roles)
+  ) {
+    return '';
+  }
+  return caseDoc.doctorEmail;
+}
+
+function staffDoctorLabel(caseDoc: Pick<ICase, 'doctorDisplayId'>): string {
+  return caseDoc.doctorDisplayId || 'Doctor';
+}
+
+function personNameForViewer(
+  personId: string | null | undefined,
+  personName: string | null | undefined,
+  caseDoc: Pick<ICase, 'doctorId' | 'doctorName' | 'doctorDisplayId'>,
+  viewer?: DoctorViewer,
+): string | null {
+  if (!personId || personId !== String(caseDoc.doctorId)) return personName ?? null;
+  return doctorNameForViewer(caseDoc, viewer);
 }
 
 function pushHistory(
@@ -360,7 +407,7 @@ function slaSnapshot(caseDoc: ICase) {
 
 async function toListItem(
   caseDoc: ICase,
-  viewer?: { id: string; role: string },
+  viewer?: { id: string; role: string; roles?: string[] },
 ): Promise<CaseListItemDto> {
   const openClarificationCount = await countOpenClarifications(caseDoc._id as Types.ObjectId);
   const clarificationButtonState = await getClarificationButtonStateForCase(
@@ -379,13 +426,8 @@ async function toListItem(
       });
   const ref = queueReferenceDate(caseDoc);
   const doctorDisplayId = caseDoc.doctorDisplayId ?? null;
-  const doctorName = viewer
-    ? formatDoctorDisplay(viewer.role as Role, viewer.id, {
-        doctorUserId: String(caseDoc.doctorId),
-        doctorName: caseDoc.doctorName,
-        doctorId: doctorDisplayId,
-      })
-    : caseDoc.doctorName;
+  const doctorName = doctorNameForViewer(caseDoc, viewer);
+  const doctorEmail = doctorEmailForViewer(caseDoc, viewer);
 
   return {
     id: caseDoc.id,
@@ -395,7 +437,7 @@ async function toListItem(
     doctorId: String(caseDoc.doctorId),
     doctorName,
     doctorDisplayId,
-    doctorEmail: caseDoc.doctorEmail,
+    doctorEmail,
     organizationId: caseDoc.organizationId ? String(caseDoc.organizationId) : null,
     facilityId: caseDoc.facilityId ? String(caseDoc.facilityId) : null,
     corporateCustomerId: caseDoc.corporateCustomerId ?? null,
@@ -464,13 +506,15 @@ function mapCutRevisions(caseDoc: ICase): CutRevisionDto[] {
   }));
 }
 
-function mapClinicalRemarks(caseDoc: ICase): ClinicalRemarkDto[] {
+function mapClinicalRemarks(caseDoc: ICase, viewer?: DoctorViewer): ClinicalRemarkDto[] {
   return (caseDoc.clinicalRemarks ?? []).map((remark) => ({
     id: String(remark._id),
     body: remark.body,
     indicator: remark.indicator,
     authorId: String(remark.authorId),
-    authorName: remark.authorName,
+    authorName:
+      personNameForViewer(String(remark.authorId), remark.authorName, caseDoc, viewer) ??
+      remark.authorName,
     createdAt: remark.createdAt.toISOString(),
   }));
 }
@@ -504,7 +548,7 @@ function mapQcReviews(caseDoc: ICase): QcReviewDto[] {
   }));
 }
 
-function mapHistory(caseDoc: ICase): CaseHistoryDto[] {
+function mapHistory(caseDoc: ICase, viewer?: DoctorViewer): CaseHistoryDto[] {
   return caseDoc.history.map((entry) => {
     const metadata = entry.metadata ?? {};
     const rawChanges = metadata.changes;
@@ -526,7 +570,12 @@ function mapHistory(caseDoc: ICase): CaseHistoryDto[] {
       action: entry.action,
       summary: entry.summary,
       actorId: entry.actorId ? String(entry.actorId) : null,
-      actorName: entry.actorName ?? null,
+      actorName: personNameForViewer(
+        entry.actorId ? String(entry.actorId) : null,
+        entry.actorName ?? null,
+        caseDoc,
+        viewer,
+      ),
       createdAt: entry.createdAt.toISOString(),
       metadata,
       changes,
@@ -536,11 +585,13 @@ function mapHistory(caseDoc: ICase): CaseHistoryDto[] {
 
 async function toDetail(
   caseDoc: ICase,
-  viewer?: { id: string; role: string },
+  viewer?: { id: string; role: string; roles?: string[] },
 ): Promise<CaseDetailDto> {
   const [listItem, clarifications, validation] = await Promise.all([
     toListItem(caseDoc, viewer),
-    listClarificationDtosForCase(caseDoc._id as Types.ObjectId, viewer?.id),
+    listClarificationDtosForCase(caseDoc._id as Types.ObjectId, viewer, {
+      doctorDisplayId: caseDoc.doctorDisplayId,
+    }),
     buildValidationSummary(caseDoc),
   ]);
 
@@ -595,7 +646,7 @@ async function toDetail(
         }
       : null,
     qcReviews: mapQcReviews(caseDoc),
-    clinicalRemarks: mapClinicalRemarks(caseDoc),
+    clinicalRemarks: mapClinicalRemarks(caseDoc, viewer),
     assignedConsultantId: caseDoc.assignedConsultantId
       ? String(caseDoc.assignedConsultantId)
       : null,
@@ -613,7 +664,9 @@ async function toDetail(
       id: String(note._id),
       body: note.body,
       authorId: String(note.authorId),
-      authorName: note.authorName,
+      authorName:
+        personNameForViewer(String(note.authorId), note.authorName, caseDoc, viewer) ??
+        note.authorName,
       createdAt: note.createdAt.toISOString(),
     })),
     files: caseDoc.files.map((file) => ({
@@ -627,7 +680,13 @@ async function toDetail(
       viewUrl: file.viewUrl || null,
       extractedFrom: file.extractedFrom || null,
       uploadedById: file.uploadedById ? String(file.uploadedById) : null,
-      uploadedByName: file.uploadedByName,
+      uploadedByName:
+        personNameForViewer(
+          file.uploadedById ? String(file.uploadedById) : null,
+          file.uploadedByName,
+          caseDoc,
+          viewer,
+        ) ?? file.uploadedByName,
       version: file.version || 1,
       createdAt: file.createdAt.toISOString(),
       note: file.note,
@@ -635,7 +694,7 @@ async function toDetail(
       scanMessage: file.scanMessage,
       ...toLifecycleDto(file, file.createdAt),
     })),
-    history: mapHistory(caseDoc),
+    history: mapHistory(caseDoc, viewer),
     timeline: buildCaseTimeline(caseDoc.status),
     cutStartedAt: caseDoc.cutStartedAt ? caseDoc.cutStartedAt.toISOString() : null,
     cutSubmittedAt: caseDoc.cutSubmittedAt ? caseDoc.cutSubmittedAt.toISOString() : null,
@@ -1478,14 +1537,14 @@ export async function createCase(
   await createNotificationsForUsers(intakeStaffIds, {
     type: NOTIFICATION_TYPES.CASE_SUBMITTED,
     title: `New case submitted: ${caseId}`,
-    body: `${caseDoc.doctorName} submitted ${caseDoc.patientName} for review.`,
+    body: `${staffDoctorLabel(caseDoc)} submitted ${caseDoc.patientName} for review.`,
     link: `/app/cases/${caseId}`,
     caseId,
   });
   await emailUsers(intakeStaffIds, {
     subject: `New case submitted: ${caseId}`,
     headline: 'New case submitted',
-    message: `${caseDoc.doctorName} submitted a new case for ${caseDoc.patientName}.`,
+    message: `${staffDoctorLabel(caseDoc)} submitted a new case for ${caseDoc.patientName}.`,
     caseId,
     patientName: caseDoc.patientName,
   });
@@ -2823,12 +2882,12 @@ function assertCanQcReview(actor: CaseActor, caseDoc?: ICase) {
   }
 }
 
-function toQcQueueCaseDto(caseDoc: ICase): QcQueueCaseDto {
+function toQcQueueCaseDto(caseDoc: ICase, viewer: DoctorViewer): QcQueueCaseDto {
   return {
     id: caseDoc.id,
     caseId: caseDoc.caseId,
     patientName: caseDoc.patientName,
-    doctorName: caseDoc.doctorName,
+    doctorName: doctorNameForViewer(caseDoc, viewer),
     designerName: caseDoc.assignedDesignerName ?? null,
     status: caseDoc.status,
     priority: caseDoc.priority,
@@ -2951,8 +3010,8 @@ export async function getQcDashboard(actor: CaseActor): Promise<QcDashboardDto> 
     generatedAt: new Date().toISOString(),
     pendingCount: pending.length,
     escalatedCount: escalated.length,
-    items: pending.map(toQcQueueCaseDto),
-    escalatedItems: escalated.map(toQcQueueCaseDto),
+    items: pending.map((doc) => toQcQueueCaseDto(doc, actor)),
+    escalatedItems: escalated.map((doc) => toQcQueueCaseDto(doc, actor)),
   };
 }
 
@@ -2974,7 +3033,7 @@ export async function getEscalatedCasesQueue(actor: CaseActor): Promise<QcQueueC
     .sort({ escalatedAt: -1, updatedAt: -1 })
     .limit(100);
 
-  return cases.map(toQcQueueCaseDto);
+  return cases.map((doc) => toQcQueueCaseDto(doc, actor));
 }
 
 export async function addQcComment(
@@ -4057,13 +4116,16 @@ export async function assignCase(
   return await toDetail(caseDoc, actor);
 }
 
-async function toCutQueueCaseDto(caseDoc: ICase): Promise<CutQueueCaseDto> {
+async function toCutQueueCaseDto(
+  caseDoc: ICase,
+  viewer: DoctorViewer,
+): Promise<CutQueueCaseDto> {
   const openClarificationCount = await countOpenClarifications(caseDoc._id as Types.ObjectId);
   return {
     id: caseDoc.id,
     caseId: caseDoc.caseId,
     patientName: caseDoc.patientName,
-    doctorName: caseDoc.doctorName,
+    doctorName: doctorNameForViewer(caseDoc, viewer),
     status: caseDoc.status,
     priority: caseDoc.priority,
     treatmentSummary: caseDoc.treatmentSummary,
@@ -4188,12 +4250,12 @@ export async function getCutDashboard(actor: CaseActor): Promise<CutDashboardDto
     completed,
     waitingForDesigner,
   ] = await Promise.all([
-    Promise.all(assignedDocs.map(toCutQueueCaseDto)),
-    Promise.all(autoQueueDocs.map(toCutQueueCaseDto)),
-    Promise.all(inProgressDocs.map(toCutQueueCaseDto)),
-    Promise.all(pendingClarificationDocs.map(toCutQueueCaseDto)),
-    Promise.all(completedDocs.map(toCutQueueCaseDto)),
-    Promise.all(waitingForDesignerDocs.map(toCutQueueCaseDto)),
+    Promise.all(assignedDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
+    Promise.all(autoQueueDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
+    Promise.all(inProgressDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
+    Promise.all(pendingClarificationDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
+    Promise.all(completedDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
+    Promise.all(waitingForDesignerDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
   ]);
 
   return {
@@ -4631,6 +4693,7 @@ export async function requestCutRework(
 function toQueueCaseDto(
   caseDoc: ICase,
   openClarificationCount: number,
+  viewer: DoctorViewer,
 ): CoordinatorQueueCaseDto {
   const assignmentMode = (caseDoc.assignmentMode ?? ASSIGNMENT_MODES.NONE) as AssignmentMode;
   const queue = resolveCoordinatorQueue({
@@ -4648,8 +4711,8 @@ function toQueueCaseDto(
     id: caseDoc.id,
     caseId: caseDoc.caseId,
     patientName: caseDoc.patientName,
-    doctorName: caseDoc.doctorName,
-    doctorEmail: caseDoc.doctorEmail,
+    doctorName: doctorNameForViewer(caseDoc, viewer),
+    doctorEmail: doctorEmailForViewer(caseDoc, viewer),
     status: caseDoc.status,
     priority: caseDoc.priority,
     treatmentSummary: caseDoc.treatmentSummary,
@@ -4692,7 +4755,7 @@ export async function getCoordinatorDashboard(
   const openMap = new Map(openCounts.map((entry) => [entry.id, entry.count]));
 
   const items = cases.map((caseDoc) =>
-    toQueueCaseDto(caseDoc, openMap.get(String(caseDoc._id)) ?? 0),
+    toQueueCaseDto(caseDoc, openMap.get(String(caseDoc._id)) ?? 0, actor),
   );
 
   // Only intake-relevant cases in coordinator buckets; assigned includes production.
@@ -4771,12 +4834,16 @@ export async function listDoctorAssignees(
     accountStatus: 'active',
   }).sort({ firstName: 1, lastName: 1 });
 
-  const canSeeName = actor.role === ROLES.ADMIN;
-
   return doctors.map((doctor) => {
+    const canSeeName = canViewDoctorName(
+      actor.role as Role,
+      actor.id,
+      doctor.id,
+      actor.roles,
+    );
     const label = canSeeName
       ? `${doctor.firstName} ${doctor.lastName}`.trim()
-      : doctor.doctorId || doctor.id;
+      : doctor.doctorId || 'Doctor';
     return {
       id: doctor.id,
       firstName: canSeeName ? doctor.firstName : label,
@@ -4820,12 +4887,15 @@ function assertCanConsult(actor: CaseActor) {
   }
 }
 
-function toConsultantQueueCaseDto(caseDoc: ICase): ConsultantQueueCaseDto {
+function toConsultantQueueCaseDto(
+  caseDoc: ICase,
+  viewer: DoctorViewer,
+): ConsultantQueueCaseDto {
   return {
     id: caseDoc.id,
     caseId: caseDoc.caseId,
     patientName: caseDoc.patientName,
-    doctorName: caseDoc.doctorName,
+    doctorName: doctorNameForViewer(caseDoc, viewer),
     designerName: caseDoc.assignedDesignerName ?? null,
     status: caseDoc.status,
     priority: caseDoc.priority,
@@ -4857,7 +4927,7 @@ export async function getConsultantDashboard(
     .sort({ priority: -1, updatedAt: -1 })
     .limit(100);
 
-  const items = cases.map(toConsultantQueueCaseDto);
+  const items = cases.map((doc) => toConsultantQueueCaseDto(doc, actor));
   let greenCount = 0;
   let yellowCount = 0;
   let redCount = 0;
@@ -5104,14 +5174,14 @@ export async function recordDoctorCaseView(
     await createNotificationsForUsers(teamIds, {
       type: NOTIFICATION_TYPES.CASE_DOCTOR_VIEWED,
       title: `Doctor has viewed Case ID ${caseDoc.caseId}`,
-      body: `${caseDoc.doctorName} opened the delivery without selecting an option yet (“Viewed”).`,
+      body: `${staffDoctorLabel(caseDoc)} opened the delivery without selecting an option yet (“Viewed”).`,
       link: `/app/cases/${caseDoc.caseId}`,
       caseId: caseDoc.caseId,
     });
     await emailUsers(teamIds, {
       subject: `Doctor viewed case ${caseDoc.caseId}`,
       headline: 'Doctor viewed delivery',
-      message: `${caseDoc.doctorName} opened case ${caseDoc.caseId} without selecting an option yet.`,
+      message: `${staffDoctorLabel(caseDoc)} opened case ${caseDoc.caseId} without selecting an option yet.`,
       caseId: caseDoc.caseId,
       patientName: caseDoc.patientName,
     });
@@ -5265,7 +5335,7 @@ export async function submitDoctorDecision(
     headline: 'Doctor decision recorded',
     message:
       note ||
-      `${caseDoc.doctorName} selected ${DOCTOR_DECISION_LABELS[input.decision]} on case ${caseDoc.caseId}.`,
+      `${staffDoctorLabel(caseDoc)} selected ${DOCTOR_DECISION_LABELS[input.decision]} on case ${caseDoc.caseId}.`,
     caseId: caseDoc.caseId,
     patientName: caseDoc.patientName,
   });

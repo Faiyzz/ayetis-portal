@@ -84,7 +84,7 @@ function toQueueItem(
         doctorName: caseDoc.doctorName,
         doctorId: caseDoc.doctorDisplayId,
       })
-    : (caseDoc.doctorDisplayId || caseDoc.doctorName);
+    : (caseDoc.doctorDisplayId || 'Doctor');
   return {
     id: caseDoc.id,
     caseId: caseDoc.caseId,
@@ -171,6 +171,7 @@ export async function getSupervisorDashboard(
     const item = toQueueItem(
       caseDoc,
       caseDoc.assignedDesignerName ?? caseDoc.assignedConsultantName ?? null,
+      { id: actor.id, role: actor.role as Role },
     );
 
     if (caseDoc.priority === 'urgent') urgentCount += 1;

@@ -5,6 +5,7 @@ import {
   isCancellationTrendGranularity,
   isPaymentStatus,
   isRefundStatus,
+  formatDoctorDisplay,
   type CancellationAuditDto,
   type CancellationReportResult,
   type CancellationReportSummary,
@@ -40,6 +41,8 @@ export interface CancellationReportQuery {
   q?: string;
 }
 
+type DoctorViewer = { id: string; role: string };
+
 function escapeCsv(cell: unknown): string {
   return `"${String(cell ?? '').replace(/"/g, '""')}"`;
 }
@@ -65,16 +68,23 @@ function pendingPortion(doc: {
   return 0;
 }
 
-export function toDto(doc: ICancellationAudit): CancellationAuditDto {
+export function toDto(doc: ICancellationAudit, viewer?: DoctorViewer): CancellationAuditDto {
   const refundedAmount = refundedPortion(doc);
   const pendingRefundAmount = pendingPortion(doc);
+  const doctorName = viewer
+    ? formatDoctorDisplay(viewer.role as never, viewer.id, {
+        doctorUserId: String(doc.doctorUserId),
+        doctorName: doc.doctorName,
+        doctorId: doc.doctorDisplayId,
+      })
+    : doc.doctorDisplayId || 'Doctor';
   return {
     id: doc.id,
     caseId: doc.caseId,
     patientId: doc.patientId ?? null,
     patientName: doc.patientName,
     doctorUserId: String(doc.doctorUserId),
-    doctorName: doc.doctorName,
+    doctorName,
     doctorDisplayId: doc.doctorDisplayId ?? null,
     coordinatorId: doc.coordinatorId ? String(doc.coordinatorId) : null,
     coordinatorName: doc.coordinatorName ?? null,
@@ -338,6 +348,7 @@ async function buildTrends(
 
 export async function listCancellationAudits(
   query: CancellationReportQuery,
+  viewer?: DoctorViewer,
 ): Promise<CancellationReportResult> {
   const page = Math.max(1, query.page ?? 1);
   const pageSize = Math.min(200, Math.max(1, query.pageSize ?? 50));
@@ -358,7 +369,7 @@ export async function listCancellationAudits(
   ]);
 
   return {
-    items: items.map(toDto),
+    items: items.map((doc) => toDto(doc, viewer)),
     total,
     page,
     pageSize,
@@ -433,7 +444,7 @@ export async function updateCancellationRefund(
     userAgent: audit.userAgent,
   });
 
-  return toDto(doc);
+  return toDto(doc, { id: actor.id, role: actor.role });
 }
 
 const EXPORT_HEADERS = [
@@ -510,15 +521,21 @@ function exportRow(item: CancellationAuditDto): string[] {
   ];
 }
 
-export async function exportCancellationCsv(query: CancellationReportQuery): Promise<string> {
-  const data = await listCancellationAudits({ ...query, page: 1, pageSize: 5000 });
+export async function exportCancellationCsv(
+  query: CancellationReportQuery,
+  viewer?: DoctorViewer,
+): Promise<string> {
+  const data = await listCancellationAudits({ ...query, page: 1, pageSize: 5000 }, viewer);
   const rows = data.items.map((item) => exportRow(item).map(escapeCsv).join(','));
   return `\uFEFF${[EXPORT_HEADERS.join(','), ...rows].join('\n')}`;
 }
 
 /** SpreadsheetML that Excel opens as .xls without external libraries. */
-export async function exportCancellationExcel(query: CancellationReportQuery): Promise<string> {
-  const data = await listCancellationAudits({ ...query, page: 1, pageSize: 5000 });
+export async function exportCancellationExcel(
+  query: CancellationReportQuery,
+  viewer?: DoctorViewer,
+): Promise<string> {
+  const data = await listCancellationAudits({ ...query, page: 1, pageSize: 5000 }, viewer);
   const headerCells = EXPORT_HEADERS.map((h) => `<Cell><Data ss:Type="String">${escapeXml(h)}</Data></Cell>`).join(
     '',
   );
@@ -549,8 +566,11 @@ export async function exportCancellationExcel(query: CancellationReportQuery): P
 </Workbook>`;
 }
 
-export async function exportCancellationHtml(query: CancellationReportQuery): Promise<string> {
-  const data = await listCancellationAudits({ ...query, page: 1, pageSize: 5000 });
+export async function exportCancellationHtml(
+  query: CancellationReportQuery,
+  viewer?: DoctorViewer,
+): Promise<string> {
+  const data = await listCancellationAudits({ ...query, page: 1, pageSize: 5000 }, viewer);
   const s = data.summary;
   const trendRows = data.trends
     .map(
