@@ -46,6 +46,7 @@ export const createUserSchema = z.object({
   isAvailable: z.boolean().optional(),
   permissionGrants: permissionListSchema.optional(),
   permissionDenies: permissionListSchema.optional(),
+  countryId: z.string().trim().min(1).optional(),
 });
 
 export const updateUserSchema = z
@@ -68,6 +69,19 @@ export const updateUserSchema = z
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',
   });
+
+export const listUsersQuerySchema = z.object({
+  q: z
+    .string()
+    .max(120)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : undefined)),
+  country: z
+    .string()
+    .max(80)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : undefined)),
+});
 
 export const assignPermissionsSchema = z.object({
   grants: permissionListSchema,

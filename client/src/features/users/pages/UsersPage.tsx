@@ -5,27 +5,42 @@ import {
   ROLE_LABELS,
   ROLES,
   type AccountStatus,
+  type CountryDto,
   type PublicUser,
 } from '@ayetis/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { dialog } from '@/components/dialog';
 import { PageHeader } from '@/components/PageHeader';
+import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { usePermissions } from '@/features/auth/permissions';
 import { updateDoctorSlaHours } from '@/features/commercial/api';
 import { toast } from '@/features/notifications/toastStore';
+import { fetchCountries } from '@/features/settings/api';
 import * as usersApi from '@/features/users/api';
 import { getErrorMessage } from '@/lib/api';
+
+function userCountry(user: PublicUser) {
+  return user.assignedCountry || user.companyAddress?.country || '';
+}
 
 export function UsersPage() {
   const { can, PERMISSIONS } = usePermissions();
   const [users, setUsers] = useState<PublicUser[]>([]);
+  const [countries, setCountries] = useState<CountryDto[]>([]);
+  const [q, setQ] = useState('');
+  const [country, setCountry] = useState('');
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  async function load(nextQ = q, nextCountry = country) {
     setLoading(true);
     try {
-      setUsers(await usersApi.fetchUsers());
+      setUsers(
+        await usersApi.fetchUsers({
+          q: nextQ.trim() || undefined,
+          country: nextCountry || undefined,
+        }),
+      );
     } catch (err) {
       toast().error(getErrorMessage(err, 'Unable to load users'));
     } finally {
@@ -35,7 +50,16 @@ export function UsersPage() {
 
   useEffect(() => {
     void load();
+    void fetchCountries(true)
+      .then(setCountries)
+      .catch(() => setCountries([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function handleFilter(event: FormEvent) {
+    event.preventDefault();
+    void load();
+  }
 
   async function setStatus(user: PublicUser, accountStatus: AccountStatus) {
     try {
@@ -169,6 +193,37 @@ export function UsersPage() {
         </div>
       </PageHeader>
 
+      <form
+        onSubmit={handleFilter}
+        className="grid gap-3 rounded-xl border border-line bg-white p-4 sm:grid-cols-[1.4fr_1fr_auto]"
+      >
+        <TextField
+          label="Search"
+          name="q"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Name, email, doctor ID…"
+        />
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-ink">Country</span>
+          <select
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+          >
+            <option value="">All countries</option>
+            {countries.map((item) => (
+              <option key={item.id} value={item.name}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex items-end">
+          <AuthButton>Filter</AuthButton>
+        </div>
+      </form>
+
       <section className="overflow-hidden rounded-xl border border-line bg-white">
         <header className="border-b border-line px-5 py-4">
           <h2 className="text-lg font-semibold text-ink">Directory</h2>
@@ -177,7 +232,7 @@ export function UsersPage() {
         {loading ? (
           <p className="px-5 py-8 text-sm text-muted">Loading users…</p>
         ) : users.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-muted">No users yet.</p>
+          <p className="px-5 py-8 text-sm text-muted">No matching users.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
@@ -185,6 +240,7 @@ export function UsersPage() {
                 <tr>
                   <th className="px-5 py-3 font-medium">User</th>
                   <th className="px-5 py-3 font-medium">Role / Type</th>
+                  <th className="px-5 py-3 font-medium">Country</th>
                   <th className="px-5 py-3 font-medium">Doctor ID</th>
                   <th className="px-5 py-3 font-medium">SLA</th>
                   <th className="px-5 py-3 font-medium">Status</th>
@@ -206,6 +262,7 @@ export function UsersPage() {
                         {ACCOUNT_TYPE_LABELS[user.accountType]}
                       </p>
                     </td>
+                    <td className="px-5 py-3 text-muted">{userCountry(user) || '—'}</td>
                     <td className="px-5 py-3 font-mono text-xs text-muted">
                       {user.doctorId || '—'}
                     </td>

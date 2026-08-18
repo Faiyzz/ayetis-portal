@@ -152,6 +152,8 @@ export interface CreateUserInput {
   isAvailable?: boolean;
   permissionGrants?: Permission[];
   permissionDenies?: Permission[];
+  /** Master-data country; server sets assignedCountry + regionIds from it. */
+  countryId?: string;
 }
 
 export interface UpdateUserInput {

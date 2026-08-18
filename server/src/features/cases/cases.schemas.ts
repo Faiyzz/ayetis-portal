@@ -237,12 +237,14 @@ export const listCasesQuerySchema = z.object({
     .union([z.boolean(), z.literal('true'), z.literal('false')])
     .optional()
     .transform((value) => value === true || value === 'true'),
-  isDemo: z
+    isDemo: z
     .union([z.boolean(), z.literal('true'), z.literal('false')])
     .optional()
     .transform((value) =>
       value === undefined ? undefined : value === true || value === 'true',
     ),
+  countryId: z.string().trim().max(40).optional(),
+  regionId: z.string().trim().max(40).optional(),
 });
 
 export const createCaseSchema = z
@@ -254,6 +256,7 @@ export const createCaseSchema = z
     clinicName: z.string().trim().max(120).optional(),
     practiceName: z.string().trim().max(160).optional(),
     country: z.string().trim().max(80).optional(),
+    countryId: z.string().trim().max(40).optional(),
     chiefComplaint: z.string().trim().max(2000).optional(),
     caseCategory: z
       .string()
@@ -343,6 +346,7 @@ export const updateCaseSchema = z
     clinicName: z.string().trim().max(120).optional(),
     practiceName: z.string().trim().max(160).optional(),
     country: z.string().trim().max(80).optional(),
+    countryId: z.string().trim().max(40).optional(),
     chiefComplaint: z.string().trim().max(2000).optional(),
     caseCategory: z
       .string()
@@ -505,6 +509,10 @@ export const qcApproveSchema = z.object({
     .max(2000)
     .optional()
     .transform((value) => (value && value.length > 0 ? value : undefined)),
+});
+
+export const updateDeliverySchema = z.object({
+  viewLink: z.string().trim().max(2000).optional(),
 });
 
 export const qcRejectSchema = z.object({

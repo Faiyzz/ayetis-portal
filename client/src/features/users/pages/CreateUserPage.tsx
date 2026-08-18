@@ -7,6 +7,7 @@ import {
   getRoleLabel,
   validatePasswordComplexity,
   type CreateUserInput,
+  type CountryDto,
   type ExperienceLevel,
   type RoleDefinitionDto,
 } from '@ayetis/shared';
@@ -16,6 +17,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import { toast } from '@/features/notifications/toastStore';
 import { fetchRoleDefinitions } from '@/features/rbac/api';
+import { fetchCountries } from '@/features/settings/api';
 import * as usersApi from '@/features/users/api';
 import { getErrorMessage, getFieldError } from '@/lib/api';
 
@@ -29,12 +31,14 @@ const INITIAL_FORM: CreateUserInput = {
   roles: [ROLES.DESIGNER],
   isAvailable: true,
   softwareExpertise: [],
+  countryId: '',
 };
 
 export function CreateUserPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState<CreateUserInput>(INITIAL_FORM);
   const [roleDefinitions, setRoleDefinitions] = useState<RoleDefinitionDto[]>([]);
+  const [countries, setCountries] = useState<CountryDto[]>([]);
   const [softwareText, setSoftwareText] = useState('');
   const [error, setError] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -46,6 +50,9 @@ export function CreateUserPage() {
       .catch(() => {
         /* roles API may be unavailable; fall back to primary role only */
       });
+    void fetchCountries(true)
+      .then(setCountries)
+      .catch(() => setCountries([]));
   }, []);
 
   function update<K extends keyof CreateUserInput>(key: K, value: CreateUserInput[K]) {
@@ -99,6 +106,7 @@ export function CreateUserPage() {
           .split(',')
           .map((item) => item.trim())
           .filter(Boolean),
+        countryId: form.countryId || undefined,
       });
       toast().success(`${created.email} created`, 'User created');
       navigate(`/app/users/${created.id}/permissions`, {
@@ -167,6 +175,25 @@ export function CreateUserPage() {
           onChange={(e) => update('email', e.target.value)}
           placeholder="alex@ayetis.com"
         />
+
+        <label className="block space-y-1.5" htmlFor="countryId">
+          <span className="text-sm font-medium text-ink">Country</span>
+          <select
+            id="countryId"
+            name="countryId"
+            value={form.countryId ?? ''}
+            onChange={(e) => update('countryId', e.target.value)}
+            className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] text-ink"
+          >
+            <option value="">Not set</option>
+            {countries.map((country) => (
+              <option key={country.id} value={country.id}>
+                {country.name}
+                {country.regionName ? ` · ${country.regionName}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <TextField
           label="Temporary password"

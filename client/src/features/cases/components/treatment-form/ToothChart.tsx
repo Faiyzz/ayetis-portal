@@ -84,7 +84,7 @@ export function ToothChart({
       <p className="text-center text-xs font-medium text-muted">{modeLabel}</p>
       <div className="mx-auto max-w-xl overflow-x-auto">
         <Odontogram
-          key={`${modeLabel}-${system}`}
+          key={`${modeLabel}-${system}-${fdiListToLibIds(selected).join(',')}`}
           name={`ayetis-odontogram-${modeLabel.replace(/\s+/g, '-').toLowerCase()}`}
           defaultSelected={fdiListToLibIds(selected)}
           notation={notationFor(system)}

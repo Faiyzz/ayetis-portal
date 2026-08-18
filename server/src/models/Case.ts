@@ -194,6 +194,8 @@ export interface ICase extends Document {
   patientGender: string;
   clinicName: string;
   country: string;
+  countryId?: Types.ObjectId;
+  regionId?: Types.ObjectId;
   treatmentSummary: string;
   instructions: string;
   treatmentInstructions: TreatmentInstructions;
@@ -490,6 +492,8 @@ const caseSchema = new Schema<ICase>(
     patientGender: { type: String, default: '', trim: true },
     clinicName: { type: String, default: '', trim: true },
     country: { type: String, default: '', trim: true },
+    countryId: { type: Schema.Types.ObjectId, ref: 'Country', index: true },
+    regionId: { type: Schema.Types.ObjectId, ref: 'Region', index: true },
     treatmentSummary: { type: String, required: true, trim: true },
     instructions: { type: String, default: '', trim: true },
     treatmentInstructions: {

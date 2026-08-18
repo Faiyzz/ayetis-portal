@@ -46,6 +46,7 @@ import {
   resolveUserQcScope,
   resolveUserRoleKeys,
 } from '../rbac/rbac.service';
+import { resolveCountryGeo, userGeoFromResolved } from '../settings/geoResolve';
 
 export type ActorAuditContext = RequestAuditContext & {
   actorId: string;
@@ -220,8 +221,35 @@ export async function listPermissionCatalog() {
   return getPermissionCatalog();
 }
 
-export async function listUsers() {
-  const users = await User.find().sort({ createdAt: -1 });
+export async function listUsers(query: { q?: string; country?: string } = {}) {
+  const filter: Record<string, unknown> = {};
+  const and: Record<string, unknown>[] = [];
+
+  if (query.q?.trim()) {
+    const term = query.q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = { $regex: term, $options: 'i' };
+    and.push({
+      $or: [
+        { firstName: regex },
+        { lastName: regex },
+        { email: regex },
+        { doctorId: regex },
+      ],
+    });
+  }
+
+  if (query.country?.trim()) {
+    const country = query.country.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = { $regex: `^${country}$`, $options: 'i' };
+    and.push({
+      $or: [{ assignedCountry: regex }, { 'companyAddress.country': regex }],
+    });
+  }
+
+  if (and.length === 1) Object.assign(filter, and[0]);
+  else if (and.length > 1) filter.$and = and;
+
+  const users = await User.find(filter).sort({ createdAt: -1 });
   return Promise.all(users.map((user) => toPublicUserAsync(user)));
 }
 
@@ -253,6 +281,7 @@ export async function createUser(
     isAvailable?: boolean;
     permissionGrants?: string[];
     permissionDenies?: string[];
+    countryId?: string;
   },
   audit?: ActorAuditContext,
 ) {
@@ -288,6 +317,14 @@ export async function createUser(
   const primaryRole = input.primaryRole ?? input.role;
   const roles = input.roles?.length ? input.roles : [input.role];
 
+  const geo = input.countryId
+    ? await resolveCountryGeo({ countryId: input.countryId })
+    : null;
+  if (input.countryId && !geo?.countryId) {
+    throw new AppError('Country not found', 400);
+  }
+  const geoFields = geo ? userGeoFromResolved(geo) : {};
+
   const user = await User.create({
     email: input.email,
     password: input.password,
@@ -311,6 +348,7 @@ export async function createUser(
     permissionDenies: denies,
     mustChangePassword: true,
     passwordChangedAt: new Date(),
+    ...geoFields,
   });
 
   if (audit) {

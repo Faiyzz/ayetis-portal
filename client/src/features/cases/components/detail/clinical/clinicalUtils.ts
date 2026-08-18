@@ -508,8 +508,14 @@ export function clinicalAlertLines(caseData: CaseDetailDto): string[] {
   if (prefs.doNotMoveTeeth.length) {
     lines.push(`Do not move: ${prefs.doNotMoveTeeth.join(', ')}`);
   }
+  if (prefs.avoidEngagersTeeth.length) {
+    lines.push(`Avoid engagers: ${prefs.avoidEngagersTeeth.join(', ')}`);
+  }
   if (prefs.extractionTeeth.length) {
     lines.push(`Extractions: ${prefs.extractionTeeth.join(', ')}`);
   }
-  return lines.slice(0, 3);
+  if (prefs.leaveSpacesOpenTeeth.length) {
+    lines.push(`Leave spaces open: ${prefs.leaveSpacesOpenTeeth.join(', ')}`);
+  }
+  return lines;
 }

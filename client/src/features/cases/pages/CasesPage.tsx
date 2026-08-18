@@ -17,6 +17,8 @@ import {
   type CasePriority,
   type CaseStatus,
   type ClarificationButtonState,
+  type CountryDto,
+  type RegionDto,
 } from '@ayetis/shared';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -26,6 +28,7 @@ import { usePermissions } from '@/features/auth/permissions';
 import { fetchCases } from '@/features/cases/api';
 import { SlaProgressBar } from '@/features/cases/components/SlaProgressBar';
 import { toast } from '@/features/notifications/toastStore';
+import { fetchCountries, fetchRegions } from '@/features/settings/api';
 import { getErrorMessage } from '@/lib/api';
 
 function StatusPill({ status }: { status: CaseStatus }) {
@@ -109,6 +112,10 @@ export function CasesPage() {
     return fromUrl && isCaseStatus(fromUrl) ? fromUrl : '';
   });
   const [priority, setPriority] = useState<CasePriority | ''>('');
+  const [countryId, setCountryId] = useState('');
+  const [regionId, setRegionId] = useState('');
+  const [countries, setCountries] = useState<CountryDto[]>([]);
+  const [regions, setRegions] = useState<RegionDto[]>([]);
   const [categoryTab, setCategoryTab] = useState<CaseCategory | 'all'>('all');
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [demoOnly, setDemoOnly] = useState(searchParams.get('isDemo') === 'true');
@@ -139,6 +146,8 @@ export function CasesPage() {
         priority,
         includeDeleted: can(PERMISSIONS.CASE_DELETE) ? includeDeleted : false,
         isDemo: demoOnly ? true : undefined,
+        countryId: countryId || undefined,
+        regionId: regionId || undefined,
       });
       setItems(data.items);
       setTotal(data.total);
@@ -152,6 +161,12 @@ export function CasesPage() {
 
   useEffect(() => {
     void load(1);
+    void Promise.all([fetchCountries(true), fetchRegions()])
+      .then(([nextCountries, nextRegions]) => {
+        setCountries(nextCountries);
+        setRegions(nextRegions);
+      })
+      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -193,7 +208,7 @@ export function CasesPage() {
 
       <form
         onSubmit={handleFilter}
-        className="grid gap-3 rounded-xl border border-line bg-white p-4 lg:grid-cols-[1.4fr_1fr_1fr_auto]"
+        className="grid gap-3 rounded-xl border border-line bg-white p-4 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_auto]"
       >
         <TextField
           label="Search"
@@ -228,6 +243,36 @@ export function CasesPage() {
             {ALL_CASE_PRIORITIES.map((value) => (
               <option key={value} value={value}>
                 {CASE_PRIORITY_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-ink">Region</span>
+          <select
+            value={regionId}
+            onChange={(e) => setRegionId(e.target.value)}
+            className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+          >
+            <option value="">All regions</option>
+            {regions.map((region) => (
+              <option key={region.id} value={region.id}>
+                {region.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-ink">Country</span>
+          <select
+            value={countryId}
+            onChange={(e) => setCountryId(e.target.value)}
+            className="w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+          >
+            <option value="">All countries</option>
+            {countries.map((country) => (
+              <option key={country.id} value={country.id}>
+                {country.name}
               </option>
             ))}
           </select>

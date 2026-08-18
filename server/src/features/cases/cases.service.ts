@@ -159,6 +159,7 @@ import {
   syncRestoreStatus,
   toLifecycleDto,
 } from '../../services/fileLifecycle.service';
+import { resolveCountryGeo } from '../settings/geoResolve';
 
 export interface CaseActor {
   id: string;
@@ -429,6 +430,9 @@ async function toListItem(
       ? (caseDoc.previousStatusForAck ?? null)
       : null,
     statusPendingDoctorAck: Boolean(caseDoc.statusPendingDoctorAck),
+    country: caseDoc.country || '',
+    countryId: caseDoc.countryId ? String(caseDoc.countryId) : null,
+    regionId: caseDoc.regionId ? String(caseDoc.regionId) : null,
     createdAt: caseDoc.createdAt.toISOString(),
     cutRequired: Boolean(caseDoc.cutRequired),
     cutPhase: (caseDoc.cutPhase ?? CUT_PHASES.NONE) as CutPhase,
@@ -549,7 +553,6 @@ async function toDetail(
       ? caseDoc.patientDateOfBirth.toISOString().slice(0, 10)
       : null,
     instructions: caseDoc.instructions,
-    country: caseDoc.country,
     treatmentInstructions: normalizeTreatmentInstructions(caseDoc.treatmentInstructions),
     recordsNumbering: nestedToPlain(caseDoc.recordsNumbering, { ...EMPTY_RECORDS_NUMBERING }),
     clinicalPreferences: nestedToPlain(caseDoc.clinicalPreferences, {
@@ -974,6 +977,8 @@ export async function listCases(
     sortDir?: 'asc' | 'desc';
     includeDeleted?: boolean;
     isDemo?: boolean;
+    countryId?: string;
+    regionId?: string;
   },
 ): Promise<CaseListResult> {
   const page = Math.max(1, query.page ?? 1);
@@ -1003,6 +1008,25 @@ export async function listCases(
   }
   if (query.isDemo === true) conditions.push({ isDemo: true });
   if (query.isDemo === false) conditions.push({ isDemo: { $ne: true } });
+  if (query.countryId?.trim()) {
+    const geo = await resolveCountryGeo({ countryId: query.countryId.trim() });
+    const countryClause: Record<string, unknown>[] = [{ countryId: query.countryId.trim() }];
+    if (geo.country) {
+      countryClause.push({ country: new RegExp(`^${escapeRegex(geo.country)}$`, 'i') });
+    }
+    conditions.push({ $or: countryClause });
+  }
+  if (query.regionId?.trim()) {
+    const { Country } = await import('../../models/Settings');
+    const inRegion = await Country.find({ regionId: query.regionId.trim() }).select('_id name');
+    conditions.push({
+      $or: [
+        { regionId: query.regionId.trim() },
+        { countryId: { $in: inRegion.map((item) => item._id) } },
+        { country: { $in: inRegion.map((item) => item.name) } },
+      ],
+    });
+  }
 
   if (query.q?.trim()) {
     const term = query.q.trim();
@@ -1316,6 +1340,11 @@ export async function createCase(
     (input.chiefComplaint ?? '').trim() ||
     (asDraft ? 'Draft' : '');
 
+  const geo = await resolveCountryGeo({
+    countryId: input.countryId,
+    countryName: input.country,
+  });
+
   const caseDoc = new Case({
     caseId,
     doctorId: doctor._id,
@@ -1334,7 +1363,9 @@ export async function createCase(
     patientAge: input.patientAge ?? undefined,
     patientGender: input.patientGender?.trim() ?? '',
     clinicName: input.clinicName?.trim() ?? '',
-    country: input.country?.trim() ?? '',
+    country: geo.country,
+    countryId: geo.countryId,
+    regionId: geo.regionId,
     treatmentSummary,
     instructions: input.instructions?.trim() ?? '',
     treatmentInstructions: normalizeTreatmentInstructions(input.treatmentInstructions),
@@ -1521,6 +1552,16 @@ export async function updateCase(
       from: previous ?? null,
       to: next ?? null,
     });
+  }
+
+  if (input.country !== undefined || input.countryId !== undefined) {
+    const geo = await resolveCountryGeo({
+      countryId: input.countryId,
+      countryName: caseDoc.country,
+    });
+    caseDoc.country = geo.country;
+    caseDoc.countryId = geo.countryId;
+    caseDoc.regionId = geo.regionId;
   }
 
   if (input.treatmentInstructions) {
@@ -3134,6 +3175,104 @@ export async function approveQcCase(
   return await toDetail(caseDoc, actor);
 }
 
+export async function updateCaseDelivery(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: { viewLink?: string },
+  videoFile?: Express.Multer.File,
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  const canQc = permissionsInclude(actor.permissions, PERMISSIONS.CASE_QC_REVIEW);
+  const canConsult = permissionsInclude(actor.permissions, PERMISSIONS.CASE_CONSULT);
+  if (!canQc && !canConsult) {
+    throw new AppError('You do not have permission to update the delivery package', 403);
+  }
+  if (canQc && !canConsult) {
+    assertCanQcReview(actor, caseDoc);
+  }
+  if (caseDoc.isDeleted) throw new AppError('Cannot update delivery on a deleted case', 400);
+
+  const existing = caseDoc.delivery;
+  const viewLink =
+    input.viewLink !== undefined ? input.viewLink.trim() : existing?.viewLink || '';
+  let videoFilename = existing?.videoFilename;
+  let videoStorageKey = existing?.videoStorageKey;
+  const uploadedAt = new Date();
+  let hot = existing
+    ? {
+        storageTier: existing.storageTier,
+        restoreStatus: existing.restoreStatus,
+        hotUntil: existing.hotUntil,
+      }
+    : initialHotFields(uploadedAt);
+
+  if (videoFile) {
+    const saved = await persistUploadedFile({
+      caseId: caseDoc.caseId,
+      originalName: videoFile.originalname,
+      mimeType: videoFile.mimetype,
+      buffer: videoFile.buffer,
+      tempPath: videoFile.path,
+    });
+    videoFilename = videoFile.originalname;
+    videoStorageKey = saved.storageKey;
+    hot = initialHotFields(uploadedAt);
+  }
+
+  if (!viewLink && !videoStorageKey) {
+    throw new AppError('Provide a view link or a delivery video', 400);
+  }
+
+  caseDoc.delivery = {
+    viewLink,
+    videoFilename,
+    videoStorageKey,
+    uploadedAt,
+    uploadedById: new Types.ObjectId(actor.id),
+    uploadedByName: actorName(actor),
+    storageTier: hot.storageTier,
+    restoreStatus: hot.restoreStatus,
+    hotUntil: hot.hotUntil,
+    coldSince: videoFile ? undefined : existing?.coldSince,
+    lastAccessedAt: existing?.lastAccessedAt,
+    restoreRequestedAt: videoFile ? undefined : existing?.restoreRequestedAt,
+    restoreError: videoFile ? undefined : existing?.restoreError,
+  };
+  caseDoc.markModified('delivery');
+
+  pushHistory(caseDoc, {
+    action: 'delivery_updated',
+    summary: `${actorName(actor)} updated the delivery package`,
+    actor,
+    metadata: {
+      hasLink: Boolean(viewLink),
+      hasVideo: Boolean(videoStorageKey),
+      videoReplaced: Boolean(videoFile),
+    },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_UPDATE,
+    summary: `${actor.email} updated delivery for ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    metadata: { viewLink: viewLink || undefined, hasVideo: Boolean(videoStorageKey) },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
+
+  return await toDetail(caseDoc, actor);
+}
+
 export async function rejectQcCase(
   actor: CaseActor,
   caseIdOrMongoId: string,
@@ -3693,7 +3832,11 @@ export async function assignCase(
   } else if (input.mode === 'auto_queue') {
     const { assignCaseByRules } = await import('../rbac/rbac.service');
     const matchedId = await assignCaseByRules(
-      { country: caseDoc.country || '' },
+      {
+        country: caseDoc.country || '',
+        countryId: caseDoc.countryId ? String(caseDoc.countryId) : null,
+        regionId: caseDoc.regionId ? String(caseDoc.regionId) : null,
+      },
       ASSIGNMENT_QUEUES.DESIGNER,
     );
 
@@ -3779,7 +3922,11 @@ export async function assignCase(
 
     const { assignCaseByRules } = await import('../rbac/rbac.service');
     const matchedId = await assignCaseByRules(
-      { country: caseDoc.country || '' },
+      {
+        country: caseDoc.country || '',
+        countryId: caseDoc.countryId ? String(caseDoc.countryId) : null,
+        regionId: caseDoc.regionId ? String(caseDoc.regionId) : null,
+      },
       ASSIGNMENT_QUEUES.CUT,
     );
 

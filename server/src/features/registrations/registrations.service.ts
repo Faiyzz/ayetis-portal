@@ -32,6 +32,7 @@ import {
   type RequestAuditContext,
 } from '../audit/audit.service';
 import { toPublicUserAsync } from '../users/users.service';
+import { resolveCountryGeo, userGeoFromResolved } from '../settings/geoResolve';
 
 export type RegistrationActor = {
   id: string;
@@ -138,6 +139,12 @@ export async function approveRegistration(
     ...(request.companyAddress ?? {}),
   };
 
+  const geo = await resolveCountryGeo({
+    countryId: request.countryId ? String(request.countryId) : undefined,
+    countryName: request.countryName || address.country,
+  });
+  const geoFields = userGeoFromResolved(geo);
+
   const user = await User.create({
     email: request.email,
     password: request.passwordHash,
@@ -152,7 +159,9 @@ export async function approveRegistration(
     companyAddress: isCorporate ? address : undefined,
     corporateCustomerId,
     preferredCurrency: request.preferredCurrency || 'USD',
-    assignedCountry: request.countryName || address.country || undefined,
+    assignedCountry: geoFields.assignedCountry || request.countryName || address.country || undefined,
+    regionIds: geoFields.regionIds,
+    scopedCountryIds: geoFields.scopedCountryIds,
     permissionGrants: [],
     permissionDenies: [],
     mustChangePassword: false,

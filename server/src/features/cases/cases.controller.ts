@@ -30,6 +30,8 @@ export async function listCases(req: AuthenticatedRequest, res: Response, next: 
         req.query.isDemo === undefined
           ? undefined
           : String(req.query.isDemo) === 'true',
+      countryId: req.query.countryId ? String(req.query.countryId) : undefined,
+      regionId: req.query.regionId ? String(req.query.regionId) : undefined,
     });
     res.json({ success: true, data });
   } catch (error) {
@@ -615,6 +617,25 @@ export async function approveQc(req: AuthenticatedRequest, res: Response, next: 
       getRequestAuditContext(req),
     );
     res.json({ success: true, data, message: 'Case approved by QC' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateDelivery(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const data = await casesService.updateCaseDelivery(
+      await actor(req),
+      req.params.caseId,
+      { viewLink: req.body.viewLink },
+      req.file,
+      getRequestAuditContext(req),
+    );
+    res.json({ success: true, data, message: 'Delivery package saved' });
   } catch (error) {
     next(error);
   }

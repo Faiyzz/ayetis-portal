@@ -18,6 +18,8 @@ import {
   type QcScope,
   type RoleDefinitionDto,
   type TeamDto,
+  type CountryDto,
+  type RegionDto,
 } from '@ayetis/shared';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { PageHeader } from '@/components/PageHeader';
@@ -25,6 +27,7 @@ import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI'
 import { usePermissions } from '@/features/auth/permissions';
 import { toast } from '@/features/notifications/toastStore';
 import * as rbacApi from '@/features/rbac/api';
+import { fetchCountries, fetchRegions } from '@/features/settings/api';
 import { PermissionEditor } from '@/features/users/components/PermissionEditor';
 import { getErrorMessage } from '@/lib/api';
 
@@ -43,6 +46,7 @@ const EMPTY_TEAM = {
   name: '',
   code: '',
   memberIds: '',
+  regionIds: [] as string[],
   isActive: true,
 };
 
@@ -52,9 +56,9 @@ const EMPTY_RULE = {
   targetQueue: 'designer' as AssignmentQueue,
   roleKeys: '',
   teamIds: '',
-  regionIds: '',
-  countryIds: '',
-  excludedCountryIds: '',
+  regionIds: [] as string[],
+  countryIds: [] as string[],
+  excludedCountryIds: [] as string[],
   experienceLevels: [] as ExperienceLevel[],
   softwareKeys: '',
   requireAvailable: true,
@@ -68,6 +72,44 @@ function parseCsv(value: string): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function toggleId(list: string[], id: string, checked: boolean) {
+  return checked ? [...new Set([...list, id])] : list.filter((item) => item !== id);
+}
+
+function IdChecklist({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: Array<{ id: string; name: string }>;
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  return (
+    <fieldset className="space-y-1.5">
+      <legend className="text-sm font-medium text-ink">{label}</legend>
+      <div className="max-h-40 overflow-y-auto rounded-xl border border-line p-2">
+        {options.length === 0 ? (
+          <p className="px-1 py-1 text-xs text-muted">No options.</p>
+        ) : (
+          options.map((opt) => (
+            <label key={opt.id} className="flex items-center gap-2 py-0.5 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={selected.includes(opt.id)}
+                onChange={(e) => onChange(toggleId(selected, opt.id, e.target.checked))}
+              />
+              {opt.name}
+            </label>
+          ))
+        )}
+      </div>
+    </fieldset>
+  );
 }
 
 function remapCatalog(
@@ -107,6 +149,8 @@ export function RolePermissionsPage() {
   const [cloneForm, setCloneForm] = useState({ sourceKey: '', name: '', key: '' });
   const [teamForm, setTeamForm] = useState({ ...EMPTY_TEAM });
   const [ruleForm, setRuleForm] = useState({ ...EMPTY_RULE });
+  const [regions, setRegions] = useState<RegionDto[]>([]);
+  const [countries, setCountries] = useState<CountryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -142,7 +186,13 @@ export function RolePermissionsPage() {
     setLoading(true);
     setError('');
     try {
-      await Promise.all([loadRoles(), loadTeams(), loadRules()]);
+      await Promise.all([
+        loadRoles(),
+        loadTeams(),
+        loadRules(),
+        fetchRegions().then(setRegions).catch(() => setRegions([])),
+        fetchCountries(true).then(setCountries).catch(() => setCountries([])),
+      ]);
       if (canViewRoles) {
         const matrix = await rbacApi.fetchPermissionMatrix();
         setMatrixCatalog(remapCatalog(matrix.permissions));
@@ -295,6 +345,7 @@ export function RolePermissionsPage() {
         name: teamForm.name.trim(),
         code: teamForm.code.trim() || null,
         memberIds: parseCsv(teamForm.memberIds),
+        regionIds: teamForm.regionIds,
         isActive: teamForm.isActive,
       };
       if (teamForm.id) {
@@ -337,9 +388,9 @@ export function RolePermissionsPage() {
         targetQueue: ruleForm.targetQueue,
         roleKeys: parseCsv(ruleForm.roleKeys),
         teamIds: parseCsv(ruleForm.teamIds),
-        regionIds: parseCsv(ruleForm.regionIds),
-        countryIds: parseCsv(ruleForm.countryIds),
-        excludedCountryIds: parseCsv(ruleForm.excludedCountryIds),
+        regionIds: ruleForm.regionIds,
+        countryIds: ruleForm.countryIds,
+        excludedCountryIds: ruleForm.excludedCountryIds,
         experienceLevels: ruleForm.experienceLevels,
         softwareKeys: parseCsv(ruleForm.softwareKeys),
         requireAvailable: ruleForm.requireAvailable,
@@ -755,6 +806,12 @@ export function RolePermissionsPage() {
               value={teamForm.memberIds}
               onChange={(e) => setTeamForm((p) => ({ ...p, memberIds: e.target.value }))}
             />
+            <IdChecklist
+              label="Regions"
+              options={regions.map((region) => ({ id: region.id, name: `${region.name} (${region.code})` }))}
+              selected={teamForm.regionIds}
+              onChange={(regionIds) => setTeamForm((p) => ({ ...p, regionIds }))}
+            />
             <label className="flex items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
@@ -771,6 +828,7 @@ export function RolePermissionsPage() {
               <thead className="bg-surface text-muted">
                 <tr>
                   <th className="px-4 py-3 font-medium">Team</th>
+                  <th className="px-4 py-3 font-medium">Regions</th>
                   <th className="px-4 py-3 font-medium">Members</th>
                   <th className="px-4 py-3 font-medium" />
                 </tr>
@@ -781,6 +839,11 @@ export function RolePermissionsPage() {
                     <td className="px-4 py-3">
                       <p className="font-medium text-ink">{team.name}</p>
                       <p className="text-xs text-muted">{team.code ?? team.id}</p>
+                    </td>
+                    <td className="px-4 py-3 text-muted">
+                      {team.regionIds
+                        .map((id) => regions.find((region) => region.id === id)?.code ?? id)
+                        .join(', ') || '—'}
                     </td>
                     <td className="px-4 py-3 text-muted">{team.memberIds.length}</td>
                     <td className="px-4 py-3 text-right">
@@ -793,6 +856,7 @@ export function RolePermissionsPage() {
                             name: team.name,
                             code: team.code ?? '',
                             memberIds: team.memberIds.join(', '),
+                            regionIds: team.regionIds,
                             isActive: team.isActive,
                           })
                         }
@@ -859,23 +923,23 @@ export function RolePermissionsPage() {
               value={ruleForm.teamIds}
               onChange={(e) => setRuleForm((p) => ({ ...p, teamIds: e.target.value }))}
             />
-            <TextField
-              label="Region IDs (comma-separated)"
-              name="regionIds"
-              value={ruleForm.regionIds}
-              onChange={(e) => setRuleForm((p) => ({ ...p, regionIds: e.target.value }))}
+            <IdChecklist
+              label="Regions"
+              options={regions.map((region) => ({ id: region.id, name: `${region.name} (${region.code})` }))}
+              selected={ruleForm.regionIds}
+              onChange={(regionIds) => setRuleForm((p) => ({ ...p, regionIds }))}
             />
-            <TextField
-              label="Country IDs (comma-separated)"
-              name="countryIds"
-              value={ruleForm.countryIds}
-              onChange={(e) => setRuleForm((p) => ({ ...p, countryIds: e.target.value }))}
+            <IdChecklist
+              label="Countries"
+              options={countries.map((country) => ({ id: country.id, name: country.name }))}
+              selected={ruleForm.countryIds}
+              onChange={(countryIds) => setRuleForm((p) => ({ ...p, countryIds }))}
             />
-            <TextField
-              label="Excluded country IDs (comma-separated)"
-              name="excludedCountryIds"
-              value={ruleForm.excludedCountryIds}
-              onChange={(e) => setRuleForm((p) => ({ ...p, excludedCountryIds: e.target.value }))}
+            <IdChecklist
+              label="Excluded countries"
+              options={countries.map((country) => ({ id: country.id, name: country.name }))}
+              selected={ruleForm.excludedCountryIds}
+              onChange={(excludedCountryIds) => setRuleForm((p) => ({ ...p, excludedCountryIds }))}
             />
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-ink">Experience levels</span>
@@ -992,9 +1056,9 @@ export function RolePermissionsPage() {
                             targetQueue: rule.targetQueue,
                             roleKeys: rule.roleKeys.join(', '),
                             teamIds: rule.teamIds.join(', '),
-                            regionIds: rule.regionIds.join(', '),
-                            countryIds: rule.countryIds.join(', '),
-                            excludedCountryIds: rule.excludedCountryIds.join(', '),
+                            regionIds: rule.regionIds,
+                            countryIds: rule.countryIds,
+                            excludedCountryIds: rule.excludedCountryIds,
                             experienceLevels: rule.experienceLevels,
                             softwareKeys: rule.softwareKeys.join(', '),
                             requireAvailable: rule.requireAvailable,
