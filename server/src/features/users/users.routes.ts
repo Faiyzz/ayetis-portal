@@ -6,6 +6,7 @@ import * as usersController from './users.controller';
 import {
   assignPermissionsSchema,
   createUserSchema,
+  listUsersQuerySchema,
   updateUserSchema,
 } from './users.schemas';
 
@@ -38,7 +39,12 @@ router.put(
   usersController.updateRolePermissions,
 );
 
-router.get('/', requirePermission(PERMISSIONS.USER_LIST), usersController.listUsers);
+router.get(
+  '/',
+  requirePermission(PERMISSIONS.USER_LIST),
+  validate(listUsersQuerySchema, 'query'),
+  usersController.listUsers,
+);
 
 router.post(
   '/',

@@ -28,6 +28,7 @@ import {
   type CaseDetailNavSection,
 } from '@/features/cases/caseDetailNav';
 import { CaseFilesPanel } from '@/features/cases/components/CaseFilesPanel';
+import { CaseViewPanel } from '@/features/cases/components/CaseViewPanel';
 import { CaseHistoryPanel } from '@/features/cases/components/CaseHistoryPanel';
 import { CasePaymentPanel } from '@/features/cases/components/CasePaymentPanel';
 import { ClarificationsPanel } from '@/features/cases/components/ClarificationsPanel';
@@ -55,6 +56,7 @@ const TAB_IDS = [
   'work',
   'clinical',
   'files',
+  'view',
   'communication',
   'finance',
   'history',
@@ -88,6 +90,7 @@ function buildSections(args: {
       id: 'files',
       label: files > 0 ? `Files (${files})` : 'Files',
     },
+    { id: 'view', label: 'View' },
     {
       id: 'communication',
       label:
@@ -274,6 +277,7 @@ export function CaseDetailPage() {
       'delivery-package': 'work',
       payment: 'finance',
       'patient-files': 'files',
+      view: 'view',
       'treatment-instructions': 'clinical',
       'production-notes': 'communication',
       history: 'history',
@@ -756,6 +760,15 @@ export function CaseDetailPage() {
                       caseId={caseData.caseId}
                       files={caseData.files}
                       canUpload={canUpload && !editsLocked}
+                      onUpdated={setCaseData}
+                    />
+                  ) : null}
+
+                  {tabId === 'view' ? (
+                    <CaseViewPanel
+                      caseData={caseData}
+                      canEdit={(canQc || canConsult) && !caseData.isDeleted}
+                      isDoctor={user?.id === caseData.doctorId}
                       onUpdated={setCaseData}
                     />
                   ) : null}

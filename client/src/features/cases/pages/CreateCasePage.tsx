@@ -484,7 +484,7 @@ export function CreateCasePage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="w-full space-y-5">
       <PageHeader
         eyebrow={isResume ? `Draft ${caseId}` : 'Cases'}
         title={isResume ? `Resume Draft — ${form.patientName || caseId}` : 'Digital Treatment Planning'}

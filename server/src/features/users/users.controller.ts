@@ -63,9 +63,12 @@ export async function updateRolePermissions(
   }
 }
 
-export async function listUsers(_req: AuthenticatedRequest, res: Response, next: NextFunction) {
+export async function listUsers(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const data = await usersService.listUsers();
+    const data = await usersService.listUsers({
+      q: typeof req.query.q === 'string' ? req.query.q : undefined,
+      country: typeof req.query.country === 'string' ? req.query.country : undefined,
+    });
     res.json({ success: true, data });
   } catch (error) {
     next(error);

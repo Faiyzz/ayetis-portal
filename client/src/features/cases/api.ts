@@ -25,6 +25,8 @@ export async function fetchCases(params: {
   sortDir?: 'asc' | 'desc';
   includeDeleted?: boolean;
   isDemo?: boolean;
+  countryId?: string;
+  regionId?: string;
 }) {
   const { data } = await api.get('/cases', {
     params: {
@@ -41,6 +43,8 @@ export async function fetchCases(params: {
       sortDir: params.sortDir || undefined,
       includeDeleted: params.includeDeleted || undefined,
       isDemo: params.isDemo === undefined ? undefined : params.isDemo,
+      countryId: params.countryId || undefined,
+      regionId: params.regionId || undefined,
     },
   });
   return data.data as {
@@ -318,6 +322,28 @@ export async function approveQcCase(
   if (payload.video) form.append('video', payload.video);
 
   const { data } = await api.post(`/cases/${caseId}/qc/approve`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    transformRequest: [
+      (body, headers) => {
+        if (body instanceof FormData) {
+          delete headers['Content-Type'];
+        }
+        return body;
+      },
+    ],
+  });
+  return data.data;
+}
+
+export async function updateCaseDelivery(
+  caseId: string,
+  payload: { viewLink?: string; video?: File | null },
+): Promise<CaseDetailDto> {
+  const form = new FormData();
+  if (payload.viewLink !== undefined) form.append('viewLink', payload.viewLink.trim());
+  if (payload.video) form.append('video', payload.video);
+
+  const { data } = await api.patch(`/cases/${caseId}/delivery`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
     transformRequest: [
       (body, headers) => {

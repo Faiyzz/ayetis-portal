@@ -40,7 +40,8 @@ router.get(
   validate(listQuerySchema, 'query'),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const data = await service.listCancellationAudits(req.query as never);
+      const viewer = { id: req.user!.id, role: req.user!.role };
+      const data = await service.listCancellationAudits(req.query as never, viewer);
       res.json({ success: true, data });
     } catch (error) {
       next(error);
@@ -54,7 +55,10 @@ router.get(
   validate(listQuerySchema, 'query'),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const csv = await service.exportCancellationCsv(req.query as never);
+      const csv = await service.exportCancellationCsv(req.query as never, {
+        id: req.user!.id,
+        role: req.user!.role,
+      });
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename="cancellation-audit.csv"');
       res.send(csv);
@@ -70,7 +74,10 @@ router.get(
   validate(listQuerySchema, 'query'),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const xml = await service.exportCancellationExcel(req.query as never);
+      const xml = await service.exportCancellationExcel(req.query as never, {
+        id: req.user!.id,
+        role: req.user!.role,
+      });
       res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename="cancellation-audit.xls"');
       res.send(xml);
@@ -86,7 +93,10 @@ router.get(
   validate(listQuerySchema, 'query'),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const html = await service.exportCancellationHtml(req.query as never);
+      const html = await service.exportCancellationHtml(req.query as never, {
+        id: req.user!.id,
+        role: req.user!.role,
+      });
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Disposition', 'inline; filename="cancellation-audit.html"');
       res.send(html);

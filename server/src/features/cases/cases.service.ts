@@ -68,6 +68,7 @@ import {
   labelForMonthKey,
   monthRangeUtc,
   formatDoctorDisplay,
+  canViewDoctorName,
   permissionsInclude,
   quarterRangeUtc,
   recentMonthOptions,
@@ -159,6 +160,7 @@ import {
   syncRestoreStatus,
   toLifecycleDto,
 } from '../../services/fileLifecycle.service';
+import { resolveCountryGeo } from '../settings/geoResolve';
 
 export interface CaseActor {
   id: string;
@@ -177,6 +179,52 @@ export interface CaseActor {
 
 function actorName(actor: CaseActor) {
   return `${actor.firstName} ${actor.lastName}`.trim();
+}
+
+type DoctorViewer = { id: string; role: string; roles?: string[] };
+
+function doctorNameForViewer(
+  caseDoc: Pick<ICase, 'doctorId' | 'doctorName' | 'doctorDisplayId'>,
+  viewer?: DoctorViewer,
+): string {
+  if (!viewer) return caseDoc.doctorDisplayId || 'Doctor';
+  return formatDoctorDisplay(
+    viewer.role as Role,
+    viewer.id,
+    {
+      doctorUserId: String(caseDoc.doctorId),
+      doctorName: caseDoc.doctorName,
+      doctorId: caseDoc.doctorDisplayId,
+    },
+    viewer.roles,
+  );
+}
+
+function doctorEmailForViewer(
+  caseDoc: Pick<ICase, 'doctorId' | 'doctorEmail'>,
+  viewer?: DoctorViewer,
+): string {
+  if (
+    !viewer ||
+    !canViewDoctorName(viewer.role as Role, viewer.id, String(caseDoc.doctorId), viewer.roles)
+  ) {
+    return '';
+  }
+  return caseDoc.doctorEmail;
+}
+
+function staffDoctorLabel(caseDoc: Pick<ICase, 'doctorDisplayId'>): string {
+  return caseDoc.doctorDisplayId || 'Doctor';
+}
+
+function personNameForViewer(
+  personId: string | null | undefined,
+  personName: string | null | undefined,
+  caseDoc: Pick<ICase, 'doctorId' | 'doctorName' | 'doctorDisplayId'>,
+  viewer?: DoctorViewer,
+): string | null {
+  if (!personId || personId !== String(caseDoc.doctorId)) return personName ?? null;
+  return doctorNameForViewer(caseDoc, viewer);
 }
 
 function pushHistory(
@@ -199,17 +247,33 @@ function pushHistory(
   } as ICase['history'][number]);
 }
 
+function nestedToPlain<T extends Record<string, unknown>>(value: unknown, empty: T): T {
+  if (!value || typeof value !== 'object') return { ...empty };
+  const rec = value as { toObject?: (opts?: object) => Record<string, unknown> };
+  const raw =
+    typeof rec.toObject === 'function'
+      ? rec.toObject({ flattenMaps: true, versionKey: false })
+      : { ...(value as Record<string, unknown>) };
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(raw)) {
+    if (key.startsWith('$') || key === '_id' || key === '__v' || key === '_doc') continue;
+    cleaned[key] = val;
+  }
+  return { ...empty, ...cleaned };
+}
+
 function normalizeTreatmentInstructions(
   input?: Partial<TreatmentInstructions> | null,
 ): TreatmentInstructions {
+  const plain = nestedToPlain(input, { ...EMPTY_TREATMENT_INSTRUCTIONS });
   return {
-    arches: (input?.arches as TreatmentInstructions['arches']) || '',
-    applianceType: input?.applianceType?.trim() ?? '',
-    treatmentGoal: input?.treatmentGoal?.trim() ?? '',
-    biteDetails: input?.biteDetails?.trim() ?? '',
-    retainers: input?.retainers?.trim() ?? '',
-    specialRequirements: input?.specialRequirements?.trim() ?? '',
-    additionalNotes: input?.additionalNotes?.trim() ?? '',
+    arches: (plain.arches as TreatmentInstructions['arches']) || '',
+    applianceType: plain.applianceType?.trim() ?? '',
+    treatmentGoal: plain.treatmentGoal?.trim() ?? '',
+    biteDetails: plain.biteDetails?.trim() ?? '',
+    retainers: plain.retainers?.trim() ?? '',
+    specialRequirements: plain.specialRequirements?.trim() ?? '',
+    additionalNotes: plain.additionalNotes?.trim() ?? '',
   };
 }
 
@@ -343,7 +407,7 @@ function slaSnapshot(caseDoc: ICase) {
 
 async function toListItem(
   caseDoc: ICase,
-  viewer?: { id: string; role: string },
+  viewer?: { id: string; role: string; roles?: string[] },
 ): Promise<CaseListItemDto> {
   const openClarificationCount = await countOpenClarifications(caseDoc._id as Types.ObjectId);
   const clarificationButtonState = await getClarificationButtonStateForCase(
@@ -362,13 +426,8 @@ async function toListItem(
       });
   const ref = queueReferenceDate(caseDoc);
   const doctorDisplayId = caseDoc.doctorDisplayId ?? null;
-  const doctorName = viewer
-    ? formatDoctorDisplay(viewer.role as Role, viewer.id, {
-        doctorUserId: String(caseDoc.doctorId),
-        doctorName: caseDoc.doctorName,
-        doctorId: doctorDisplayId,
-      })
-    : caseDoc.doctorName;
+  const doctorName = doctorNameForViewer(caseDoc, viewer);
+  const doctorEmail = doctorEmailForViewer(caseDoc, viewer);
 
   return {
     id: caseDoc.id,
@@ -378,7 +437,7 @@ async function toListItem(
     doctorId: String(caseDoc.doctorId),
     doctorName,
     doctorDisplayId,
-    doctorEmail: caseDoc.doctorEmail,
+    doctorEmail,
     organizationId: caseDoc.organizationId ? String(caseDoc.organizationId) : null,
     facilityId: caseDoc.facilityId ? String(caseDoc.facilityId) : null,
     corporateCustomerId: caseDoc.corporateCustomerId ?? null,
@@ -413,6 +472,9 @@ async function toListItem(
       ? (caseDoc.previousStatusForAck ?? null)
       : null,
     statusPendingDoctorAck: Boolean(caseDoc.statusPendingDoctorAck),
+    country: caseDoc.country || '',
+    countryId: caseDoc.countryId ? String(caseDoc.countryId) : null,
+    regionId: caseDoc.regionId ? String(caseDoc.regionId) : null,
     createdAt: caseDoc.createdAt.toISOString(),
     cutRequired: Boolean(caseDoc.cutRequired),
     cutPhase: (caseDoc.cutPhase ?? CUT_PHASES.NONE) as CutPhase,
@@ -444,13 +506,15 @@ function mapCutRevisions(caseDoc: ICase): CutRevisionDto[] {
   }));
 }
 
-function mapClinicalRemarks(caseDoc: ICase): ClinicalRemarkDto[] {
+function mapClinicalRemarks(caseDoc: ICase, viewer?: DoctorViewer): ClinicalRemarkDto[] {
   return (caseDoc.clinicalRemarks ?? []).map((remark) => ({
     id: String(remark._id),
     body: remark.body,
     indicator: remark.indicator,
     authorId: String(remark.authorId),
-    authorName: remark.authorName,
+    authorName:
+      personNameForViewer(String(remark.authorId), remark.authorName, caseDoc, viewer) ??
+      remark.authorName,
     createdAt: remark.createdAt.toISOString(),
   }));
 }
@@ -484,7 +548,7 @@ function mapQcReviews(caseDoc: ICase): QcReviewDto[] {
   }));
 }
 
-function mapHistory(caseDoc: ICase): CaseHistoryDto[] {
+function mapHistory(caseDoc: ICase, viewer?: DoctorViewer): CaseHistoryDto[] {
   return caseDoc.history.map((entry) => {
     const metadata = entry.metadata ?? {};
     const rawChanges = metadata.changes;
@@ -506,7 +570,12 @@ function mapHistory(caseDoc: ICase): CaseHistoryDto[] {
       action: entry.action,
       summary: entry.summary,
       actorId: entry.actorId ? String(entry.actorId) : null,
-      actorName: entry.actorName ?? null,
+      actorName: personNameForViewer(
+        entry.actorId ? String(entry.actorId) : null,
+        entry.actorName ?? null,
+        caseDoc,
+        viewer,
+      ),
       createdAt: entry.createdAt.toISOString(),
       metadata,
       changes,
@@ -516,11 +585,13 @@ function mapHistory(caseDoc: ICase): CaseHistoryDto[] {
 
 async function toDetail(
   caseDoc: ICase,
-  viewer?: { id: string; role: string },
+  viewer?: { id: string; role: string; roles?: string[] },
 ): Promise<CaseDetailDto> {
   const [listItem, clarifications, validation] = await Promise.all([
     toListItem(caseDoc, viewer),
-    listClarificationDtosForCase(caseDoc._id as Types.ObjectId, viewer?.id),
+    listClarificationDtosForCase(caseDoc._id as Types.ObjectId, viewer, {
+      doctorDisplayId: caseDoc.doctorDisplayId,
+    }),
     buildValidationSummary(caseDoc),
   ]);
 
@@ -533,32 +604,15 @@ async function toDetail(
       ? caseDoc.patientDateOfBirth.toISOString().slice(0, 10)
       : null,
     instructions: caseDoc.instructions,
-    country: caseDoc.country,
     treatmentInstructions: normalizeTreatmentInstructions(caseDoc.treatmentInstructions),
-    recordsNumbering: {
-      ...EMPTY_RECORDS_NUMBERING,
-      ...(caseDoc.recordsNumbering ?? {}),
-    },
-    clinicalPreferences: {
+    recordsNumbering: nestedToPlain(caseDoc.recordsNumbering, { ...EMPTY_RECORDS_NUMBERING }),
+    clinicalPreferences: nestedToPlain(caseDoc.clinicalPreferences, {
       ...EMPTY_CLINICAL_PREFERENCES,
-      ...(caseDoc.clinicalPreferences ?? {}),
-    },
-    occlusionGoals: {
-      ...EMPTY_OCCLUSION_GOALS,
-      ...(caseDoc.occlusionGoals ?? {}),
-    },
-    prosthoDetails: {
-      ...EMPTY_PROSTHO_DETAILS,
-      ...(caseDoc.prosthoDetails ?? {}),
-    },
-    implantDetails: {
-      ...EMPTY_IMPLANT_DETAILS,
-      ...(caseDoc.implantDetails ?? {}),
-    },
-    commercial: {
-      ...EMPTY_CASE_COMMERCIAL,
-      ...(caseDoc.commercial ?? {}),
-    },
+    }),
+    occlusionGoals: nestedToPlain(caseDoc.occlusionGoals, { ...EMPTY_OCCLUSION_GOALS }),
+    prosthoDetails: nestedToPlain(caseDoc.prosthoDetails, { ...EMPTY_PROSTHO_DETAILS }),
+    implantDetails: nestedToPlain(caseDoc.implantDetails, { ...EMPTY_IMPLANT_DETAILS }),
+    commercial: nestedToPlain(caseDoc.commercial, { ...EMPTY_CASE_COMMERCIAL }),
     payment: toPaymentDto(caseDoc),
     cancelReason: caseDoc.cancelReason ?? null,
     deletedAt: caseDoc.deletedAt ? caseDoc.deletedAt.toISOString() : null,
@@ -592,7 +646,7 @@ async function toDetail(
         }
       : null,
     qcReviews: mapQcReviews(caseDoc),
-    clinicalRemarks: mapClinicalRemarks(caseDoc),
+    clinicalRemarks: mapClinicalRemarks(caseDoc, viewer),
     assignedConsultantId: caseDoc.assignedConsultantId
       ? String(caseDoc.assignedConsultantId)
       : null,
@@ -610,7 +664,9 @@ async function toDetail(
       id: String(note._id),
       body: note.body,
       authorId: String(note.authorId),
-      authorName: note.authorName,
+      authorName:
+        personNameForViewer(String(note.authorId), note.authorName, caseDoc, viewer) ??
+        note.authorName,
       createdAt: note.createdAt.toISOString(),
     })),
     files: caseDoc.files.map((file) => ({
@@ -624,7 +680,13 @@ async function toDetail(
       viewUrl: file.viewUrl || null,
       extractedFrom: file.extractedFrom || null,
       uploadedById: file.uploadedById ? String(file.uploadedById) : null,
-      uploadedByName: file.uploadedByName,
+      uploadedByName:
+        personNameForViewer(
+          file.uploadedById ? String(file.uploadedById) : null,
+          file.uploadedByName,
+          caseDoc,
+          viewer,
+        ) ?? file.uploadedByName,
       version: file.version || 1,
       createdAt: file.createdAt.toISOString(),
       note: file.note,
@@ -632,7 +694,7 @@ async function toDetail(
       scanMessage: file.scanMessage,
       ...toLifecycleDto(file, file.createdAt),
     })),
-    history: mapHistory(caseDoc),
+    history: mapHistory(caseDoc, viewer),
     timeline: buildCaseTimeline(caseDoc.status),
     cutStartedAt: caseDoc.cutStartedAt ? caseDoc.cutStartedAt.toISOString() : null,
     cutSubmittedAt: caseDoc.cutSubmittedAt ? caseDoc.cutSubmittedAt.toISOString() : null,
@@ -974,6 +1036,8 @@ export async function listCases(
     sortDir?: 'asc' | 'desc';
     includeDeleted?: boolean;
     isDemo?: boolean;
+    countryId?: string;
+    regionId?: string;
   },
 ): Promise<CaseListResult> {
   const page = Math.max(1, query.page ?? 1);
@@ -1003,6 +1067,25 @@ export async function listCases(
   }
   if (query.isDemo === true) conditions.push({ isDemo: true });
   if (query.isDemo === false) conditions.push({ isDemo: { $ne: true } });
+  if (query.countryId?.trim()) {
+    const geo = await resolveCountryGeo({ countryId: query.countryId.trim() });
+    const countryClause: Record<string, unknown>[] = [{ countryId: query.countryId.trim() }];
+    if (geo.country) {
+      countryClause.push({ country: new RegExp(`^${escapeRegex(geo.country)}$`, 'i') });
+    }
+    conditions.push({ $or: countryClause });
+  }
+  if (query.regionId?.trim()) {
+    const { Country } = await import('../../models/Settings');
+    const inRegion = await Country.find({ regionId: query.regionId.trim() }).select('_id name');
+    conditions.push({
+      $or: [
+        { regionId: query.regionId.trim() },
+        { countryId: { $in: inRegion.map((item) => item._id) } },
+        { country: { $in: inRegion.map((item) => item.name) } },
+      ],
+    });
+  }
 
   if (query.q?.trim()) {
     const term = query.q.trim();
@@ -1316,6 +1399,11 @@ export async function createCase(
     (input.chiefComplaint ?? '').trim() ||
     (asDraft ? 'Draft' : '');
 
+  const geo = await resolveCountryGeo({
+    countryId: input.countryId,
+    countryName: input.country,
+  });
+
   const caseDoc = new Case({
     caseId,
     doctorId: doctor._id,
@@ -1334,7 +1422,9 @@ export async function createCase(
     patientAge: input.patientAge ?? undefined,
     patientGender: input.patientGender?.trim() ?? '',
     clinicName: input.clinicName?.trim() ?? '',
-    country: input.country?.trim() ?? '',
+    country: geo.country,
+    countryId: geo.countryId,
+    regionId: geo.regionId,
     treatmentSummary,
     instructions: input.instructions?.trim() ?? '',
     treatmentInstructions: normalizeTreatmentInstructions(input.treatmentInstructions),
@@ -1447,14 +1537,14 @@ export async function createCase(
   await createNotificationsForUsers(intakeStaffIds, {
     type: NOTIFICATION_TYPES.CASE_SUBMITTED,
     title: `New case submitted: ${caseId}`,
-    body: `${caseDoc.doctorName} submitted ${caseDoc.patientName} for review.`,
+    body: `${staffDoctorLabel(caseDoc)} submitted ${caseDoc.patientName} for review.`,
     link: `/app/cases/${caseId}`,
     caseId,
   });
   await emailUsers(intakeStaffIds, {
     subject: `New case submitted: ${caseId}`,
     headline: 'New case submitted',
-    message: `${caseDoc.doctorName} submitted a new case for ${caseDoc.patientName}.`,
+    message: `${staffDoctorLabel(caseDoc)} submitted a new case for ${caseDoc.patientName}.`,
     caseId,
     patientName: caseDoc.patientName,
   });
@@ -1772,6 +1862,16 @@ export async function updateCase(
     });
   }
 
+  if (input.country !== undefined || input.countryId !== undefined) {
+    const geo = await resolveCountryGeo({
+      countryId: input.countryId,
+      countryName: caseDoc.country,
+    });
+    caseDoc.country = geo.country;
+    caseDoc.countryId = geo.countryId;
+    caseDoc.regionId = geo.regionId;
+  }
+
   if (input.treatmentInstructions) {
     const previous = normalizeTreatmentInstructions(caseDoc.treatmentInstructions);
     const next = normalizeTreatmentInstructions({
@@ -1779,7 +1879,8 @@ export async function updateCase(
       ...input.treatmentInstructions,
     });
     if (JSON.stringify(previous) !== JSON.stringify(next)) {
-      caseDoc.treatmentInstructions = next;
+      caseDoc.set('treatmentInstructions', next);
+      caseDoc.markModified('treatmentInstructions');
       changes.push({
         field: 'treatmentInstructions',
         label: 'Treatment instructions',
@@ -3030,12 +3131,12 @@ function assertCanQcReview(actor: CaseActor, caseDoc?: ICase) {
   }
 }
 
-function toQcQueueCaseDto(caseDoc: ICase): QcQueueCaseDto {
+function toQcQueueCaseDto(caseDoc: ICase, viewer: DoctorViewer): QcQueueCaseDto {
   return {
     id: caseDoc.id,
     caseId: caseDoc.caseId,
     patientName: caseDoc.patientName,
-    doctorName: caseDoc.doctorName,
+    doctorName: doctorNameForViewer(caseDoc, viewer),
     designerName: caseDoc.assignedDesignerName ?? null,
     status: caseDoc.status,
     priority: caseDoc.priority,
@@ -3158,8 +3259,8 @@ export async function getQcDashboard(actor: CaseActor): Promise<QcDashboardDto> 
     generatedAt: new Date().toISOString(),
     pendingCount: pending.length,
     escalatedCount: escalated.length,
-    items: pending.map(toQcQueueCaseDto),
-    escalatedItems: escalated.map(toQcQueueCaseDto),
+    items: pending.map((doc) => toQcQueueCaseDto(doc, actor)),
+    escalatedItems: escalated.map((doc) => toQcQueueCaseDto(doc, actor)),
   };
 }
 
@@ -3181,7 +3282,7 @@ export async function getEscalatedCasesQueue(actor: CaseActor): Promise<QcQueueC
     .sort({ escalatedAt: -1, updatedAt: -1 })
     .limit(100);
 
-  return cases.map(toQcQueueCaseDto);
+  return cases.map((doc) => toQcQueueCaseDto(doc, actor));
 }
 
 export async function addQcComment(
@@ -3378,6 +3479,104 @@ export async function approveQcCase(
   } catch {
     // Non-blocking email failure
   }
+
+  return await toDetail(caseDoc, actor);
+}
+
+export async function updateCaseDelivery(
+  actor: CaseActor,
+  caseIdOrMongoId: string,
+  input: { viewLink?: string },
+  videoFile?: Express.Multer.File,
+  audit?: RequestAuditContext,
+) {
+  const caseDoc = await findCase(caseIdOrMongoId);
+  assertCanViewCase(actor, caseDoc);
+
+  const canQc = permissionsInclude(actor.permissions, PERMISSIONS.CASE_QC_REVIEW);
+  const canConsult = permissionsInclude(actor.permissions, PERMISSIONS.CASE_CONSULT);
+  if (!canQc && !canConsult) {
+    throw new AppError('You do not have permission to update the delivery package', 403);
+  }
+  if (canQc && !canConsult) {
+    assertCanQcReview(actor, caseDoc);
+  }
+  if (caseDoc.isDeleted) throw new AppError('Cannot update delivery on a deleted case', 400);
+
+  const existing = caseDoc.delivery;
+  const viewLink =
+    input.viewLink !== undefined ? input.viewLink.trim() : existing?.viewLink || '';
+  let videoFilename = existing?.videoFilename;
+  let videoStorageKey = existing?.videoStorageKey;
+  const uploadedAt = new Date();
+  let hot = existing
+    ? {
+        storageTier: existing.storageTier,
+        restoreStatus: existing.restoreStatus,
+        hotUntil: existing.hotUntil,
+      }
+    : initialHotFields(uploadedAt);
+
+  if (videoFile) {
+    const saved = await persistUploadedFile({
+      caseId: caseDoc.caseId,
+      originalName: videoFile.originalname,
+      mimeType: videoFile.mimetype,
+      buffer: videoFile.buffer,
+      tempPath: videoFile.path,
+    });
+    videoFilename = videoFile.originalname;
+    videoStorageKey = saved.storageKey;
+    hot = initialHotFields(uploadedAt);
+  }
+
+  if (!viewLink && !videoStorageKey) {
+    throw new AppError('Provide a view link or a delivery video', 400);
+  }
+
+  caseDoc.delivery = {
+    viewLink,
+    videoFilename,
+    videoStorageKey,
+    uploadedAt,
+    uploadedById: new Types.ObjectId(actor.id),
+    uploadedByName: actorName(actor),
+    storageTier: hot.storageTier,
+    restoreStatus: hot.restoreStatus,
+    hotUntil: hot.hotUntil,
+    coldSince: videoFile ? undefined : existing?.coldSince,
+    lastAccessedAt: existing?.lastAccessedAt,
+    restoreRequestedAt: videoFile ? undefined : existing?.restoreRequestedAt,
+    restoreError: videoFile ? undefined : existing?.restoreError,
+  };
+  caseDoc.markModified('delivery');
+
+  pushHistory(caseDoc, {
+    action: 'delivery_updated',
+    summary: `${actorName(actor)} updated the delivery package`,
+    actor,
+    metadata: {
+      hasLink: Boolean(viewLink),
+      hasVideo: Boolean(videoStorageKey),
+      videoReplaced: Boolean(videoFile),
+    },
+  });
+
+  await caseDoc.save();
+
+  await recordActivity({
+    action: AUDIT_ACTIONS.CASE_UPDATE,
+    summary: `${actor.email} updated delivery for ${caseDoc.caseId}`,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorName: actorName(actor),
+    actorRole: actor.role,
+    targetType: 'case',
+    targetId: caseDoc.caseId,
+    metadata: { viewLink: viewLink || undefined, hasVideo: Boolean(videoStorageKey) },
+    ipAddress: audit?.ipAddress,
+    userAgent: audit?.userAgent,
+  });
 
   return await toDetail(caseDoc, actor);
 }
@@ -3710,7 +3909,8 @@ export async function updateTreatmentInstructions(
 
   const previous = normalizeTreatmentInstructions(caseDoc.treatmentInstructions);
   const next = normalizeTreatmentInstructions({ ...previous, ...input });
-  caseDoc.treatmentInstructions = next;
+  caseDoc.set('treatmentInstructions', next);
+  caseDoc.markModified('treatmentInstructions');
 
   pushHistory(caseDoc, {
     action: 'treatment_instructions_updated',
@@ -3940,7 +4140,11 @@ export async function assignCase(
   } else if (input.mode === 'auto_queue') {
     const { assignCaseByRules } = await import('../rbac/rbac.service');
     const matchedId = await assignCaseByRules(
-      { country: caseDoc.country || '' },
+      {
+        country: caseDoc.country || '',
+        countryId: caseDoc.countryId ? String(caseDoc.countryId) : null,
+        regionId: caseDoc.regionId ? String(caseDoc.regionId) : null,
+      },
       ASSIGNMENT_QUEUES.DESIGNER,
     );
 
@@ -4026,7 +4230,11 @@ export async function assignCase(
 
     const { assignCaseByRules } = await import('../rbac/rbac.service');
     const matchedId = await assignCaseByRules(
-      { country: caseDoc.country || '' },
+      {
+        country: caseDoc.country || '',
+        countryId: caseDoc.countryId ? String(caseDoc.countryId) : null,
+        regionId: caseDoc.regionId ? String(caseDoc.regionId) : null,
+      },
       ASSIGNMENT_QUEUES.CUT,
     );
 
@@ -4157,13 +4365,16 @@ export async function assignCase(
   return await toDetail(caseDoc, actor);
 }
 
-async function toCutQueueCaseDto(caseDoc: ICase): Promise<CutQueueCaseDto> {
+async function toCutQueueCaseDto(
+  caseDoc: ICase,
+  viewer: DoctorViewer,
+): Promise<CutQueueCaseDto> {
   const openClarificationCount = await countOpenClarifications(caseDoc._id as Types.ObjectId);
   return {
     id: caseDoc.id,
     caseId: caseDoc.caseId,
     patientName: caseDoc.patientName,
-    doctorName: caseDoc.doctorName,
+    doctorName: doctorNameForViewer(caseDoc, viewer),
     status: caseDoc.status,
     priority: caseDoc.priority,
     treatmentSummary: caseDoc.treatmentSummary,
@@ -4288,12 +4499,12 @@ export async function getCutDashboard(actor: CaseActor): Promise<CutDashboardDto
     completed,
     waitingForDesigner,
   ] = await Promise.all([
-    Promise.all(assignedDocs.map(toCutQueueCaseDto)),
-    Promise.all(autoQueueDocs.map(toCutQueueCaseDto)),
-    Promise.all(inProgressDocs.map(toCutQueueCaseDto)),
-    Promise.all(pendingClarificationDocs.map(toCutQueueCaseDto)),
-    Promise.all(completedDocs.map(toCutQueueCaseDto)),
-    Promise.all(waitingForDesignerDocs.map(toCutQueueCaseDto)),
+    Promise.all(assignedDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
+    Promise.all(autoQueueDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
+    Promise.all(inProgressDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
+    Promise.all(pendingClarificationDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
+    Promise.all(completedDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
+    Promise.all(waitingForDesignerDocs.map((doc) => toCutQueueCaseDto(doc, actor))),
   ]);
 
   return {
@@ -4731,6 +4942,7 @@ export async function requestCutRework(
 function toQueueCaseDto(
   caseDoc: ICase,
   openClarificationCount: number,
+  viewer: DoctorViewer,
 ): CoordinatorQueueCaseDto {
   const assignmentMode = (caseDoc.assignmentMode ?? ASSIGNMENT_MODES.NONE) as AssignmentMode;
   const queue = resolveCoordinatorQueue({
@@ -4748,8 +4960,8 @@ function toQueueCaseDto(
     id: caseDoc.id,
     caseId: caseDoc.caseId,
     patientName: caseDoc.patientName,
-    doctorName: caseDoc.doctorName,
-    doctorEmail: caseDoc.doctorEmail,
+    doctorName: doctorNameForViewer(caseDoc, viewer),
+    doctorEmail: doctorEmailForViewer(caseDoc, viewer),
     status: caseDoc.status,
     priority: caseDoc.priority,
     treatmentSummary: caseDoc.treatmentSummary,
@@ -4792,7 +5004,7 @@ export async function getCoordinatorDashboard(
   const openMap = new Map(openCounts.map((entry) => [entry.id, entry.count]));
 
   const items = cases.map((caseDoc) =>
-    toQueueCaseDto(caseDoc, openMap.get(String(caseDoc._id)) ?? 0),
+    toQueueCaseDto(caseDoc, openMap.get(String(caseDoc._id)) ?? 0, actor),
   );
 
   // Only intake-relevant cases in coordinator buckets; assigned includes production.
@@ -4871,12 +5083,16 @@ export async function listDoctorAssignees(
     accountStatus: 'active',
   }).sort({ firstName: 1, lastName: 1 });
 
-  const canSeeName = actor.role === ROLES.ADMIN;
-
   return doctors.map((doctor) => {
+    const canSeeName = canViewDoctorName(
+      actor.role as Role,
+      actor.id,
+      doctor.id,
+      actor.roles,
+    );
     const label = canSeeName
       ? `${doctor.firstName} ${doctor.lastName}`.trim()
-      : doctor.doctorId || doctor.id;
+      : doctor.doctorId || 'Doctor';
     return {
       id: doctor.id,
       firstName: canSeeName ? doctor.firstName : label,
@@ -4920,12 +5136,15 @@ function assertCanConsult(actor: CaseActor) {
   }
 }
 
-function toConsultantQueueCaseDto(caseDoc: ICase): ConsultantQueueCaseDto {
+function toConsultantQueueCaseDto(
+  caseDoc: ICase,
+  viewer: DoctorViewer,
+): ConsultantQueueCaseDto {
   return {
     id: caseDoc.id,
     caseId: caseDoc.caseId,
     patientName: caseDoc.patientName,
-    doctorName: caseDoc.doctorName,
+    doctorName: doctorNameForViewer(caseDoc, viewer),
     designerName: caseDoc.assignedDesignerName ?? null,
     status: caseDoc.status,
     priority: caseDoc.priority,
@@ -4957,7 +5176,7 @@ export async function getConsultantDashboard(
     .sort({ priority: -1, updatedAt: -1 })
     .limit(100);
 
-  const items = cases.map(toConsultantQueueCaseDto);
+  const items = cases.map((doc) => toConsultantQueueCaseDto(doc, actor));
   let greenCount = 0;
   let yellowCount = 0;
   let redCount = 0;
@@ -5204,14 +5423,14 @@ export async function recordDoctorCaseView(
     await createNotificationsForUsers(teamIds, {
       type: NOTIFICATION_TYPES.CASE_DOCTOR_VIEWED,
       title: `Doctor has viewed Case ID ${caseDoc.caseId}`,
-      body: `${caseDoc.doctorName} opened the delivery without selecting an option yet (“Viewed”).`,
+      body: `${staffDoctorLabel(caseDoc)} opened the delivery without selecting an option yet (“Viewed”).`,
       link: `/app/cases/${caseDoc.caseId}`,
       caseId: caseDoc.caseId,
     });
     await emailUsers(teamIds, {
       subject: `Doctor viewed case ${caseDoc.caseId}`,
       headline: 'Doctor viewed delivery',
-      message: `${caseDoc.doctorName} opened case ${caseDoc.caseId} without selecting an option yet.`,
+      message: `${staffDoctorLabel(caseDoc)} opened case ${caseDoc.caseId} without selecting an option yet.`,
       caseId: caseDoc.caseId,
       patientName: caseDoc.patientName,
     });
@@ -5365,7 +5584,7 @@ export async function submitDoctorDecision(
     headline: 'Doctor decision recorded',
     message:
       note ||
-      `${caseDoc.doctorName} selected ${DOCTOR_DECISION_LABELS[input.decision]} on case ${caseDoc.caseId}.`,
+      `${staffDoctorLabel(caseDoc)} selected ${DOCTOR_DECISION_LABELS[input.decision]} on case ${caseDoc.caseId}.`,
     caseId: caseDoc.caseId,
     patientName: caseDoc.patientName,
   });

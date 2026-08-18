@@ -29,6 +29,7 @@ import {
   setPrioritySchema,
   treatmentInstructionsBodySchema,
   updateCaseSchema,
+  updateDeliverySchema,
   updatePaymentSchema,
   uploadFilesMetaSchema,
   validateCaseSchema,
@@ -399,6 +400,14 @@ router.get(
     PERMISSIONS.CASE_CONSULT,
   ),
   casesController.downloadDeliveryVideo,
+);
+
+router.patch(
+  '/:caseId/delivery',
+  requireAnyPermission(PERMISSIONS.CASE_QC_REVIEW, PERMISSIONS.CASE_CONSULT),
+  deliveryVideoUpload.single('video'),
+  validate(updateDeliverySchema),
+  casesController.updateDelivery,
 );
 
 router.post(

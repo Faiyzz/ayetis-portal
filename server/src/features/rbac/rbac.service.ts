@@ -769,7 +769,7 @@ const OPEN_CASE_STATUSES = ['new_case', 'in_process', 'waiting_for_approval'];
 function userMatchesRule(
   user: IUser,
   rule: IAssignmentRule,
-  caseCountry: string,
+  geo: { country: string; countryId?: string | null; regionId?: string | null },
   openCaseCount: number,
 ): boolean {
   const userRoleKeys = resolveUserRoleKeys(user);
@@ -800,25 +800,30 @@ function userMatchesRule(
 
   if (rule.maxOpenCases != null && openCaseCount >= rule.maxOpenCases) return false;
 
-  const caseCountryNorm = caseCountry.trim().toLowerCase();
-  if (rule.excludedCountryIds.length > 0 && caseCountryNorm) {
-    // Country name match is best-effort until case stores countryId
+  const caseCountryId = geo.countryId ? String(geo.countryId) : '';
+  const caseRegionId = geo.regionId ? String(geo.regionId) : '';
+
+  if (rule.excludedCountryIds.length > 0) {
+    const excluded = rule.excludedCountryIds.map(String);
+    if (caseCountryId && excluded.includes(caseCountryId)) return false;
     const userExcluded = (user.excludedCountryIds ?? []).map(String);
-    if (userExcluded.some((id) => rule.excludedCountryIds.map(String).includes(id))) {
-      return false;
-    }
+    if (userExcluded.some((id) => excluded.includes(id))) return false;
   }
 
   if (rule.countryIds.length > 0) {
+    const ruleCountries = rule.countryIds.map(String);
+    if (!caseCountryId || !ruleCountries.includes(caseCountryId)) return false;
     const scoped = (user.scopedCountryIds ?? []).map(String);
-    if (scoped.length > 0 && !rule.countryIds.some((id) => scoped.includes(String(id)))) {
+    if (scoped.length > 0 && !ruleCountries.some((id) => scoped.includes(id))) {
       return false;
     }
   }
 
   if (rule.regionIds.length > 0) {
+    const ruleRegions = rule.regionIds.map(String);
+    if (!caseRegionId || !ruleRegions.includes(caseRegionId)) return false;
     const userRegions = (user.regionIds ?? []).map(String);
-    if (userRegions.length > 0 && !rule.regionIds.some((id) => userRegions.includes(String(id)))) {
+    if (!userRegions.length || !ruleRegions.some((id) => userRegions.includes(id))) {
       return false;
     }
   }
@@ -827,7 +832,11 @@ function userMatchesRule(
 }
 
 export async function assignCaseByRules(
-  caseDoc: Pick<{ country?: string }, 'country'>,
+  caseDoc: {
+    country?: string;
+    countryId?: string | null;
+    regionId?: string | null;
+  },
   targetQueue: AssignmentQueue,
 ): Promise<string | null> {
   const config = await BusinessConfig.findOne({ key: 'default' });
@@ -846,7 +855,11 @@ export async function assignCaseByRules(
     isActive: true,
   });
 
-  const caseCountry = caseDoc.country ?? '';
+  const caseGeo = {
+    country: caseDoc.country ?? '',
+    countryId: caseDoc.countryId ?? null,
+    regionId: caseDoc.regionId ?? null,
+  };
   const workload = new Map<string, number>();
 
   for (const user of candidates) {
@@ -859,7 +872,7 @@ export async function assignCaseByRules(
 
   for (const rule of rules) {
     const matched = candidates.filter((user) =>
-      userMatchesRule(user, rule, caseCountry, workload.get(String(user._id)) ?? 0),
+      userMatchesRule(user, rule, caseGeo, workload.get(String(user._id)) ?? 0),
     );
 
     if (!matched.length) continue;

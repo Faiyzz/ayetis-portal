@@ -252,11 +252,14 @@ export function RecordsNumberingPart({
               className={fieldClassName(errors, 'doctorId')}
             >
               <option value="">Select doctor…</option>
-              {doctors.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {`${d.firstName} ${d.lastName}`.trim()} ({d.email})
-                </option>
-              ))}
+              {doctors.map((d) => {
+                const label = `${d.firstName} ${d.lastName}`.trim();
+                return (
+                  <option key={d.id} value={d.id}>
+                    {d.email ? `${label} (${d.email})` : label}
+                  </option>
+                );
+              })}
             </select>
             <FieldError errors={errors} name="doctorId" />
           </label>

@@ -7,6 +7,7 @@ import {
   DOCTOR_DECISIONS,
   PERMISSIONS,
   ROLES,
+  formatDoctorDisplay,
   permissionsInclude,
   type ComplaintDto,
   type ComplaintReportsDto,
@@ -31,6 +32,7 @@ interface Actor {
   firstName: string;
   lastName: string;
   role: string;
+  roles?: string[];
   permissions: string[];
 }
 
@@ -95,14 +97,55 @@ function average(values: number[]): number | null {
   return Number((sum / values.length).toFixed(2));
 }
 
-function toDto(doc: InstanceType<typeof Complaint>): ComplaintDto {
+function doctorLabel(
+  actor: Actor,
+  doctorUserId: string | null | undefined,
+  doctorName: string | null | undefined,
+  doctorDisplayId?: string | null,
+) {
+  if (!doctorUserId) return doctorName ?? null;
+  return formatDoctorDisplay(
+    actor.role as never,
+    actor.id,
+    {
+      doctorUserId,
+      doctorName: doctorName || '',
+      doctorId: doctorDisplayId ?? null,
+    },
+    actor.roles,
+  );
+}
+
+async function doctorDisplayIdMap(
+  userIds: Array<Types.ObjectId | string | null | undefined>,
+): Promise<Map<string, string>> {
+  const ids = [...new Set(userIds.filter(Boolean).map((id) => String(id)))];
+  if (!ids.length) return new Map();
+  const users = await User.find({ _id: { $in: ids } }).select('doctorId');
+  const map = new Map<string, string>();
+  for (const user of users) {
+    if (user.doctorId) map.set(user.id, user.doctorId);
+  }
+  return map;
+}
+
+function toDto(
+  doc: InstanceType<typeof Complaint>,
+  actor: Actor,
+  doctorDisplayId?: string | null,
+): ComplaintDto {
   return {
     id: doc.id,
     complaintCode: doc.complaintCode,
     details: doc.details,
     caseId: doc.caseId ?? null,
     doctorId: doc.doctorId ? String(doc.doctorId) : null,
-    doctorName: doc.doctorName ?? null,
+    doctorName: doctorLabel(
+      actor,
+      doc.doctorId ? String(doc.doctorId) : null,
+      doc.doctorName ?? null,
+      doctorDisplayId,
+    ),
     responsibleEmployeeId: doc.responsibleEmployeeId
       ? String(doc.responsibleEmployeeId)
       : null,
@@ -189,7 +232,10 @@ export async function listComplaints(actor: Actor) {
       : { createdById: new Types.ObjectId(actor.id) };
 
   const items = await Complaint.find(filter).sort({ createdAt: -1 }).limit(200);
-  return items.map(toDto);
+  const displayIds = await doctorDisplayIdMap(items.map((item) => item.doctorId));
+  return items.map((doc) =>
+    toDto(doc, actor, doc.doctorId ? displayIds.get(String(doc.doctorId)) : undefined),
+  );
 }
 
 export async function listComplaintStaff(actor: Actor): Promise<ComplaintStaffOptionDto[]> {
@@ -254,7 +300,7 @@ export async function getComplaintReports(
       isDeleted: false,
       doctorDecision: { $exists: true, $ne: null },
       doctorDecisionAt: { $gte: start },
-    }).select('doctorId doctorName doctorDecision doctorDecisionAt'),
+    }).select('doctorId doctorName doctorDisplayId doctorDecision doctorDecisionAt'),
     getRatingsOverview(actor),
   ]);
 
@@ -342,7 +388,7 @@ export async function getComplaintReports(
     Case.find({
       isDeleted: false,
       doctorDecision: { $exists: true, $ne: null },
-    }).select('doctorId doctorName doctorDecision'),
+    }).select('doctorId doctorName doctorDisplayId doctorDecision'),
     Complaint.find().select(
       'doctorId doctorName rating status',
     ),
@@ -403,6 +449,15 @@ export async function getComplaintReports(
     }
   }
 
+  const displayFromCases = new Map<string, string>();
+  for (const decision of allDecisions) {
+    if (decision.doctorDisplayId) {
+      displayFromCases.set(String(decision.doctorId), decision.doctorDisplayId);
+    }
+  }
+  const missingIds = [...byDoctorMap.keys()].filter((id) => !displayFromCases.has(id));
+  const displayFromUsers = await doctorDisplayIdMap(missingIds);
+
   const byDoctor = [...byDoctorMap.values()]
     .map((row) => {
       const ratings = doctorRatings.get(row.doctorId) ?? [];
@@ -410,6 +465,12 @@ export async function getComplaintReports(
       row.averageRating = average(ratings);
       row.approvalRate = rate(row.approvedCount, row.decisionsTotal);
       row.rejectionRate = rate(row.modificationCount, row.decisionsTotal);
+      row.doctorName = doctorLabel(
+        actor,
+        row.doctorId,
+        row.doctorName,
+        displayFromCases.get(row.doctorId) ?? displayFromUsers.get(row.doctorId),
+      ) ?? row.doctorName;
       return row;
     })
     .sort((a, b) => b.decisionsTotal - a.decisionsTotal || b.complaintsCount - a.complaintsCount)
@@ -429,6 +490,7 @@ export async function createComplaint(
 
   let doctorId: Types.ObjectId | undefined;
   let doctorName: string | undefined;
+  let doctorDisplayId: string | undefined;
   let employeeId = input.responsibleEmployeeId;
   let qcId = input.responsibleQcId;
   let consultantId = input.responsibleConsultantId;
@@ -439,6 +501,7 @@ export async function createComplaint(
     if (!caseDoc) throw new AppError('Case not found', 404);
     doctorId = caseDoc.doctorId;
     doctorName = caseDoc.doctorName;
+    doctorDisplayId = caseDoc.doctorDisplayId;
     // Prefill responsible parties from the case when not explicitly provided.
     if (!employeeId && caseDoc.assignedDesignerId) {
       employeeId = String(caseDoc.assignedDesignerId);
@@ -489,7 +552,7 @@ export async function createComplaint(
     userAgent: audit?.userAgent,
   });
 
-  return toDto(doc);
+  return toDto(doc, actor, doctorDisplayId);
 }
 
 export async function updateComplaint(
@@ -562,5 +625,10 @@ export async function updateComplaint(
     userAgent: audit?.userAgent,
   });
 
-  return toDto(doc);
+  const displayIds = await doctorDisplayIdMap([doc.doctorId]);
+  return toDto(
+    doc,
+    actor,
+    doc.doctorId ? displayIds.get(String(doc.doctorId)) : undefined,
+  );
 }

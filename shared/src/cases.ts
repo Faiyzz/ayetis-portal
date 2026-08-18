@@ -374,6 +374,9 @@ export interface CaseListItemDto {
   /** Prior status shown in Updated-Status until doctor acknowledges. */
   previousStatus: CaseStatus | null;
   statusPendingDoctorAck: boolean;
+  country: string;
+  countryId: string | null;
+  regionId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -384,7 +387,6 @@ export interface CaseDetailDto extends CaseListItemDto {
   patientGender: string;
   patientDateOfBirth: string | null;
   instructions: string;
-  country: string;
   treatmentInstructions: TreatmentInstructions;
   recordsNumbering: import('./treatment').RecordsNumbering | null;
   clinicalPreferences: import('./treatment').ClinicalPreferences | null;
@@ -476,6 +478,7 @@ export interface CreateCaseInput {
   clinicName?: string;
   practiceName?: string;
   country?: string;
+  countryId?: string;
   chiefComplaint?: string;
   caseCategory?: import('./caseTaxonomy').CaseCategory;
   caseType?: import('./caseTaxonomy').CaseType;
@@ -510,6 +513,7 @@ export interface UpdateCaseInput {
   clinicName?: string;
   practiceName?: string;
   country?: string;
+  countryId?: string;
   chiefComplaint?: string;
   caseCategory?: import('./caseTaxonomy').CaseCategory;
   caseType?: import('./caseTaxonomy').CaseType;

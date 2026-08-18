@@ -11,6 +11,8 @@ async function actor(req: AuthenticatedRequest) {
   if (!user || !user.isActive) throw new AppError('User not found or inactive', 401);
   return {
     id: user.id,
+    role: user.role,
+    roles: user.roles,
     permissions: (await resolvePermissionsForUserId(user.id)) as Permission[],
   };
 }

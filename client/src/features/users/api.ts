@@ -32,8 +32,16 @@ export async function updateRolePermissions(
   return data.data;
 }
 
-export async function fetchUsers(): Promise<PublicUser[]> {
-  const { data } = await api.get('/users');
+export async function fetchUsers(params?: {
+  q?: string;
+  country?: string;
+}): Promise<PublicUser[]> {
+  const { data } = await api.get('/users', {
+    params: {
+      q: params?.q || undefined,
+      country: params?.country || undefined,
+    },
+  });
   return data.data;
 }
 

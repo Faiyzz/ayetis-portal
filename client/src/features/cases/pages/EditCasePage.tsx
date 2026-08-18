@@ -256,7 +256,7 @@ export function EditCasePage() {
 
   if (locked || !form) {
     return (
-      <div className="w-full max-w-5xl space-y-5">
+      <div className="w-full space-y-5">
         <PageHeader
           eyebrow={
             <Link to={`/app/cases/${caseId}`} className="hover:text-brand-700">
@@ -281,7 +281,7 @@ export function EditCasePage() {
         : `Update case information for ${caseLabel}.`;
 
   return (
-    <div className="w-full max-w-5xl space-y-5">
+    <div className="w-full space-y-5">
       <PageHeader
         eyebrow={
           <Link to={`/app/cases/${caseId}`} className="hover:text-brand-700">

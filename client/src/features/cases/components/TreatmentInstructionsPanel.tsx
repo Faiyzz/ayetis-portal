@@ -150,7 +150,15 @@ export function TreatmentInstructionsPanel({
 
   async function handleSave(event: FormEvent) {
     event.preventDefault();
-    await onSave(draft);
+    await onSave({
+      arches: draft.arches || '',
+      applianceType: draft.applianceType,
+      treatmentGoal: draft.treatmentGoal,
+      biteDetails: draft.biteDetails,
+      retainers: draft.retainers,
+      specialRequirements: draft.specialRequirements,
+      additionalNotes: draft.additionalNotes,
+    });
     setEditing(false);
   }
 

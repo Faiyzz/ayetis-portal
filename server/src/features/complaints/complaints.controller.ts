@@ -16,6 +16,7 @@ async function actor(req: AuthenticatedRequest) {
     firstName: user.firstName,
     lastName: user.lastName,
     role: user.role,
+    roles: user.roles,
     permissions: (await resolvePermissionsForUserId(user.id)) as Permission[],
   };
 }

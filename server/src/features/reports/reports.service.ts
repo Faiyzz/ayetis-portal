@@ -9,6 +9,7 @@ import {
   QC_ERROR_CODE_LABELS,
   ALL_QC_ERROR_CODES,
   ROLES,
+  formatDoctorDisplay,
   labelForMonthKey,
   monthRangeUtc,
   permissionsInclude,
@@ -36,6 +37,8 @@ import { toPrintHtml, toSpreadsheetMl } from '../../utils/spreadsheet';
 
 interface Actor {
   id: string;
+  role: string;
+  roles?: string[];
   permissions: string[];
 }
 
@@ -702,7 +705,16 @@ export async function getDoctorPerformanceReport(
     const rating = ratingMap.get(doctorId);
     return {
       doctorId,
-      doctorName: row.doctorName,
+      doctorName: formatDoctorDisplay(
+        actor.role as never,
+        actor.id,
+        {
+          doctorUserId: doctorId,
+          doctorName: row.doctorName,
+          doctorId: row.doctorDisplayId,
+        },
+        actor.roles,
+      ),
       doctorDisplayId: row.doctorDisplayId,
       viewed: row.viewed,
       approved: row.approved,
