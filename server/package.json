@@ -7,7 +7,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "seed": "tsx src/scripts/seed.ts",
-    "uat:assert": "tsx src/scripts/uatAssert.ts"
+    "uat:assert": "tsx src/scripts/uatAssert.ts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1095.0",
@@ -44,7 +46,9 @@
     "@types/multer": "^2.2.0",
     "@types/node": "^22.13.10",
     "@types/node-7z": "^2.1.11",
+    "@vitest/coverage-v8": "^3.2.4",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4"
   }
 }
