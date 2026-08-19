@@ -7,6 +7,7 @@ import {
   getPermissionCatalog,
   getPermissionsForRole,
   isPermission,
+  PERMISSIONS,
   resolveEffectivePermissions,
   resolveQcScope,
   slugifyRoleKey,
@@ -245,6 +246,14 @@ export async function seedRoleDefinitions(): Promise<void> {
       doc.permissionDenies = [...(config.denies ?? [])];
       await doc.save();
     }
+  }
+
+  const doctorRole = await RoleDefinition.findOne({ key: ROLES.DOCTOR });
+  if (doctorRole?.permissionGrants?.includes(PERMISSIONS.CASE_VIEW_FACILITY)) {
+    doctorRole.permissionGrants = doctorRole.permissionGrants.filter(
+      (permission) => permission !== PERMISSIONS.CASE_VIEW_FACILITY,
+    );
+    await doctorRole.save();
   }
 
   invalidateRoleCache();

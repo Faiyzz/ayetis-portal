@@ -241,6 +241,15 @@ export function invoiceHtmlUrl(id: string) {
   return `/api/commercial/invoices/${id}/html`;
 }
 
+export async function openInvoiceHtml(id: string) {
+  const { data } = await api.get<string>(`/commercial/invoices/${id}/html`, {
+    responseType: 'text',
+  });
+  const blob = new Blob([data], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 export function receiptHtmlUrl(id: string) {
   return `/api/commercial/receipts/${id}/html`;
 }

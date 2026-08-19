@@ -190,14 +190,14 @@ export function CasesPage() {
         eyebrow="Cases"
         title={
           isDoctorView
-            ? 'My submitted cases'
+            ? 'My cases'
             : isDesignerView
               ? 'My assigned cases'
               : 'Case listing'
         }
         subtitle={
           isDoctorView
-            ? 'Track every case you have submitted in one place — status, priority, and payment.'
+            ? 'Track every case you have submitted — status, priority, and payment.'
             : isDesignerView
               ? 'Cases assigned to you for production. Open a case to review files and instructions.'
               : 'Search and filter cases relevant to your role.'
@@ -222,7 +222,7 @@ export function CasesPage() {
           name="q"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Case ID, patient, doctor…"
+          placeholder={isDoctorView ? 'Case ID, patient…' : 'Case ID, patient, doctor…'}
         />
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-ink">Status</span>

@@ -24,7 +24,9 @@ import { CreateCasePage } from '@/features/cases/pages/CreateCasePage';
 import { EditCasePage } from '@/features/cases/pages/EditCasePage';
 import { CancellationReportPage } from '@/features/cancellations/pages/CancellationReportPage';
 import { CommercialAdminPage } from '@/features/commercial/pages/CommercialAdminPage';
+import { MyInvoicesPage } from '@/features/commercial/pages/MyInvoicesPage';
 import { PaySessionPage } from '@/features/commercial/pages/PaySessionPage';
+import { AccountPage } from '@/features/account/pages/AccountPage';
 import { ComplaintsPage } from '@/features/complaints/pages/ComplaintsPage';
 import { NotificationCenterPage } from '@/features/notifications/pages/NotificationCenterPage';
 import { SettingsAdminPage } from '@/features/settings/pages/SettingsAdminPage';
@@ -62,6 +64,12 @@ export function AppRouter() {
           <Route index element={<RoleHomeRedirect />} />
           <Route path="change-password" element={<ChangePasswordPage />} />
           <Route path="notifications" element={<NotificationCenterPage />} />
+          <Route element={<RequirePermission permission={PERMISSIONS.USER_VIEW_OWN} />}>
+            <Route path="account" element={<AccountPage />} />
+          </Route>
+          <Route element={<RequirePermission permission={PERMISSIONS.INVOICE_VIEW} />}>
+            <Route path="invoices" element={<MyInvoicesPage />} />
+          </Route>
 
           {ALL_ROLES.map((role) => (
             <Route key={role} path={role} element={<RoleDashboard role={role} />} />
@@ -202,7 +210,6 @@ export function AppRouter() {
                   PERMISSIONS.BILLING_ARRANGE_MANAGE,
                   PERMISSIONS.PREPAID_MANAGE,
                   PERMISSIONS.PAYMENT_PROVIDER_MANAGE,
-                  PERMISSIONS.INVOICE_VIEW,
                   PERMISSIONS.INVOICE_MANAGE,
                 ]}
               />

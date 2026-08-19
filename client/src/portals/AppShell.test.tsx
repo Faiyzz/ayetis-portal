@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { render, screen } from '@testing-library/react';
 import { ACCOUNT_TYPES, PERMISSIONS, ROLES, THEMES } from '@ayetis/shared';
-import { GuestOnly, RequireAuth, RequirePermission } from './AppShell';
+import { GuestOnly, RequireAnyPermission, RequireAuth, RequirePermission } from './AppShell';
 import { useAuthStore } from '@/features/auth/store';
 import type { PublicUser } from '@ayetis/shared';
 
@@ -97,6 +97,23 @@ describe('route gates', () => {
       isBootstrapping: false,
     });
     renderAt(<RequirePermission permission={PERMISSIONS.SETTINGS_MANAGE} />, '/app/settings');
+    expect(screen.getByText('doctor-home')).toBeInTheDocument();
+  });
+
+  it('redirects doctors away from Commercial admin', () => {
+    useAuthStore.setState({
+      user: doctor({
+        permissions: [PERMISSIONS.INVOICE_VIEW, PERMISSIONS.CASE_VIEW_OWN],
+      }),
+      token: 't',
+      isBootstrapping: false,
+    });
+    renderAt(
+      <RequireAnyPermission
+        permissions={[PERMISSIONS.INVOICE_MANAGE, PERMISSIONS.TREATMENT_PLAN_MANAGE]}
+      />,
+      '/app/settings',
+    );
     expect(screen.getByText('doctor-home')).toBeInTheDocument();
   });
 

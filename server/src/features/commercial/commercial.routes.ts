@@ -585,9 +585,11 @@ router.post(
 router.get(
   '/invoices/:id',
   requirePermission(PERMISSIONS.INVOICE_VIEW),
-  async (req, res, next) => {
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const doc = await invoices.getInvoice(req.params.id);
+      const perms = req.user!.permissions ?? (await resolvePermissionsForUserId(req.user!.id));
+      await invoices.assertInvoiceAccess(doc, { id: req.user!.id, permissions: perms });
       res.json({ success: true, data: invoices.invoiceDto(doc) });
     } catch (error) {
       next(error);
@@ -598,9 +600,11 @@ router.get(
 router.get(
   '/invoices/:id/html',
   requirePermission(PERMISSIONS.INVOICE_VIEW),
-  async (req, res, next) => {
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const doc = await invoices.getInvoice(req.params.id);
+      const perms = req.user!.permissions ?? (await resolvePermissionsForUserId(req.user!.id));
+      await invoices.assertInvoiceAccess(doc, { id: req.user!.id, permissions: perms });
       res.type('html').send(doc.htmlBody || '<p>No HTML</p>');
     } catch (error) {
       next(error);
@@ -611,9 +615,11 @@ router.get(
 router.get(
   '/receipts/:id/html',
   requirePermission(PERMISSIONS.INVOICE_VIEW),
-  async (req, res, next) => {
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const doc = await invoices.getReceipt(req.params.id);
+      const perms = req.user!.permissions ?? (await resolvePermissionsForUserId(req.user!.id));
+      await invoices.assertReceiptAccess(doc, { id: req.user!.id, permissions: perms });
       res.type('html').send(doc.htmlBody || '<p>No HTML</p>');
     } catch (error) {
       next(error);

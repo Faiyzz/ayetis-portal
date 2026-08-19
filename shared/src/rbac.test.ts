@@ -72,6 +72,8 @@ describe('URD RBAC matrix', () => {
     expect(hasPermission(ROLES.DOCTOR, PERMISSIONS.SETTINGS_MANAGE)).toBe(false);
     expect(hasPermission(ROLES.DOCTOR, PERMISSIONS.CANCELLATION_REPORT_VIEW)).toBe(false);
     expect(hasPermission(ROLES.DOCTOR, PERMISSIONS.CASE_CREATE)).toBe(true);
+    expect(hasPermission(ROLES.DOCTOR, PERMISSIONS.CASE_VIEW_OWN)).toBe(true);
+    expect(hasPermission(ROLES.DOCTOR, PERMISSIONS.CASE_VIEW_FACILITY)).toBe(false);
     expect(hasPermission(ROLES.CORPORATE_ADMIN, PERMISSIONS.CORPORATE_REPORT_VIEW)).toBe(true);
     expect(hasPermission(ROLES.CORPORATE_ADMIN, PERMISSIONS.CORPORATE_AUDIT_VIEW)).toBe(true);
     expect(hasPermission(ROLES.ADMIN, PERMISSIONS.SETTINGS_MANAGE)).toBe(true);

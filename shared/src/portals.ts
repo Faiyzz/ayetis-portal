@@ -100,7 +100,7 @@ export const ROLE_DASHBOARDS: Record<PortalTemplate, RoleDashboardConfig> = {
       {
         label: 'Deliveries',
         description: 'Review delivered cases and decide',
-        to: '/app/doctor',
+        to: '/app/doctor#awaiting-review',
       },
     ],
   },

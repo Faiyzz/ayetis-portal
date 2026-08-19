@@ -2,12 +2,15 @@ import {
   AUDIT_ACTIONS,
   CASE_STATUSES,
   PAYMENT_STATUSES,
-  isInvoiceScheduleArrangement,
+  PERMISSIONS,
   PRICE_SUBJECT_TYPES,
+  isInvoiceScheduleArrangement,
+  permissionsInclude,
   type BatchInvoiceResult,
   type InvoiceDto,
   type PaymentProviderId,
   type PaymentReceiptDto,
+  type Permission,
 } from '@ayetis/shared';
 import { Types } from 'mongoose';
 import { Case, type ICase } from '../../models/Case';
@@ -301,10 +304,29 @@ export async function getInvoice(id: string) {
   return doc;
 }
 
+export async function assertInvoiceAccess(
+  doc: IInvoice,
+  actor: { id: string; permissions: readonly string[] },
+) {
+  if (permissionsInclude(actor.permissions as Permission[], PERMISSIONS.INVOICE_MANAGE)) return;
+  if (doc.customerUserId && String(doc.customerUserId) === actor.id) return;
+  throw new AppError('Invoice not found', 404);
+}
+
 export async function getReceipt(id: string) {
   const doc = await PaymentReceipt.findById(id);
   if (!doc) throw new AppError('Receipt not found', 404);
   return doc;
+}
+
+export async function assertReceiptAccess(
+  doc: IPaymentReceipt,
+  actor: { id: string; permissions: readonly string[] },
+) {
+  if (permissionsInclude(actor.permissions as Permission[], PERMISSIONS.INVOICE_MANAGE)) return;
+  const invoice = doc.invoiceId ? await Invoice.findById(doc.invoiceId) : null;
+  if (invoice?.customerUserId && String(invoice.customerUserId) === actor.id) return;
+  throw new AppError('Receipt not found', 404);
 }
 
 export async function listInvoices(filter: {

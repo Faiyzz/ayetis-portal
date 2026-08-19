@@ -7,7 +7,7 @@ import {
   type CaseDetailDto,
 } from '@ayetis/shared';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { dialog } from '@/components/dialog';
 import { Alert } from '@/features/auth/components/AuthUI';
@@ -68,6 +68,38 @@ function isTabId(value: string): value is TabId {
   return (TAB_IDS as readonly string[]).includes(value);
 }
 
+const TAB_ALIASES: Record<string, TabId> = {
+  'case-overview': 'overview',
+  'status-timeline': 'overview',
+  clarifications: 'communication',
+  communication: 'communication',
+  'validation-assignment': 'work',
+  'designer-workspace': 'work',
+  'qc-review': 'work',
+  'clinical-remarks': 'clinical',
+  'delivery-review': 'work',
+  delivery: 'work',
+  work: 'work',
+  'delivery-package': 'work',
+  payment: 'finance',
+  finance: 'finance',
+  'patient-files': 'files',
+  files: 'files',
+  view: 'view',
+  'treatment-instructions': 'clinical',
+  clinical: 'clinical',
+  'production-notes': 'communication',
+  history: 'history',
+  overview: 'overview',
+};
+
+function mapTabToken(token: string | null | undefined): TabId | null {
+  if (!token) return null;
+  if (TAB_ALIASES[token]) return TAB_ALIASES[token];
+  if (isTabId(token)) return token;
+  return null;
+}
+
 function buildSections(args: {
   caseData: CaseDetailDto;
   showWorkTab: boolean;
@@ -105,6 +137,7 @@ function buildSections(args: {
 
 export function CaseDetailPage() {
   const { caseId = '' } = useParams();
+  const [searchParams] = useSearchParams();
   const { can, canAny, user } = usePermissions();
   const setActiveSection = useCaseDetailNav((s) => s.setActiveSection);
   const activeSectionId = useCaseDetailNav((s) => s.activeSectionId);
@@ -259,43 +292,33 @@ export function CaseDetailPage() {
     if (!caseData || sections.length === 0) return;
 
     const hash = window.location.hash.replace(/^#/, '');
-    if (hash && sections.some((s) => s.id === hash)) {
-      setActiveSection(hash);
-      return;
-    }
+    const tabParam = searchParams.get('tab');
+    const mapped = mapTabToken(hash) || mapTabToken(tabParam);
 
-    // Legacy hashes → map to new tabs
-    const legacyMap: Record<string, TabId> = {
-      'case-overview': 'overview',
-      'status-timeline': 'overview',
-      clarifications: 'communication',
-      'validation-assignment': 'work',
-      'designer-workspace': 'work',
-      'qc-review': 'work',
-      'clinical-remarks': 'clinical',
-      'delivery-review': 'work',
-      'delivery-package': 'work',
-      payment: 'finance',
-      'patient-files': 'files',
-      view: 'view',
-      'treatment-instructions': 'clinical',
-      'production-notes': 'communication',
-      history: 'history',
-    };
-    if (hash && legacyMap[hash]) {
-      const mapped = legacyMap[hash]!;
+    if (mapped) {
       if (mapped === 'work' && !showWorkTab) {
         setActiveSection('overview');
         window.history.replaceState(null, '', '#overview');
-      } else {
-        setActiveSection(mapped);
+        return;
+      }
+      const deliveryToken = hash || tabParam || '';
+      if (
+        mapped === 'work' &&
+        (deliveryToken === 'delivery-review' ||
+          deliveryToken === 'delivery' ||
+          deliveryToken === 'delivery-package')
+      ) {
+        setWorkFocus('delivery');
+      }
+      setActiveSection(mapped);
+      if (hash !== mapped) {
         window.history.replaceState(null, '', `#${mapped}`);
       }
       return;
     }
 
     setActiveSection(sections[0]?.id ?? 'overview');
-  }, [caseData?.caseId, sections, setActiveSection, showWorkTab]);
+  }, [caseData?.caseId, searchParams, sections, setActiveSection, showWorkTab]);
 
   async function handlePriorityToggle() {
     if (!caseData) return;
@@ -432,7 +455,9 @@ export function CaseDetailPage() {
       <div>
         <h2 className="text-sm font-semibold text-ink">{workLabel}</h2>
         <p className="mt-0.5 text-sm text-muted">
-          Tools for your role only — switch panels below if you have more than one capability.
+          {showDoctorDelivery
+            ? 'Review the delivery, then approve, request changes, or cancel.'
+            : 'Tools for your role only — switch panels below if you have more than one capability.'}
         </p>
       </div>
 
@@ -565,8 +590,8 @@ export function CaseDetailPage() {
             ← Cases
           </Link>
         }
-        title={caseData.patientName}
-        subtitle={formatCaseIdLabel(caseData.caseId, caseData.status)}
+        title={formatCaseIdLabel(caseData.caseId, caseData.status)}
+        subtitle={caseData.patientName}
       />
 
       <CaseClinicalHeader
@@ -588,7 +613,7 @@ export function CaseDetailPage() {
                   selectTab('work');
                 }}
               >
-                Approve Plan
+                Review delivery
               </CaseDetailActionButton>
             ) : showAssign ? (
               <CaseDetailActionButton tone="primary" onClick={openAssignment}>
@@ -612,13 +637,8 @@ export function CaseDetailPage() {
                 ...(!editsLocked && !isCancelled && !isDraft
                   ? [
                       {
-                        id: 'refinement',
-                        label: 'Request refinement',
-                        onClick: () => selectTab('communication'),
-                      },
-                      {
-                        id: 'checkin',
-                        label: 'Schedule check-in',
+                        id: 'message',
+                        label: 'Message the team',
                         onClick: () => selectTab('communication'),
                       },
                     ]

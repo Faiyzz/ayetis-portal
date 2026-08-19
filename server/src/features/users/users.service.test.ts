@@ -38,7 +38,9 @@ describe('users.service helpers', () => {
   it('describes role defaults', () => {
     const doctor = describeRolePermissions(ROLES.DOCTOR);
     expect(doctor.defaults).not.toContain(PERMISSIONS.SETTINGS_MANAGE);
+    expect(doctor.defaults).not.toContain(PERMISSIONS.CASE_VIEW_FACILITY);
     expect(userHasEffectivePermission(doctor.defaults, PERMISSIONS.CASE_CREATE)).toBe(true);
+    expect(userHasEffectivePermission(doctor.defaults, PERMISSIONS.CASE_VIEW_OWN)).toBe(true);
   });
 
   it('blocks suspended accounts from submitting work', async () => {

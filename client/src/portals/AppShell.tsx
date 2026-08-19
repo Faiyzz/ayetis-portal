@@ -13,6 +13,7 @@ import {
   IconMessageSquare,
   IconPlus,
   IconShield,
+  IconUser,
   IconUsers,
 } from '@/components/NavIcons';
 import { BrandMark } from '@/features/auth/components/AuthUI';
@@ -141,12 +142,13 @@ function buildNavItems(
     canCreateUser: boolean;
     canListRegistrations: boolean;
     canManageCorporate: boolean;
+    ownCasesOnly: boolean;
   },
 ): NavItem[] {
   const caseChildren: NavChild[] = [
     {
       id: 'all-cases',
-      label: 'All cases',
+      label: options.ownCasesOnly ? 'My cases' : 'All cases',
       to: '/app/cases',
       icon: <IconList className="h-3.5 w-3.5" />,
       isActive: (pathname, hash) => pathname === '/app/cases' && !hash,
@@ -320,6 +322,14 @@ function buildNavItems(
       isActive: (pathname) => pathname.startsWith('/app/notifications'),
     },
     {
+      id: 'invoices',
+      label: 'Invoices',
+      to: '/app/invoices',
+      icon: <IconList />,
+      permission: PERMISSIONS.INVOICE_VIEW,
+      isActive: (pathname) => pathname.startsWith('/app/invoices'),
+    },
+    {
       id: 'activity',
       label: 'Activity log',
       to: '/app/activity',
@@ -357,6 +367,14 @@ function buildNavItems(
         PERMISSIONS.PRIVACY_MANAGE,
       ],
       isActive: (pathname) => pathname.startsWith('/app/settings'),
+    },
+    {
+      id: 'account',
+      label: 'Account',
+      to: '/app/account',
+      icon: <IconUser />,
+      permission: PERMISSIONS.USER_VIEW_OWN,
+      isActive: (pathname) => pathname === '/app/account',
     },
     {
       id: 'password',
@@ -565,6 +583,14 @@ export function AppShell() {
       PERMISSIONS.CORPORATE_REPORT_VIEW,
       PERMISSIONS.CORPORATE_AUDIT_VIEW,
     );
+  const ownCasesOnly =
+    can(PERMISSIONS.CASE_VIEW_OWN) &&
+    !canAny(
+      PERMISSIONS.CASE_VIEW_ALL,
+      PERMISSIONS.CASE_VIEW_ASSIGNED,
+      PERMISSIONS.CASE_VIEW_ORG,
+      PERMISSIONS.CASE_VIEW_FACILITY,
+    );
 
   const navItems = useMemo(
     () =>
@@ -573,12 +599,23 @@ export function AppShell() {
         canCreateUser,
         canListRegistrations,
         canManageCorporate,
+        ownCasesOnly,
       }).filter((item) => {
+        if (item.id === 'invoices' && can(PERMISSIONS.INVOICE_MANAGE)) return false;
         if (item.permission) return can(item.permission);
         if (item.anyOf?.length) return canAny(...item.anyOf);
         return true;
       }),
-    [dashboardPath, canCreateCase, canCreateUser, canListRegistrations, canManageCorporate, can, canAny],
+    [
+      dashboardPath,
+      canCreateCase,
+      canCreateUser,
+      canListRegistrations,
+      canManageCorporate,
+      ownCasesOnly,
+      can,
+      canAny,
+    ],
   );
 
   function closeMobile() {
@@ -621,6 +658,9 @@ export function AppShell() {
               <p className="truncate text-sm font-semibold text-ink">
                 {user.firstName} {user.lastName}
               </p>
+              {user.doctorId ? (
+                <p className="mt-0.5 truncate font-mono text-xs font-medium text-ink">{user.doctorId}</p>
+              ) : null}
               <p className="mt-0.5 truncate text-xs text-muted">{user.email}</p>
             </div>
             <button

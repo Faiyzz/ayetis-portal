@@ -12,9 +12,9 @@ import {
   type DoctorDeliveryQueueItemDto,
 } from '@ayetis/shared';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
-import { AuthButton, TextField } from '@/features/auth/components/AuthUI';
+import { Alert, AuthButton, TextField } from '@/features/auth/components/AuthUI';
 import {
   acknowledgeCaseStatus,
   fetchCases,
@@ -35,23 +35,34 @@ type SortField =
   | 'caseType';
 
 export function DoctorDashboard({ firstName }: { firstName: string }) {
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryTab = (searchParams.get('category') as CaseCategory | 'all' | null) || 'all';
   const typeTab = (searchParams.get('type') as CaseType | 'all' | null) || 'all';
+  const page = Math.max(1, Number(searchParams.get('page')) || 1);
+  const pageSize = 50;
+  const urlCaseId = searchParams.get('caseId') || '';
+  const urlPatient = searchParams.get('patient') || '';
 
   const [deliveries, setDeliveries] = useState<DoctorDeliveryQueueItemDto[]>([]);
   const [cases, setCases] = useState<CaseListItemDto[]>([]);
   const [total, setTotal] = useState(0);
   const [summary, setSummary] = useState<DoctorCaseSummaryDto | null>(null);
   const [loading, setLoading] = useState(true);
-  const [caseIdFilter, setCaseIdFilter] = useState(searchParams.get('caseId') || '');
-  const [patientFilter, setPatientFilter] = useState(searchParams.get('patient') || '');
+  const [error, setError] = useState('');
+  const [caseIdFilter, setCaseIdFilter] = useState(urlCaseId);
+  const [patientFilter, setPatientFilter] = useState(urlPatient);
   const [sortBy, setSortBy] = useState<SortField>(
     (searchParams.get('sortBy') as SortField) || 'updatedAt',
   );
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
     searchParams.get('sortDir') === 'asc' ? 'asc' : 'desc',
   );
+
+  useEffect(() => {
+    setCaseIdFilter(urlCaseId);
+    setPatientFilter(urlPatient);
+  }, [urlCaseId, urlPatient]);
 
   const typeOptions = useMemo(() => {
     if (categoryTab === 'all') {
@@ -62,16 +73,17 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
 
   async function load() {
     setLoading(true);
+    setError('');
     try {
       const [deliveryList, caseList, caseSummary] = await Promise.all([
         fetchDoctorDeliveries(),
         fetchCases({
-          page: 1,
-          pageSize: 50,
+          page,
+          pageSize,
           caseCategory: categoryTab === 'all' ? undefined : categoryTab,
           caseType: typeTab === 'all' ? undefined : typeTab,
-          caseId: caseIdFilter.trim() || undefined,
-          patient: patientFilter.trim() || undefined,
+          caseId: urlCaseId.trim() || undefined,
+          patient: urlPatient.trim() || undefined,
           sortBy,
           sortDir,
         }),
@@ -82,7 +94,9 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
       setTotal(caseList.total);
       setSummary(caseSummary);
     } catch (err) {
-      toast().error(getErrorMessage(err, 'Unable to load doctor dashboard'));
+      const message = getErrorMessage(err, 'Unable to load doctor dashboard');
+      setError(message);
+      toast().error(message);
     } finally {
       setLoading(false);
     }
@@ -91,7 +105,12 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryTab, typeTab, sortBy, sortDir]);
+  }, [categoryTab, typeTab, sortBy, sortDir, urlCaseId, urlPatient, page]);
+
+  useEffect(() => {
+    if (location.hash !== '#awaiting-review') return;
+    document.getElementById('awaiting-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [location.hash, loading]);
 
   function updateFilters(next: {
     category?: CaseCategory | 'all';
@@ -105,6 +124,7 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
       else params.set('category', category);
       if (type === 'all') params.delete('type');
       else params.set('type', type);
+      params.delete('page');
       return params;
     });
   }
@@ -119,9 +139,9 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
       else params.delete('patient');
       params.set('sortBy', sortBy);
       params.set('sortDir', sortDir);
+      params.delete('page');
       return params;
     });
-    void load();
   }
 
   function toggleSort(field: SortField) {
@@ -184,6 +204,8 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
           Clarifications
         </Link>
       </div>
+
+      {error ? <Alert>{error}</Alert> : null}
 
       <section className="rounded-xl border border-line bg-white p-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -250,34 +272,43 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
         </div>
       </section>
 
-      <section className="rounded-xl border border-line bg-white p-5">
+      <section id="awaiting-review" className="rounded-xl border border-line bg-white p-5">
         <h2 className="text-sm font-semibold text-ink">Awaiting your review</h2>
         <p className="mt-1 text-sm text-muted">Delivered plans waiting for a decision.</p>
         {loading ? (
           <p className="mt-4 text-sm text-muted">Loading…</p>
         ) : awaiting.length === 0 ? (
-          <p className="mt-4 text-sm text-muted">Nothing waiting for approval.</p>
+          <p className="mt-4 text-sm text-muted">
+            No deliveries waiting. When a plan is ready, it will appear here with a Review plan
+            action.
+          </p>
         ) : (
           <ul className="mt-4 divide-y divide-line">
             {awaiting.map((item) => (
               <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                 <div>
                   <Link
-                    to={`/app/cases/${item.caseId}`}
+                    to={`/app/cases/${item.caseId}#work`}
                     className="font-semibold text-brand-700 hover:text-brand-800"
                   >
-                    {item.caseId}
+                    {formatCaseIdLabel(item.caseId)}
                   </Link>
                   <p className="text-sm text-ink">{item.patientName}</p>
                   <p className="text-xs text-muted">{item.treatmentSummary}</p>
                 </div>
-                <div className="flex gap-2 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
                   {item.hasDeliveryVideo ? (
-                    <span className="rounded-md bg-slate-100 px-2 py-1">Video</span>
+                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs">Video</span>
                   ) : null}
                   {item.hasDeliveryLink ? (
-                    <span className="rounded-md bg-slate-100 px-2 py-1">Link</span>
+                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs">Link</span>
                   ) : null}
+                  <Link
+                    to={`/app/cases/${item.caseId}#work`}
+                    className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700"
+                  >
+                    Review plan
+                  </Link>
                 </div>
               </li>
             ))}
@@ -304,11 +335,11 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
             placeholder="AY-…"
           />
           <TextField
-            label="Patient ID / Name"
+            label="Patient name"
             name="patient"
             value={patientFilter}
             onChange={(e) => setPatientFilter(e.target.value)}
-            placeholder="Name or ID"
+            placeholder="Patient name"
           />
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-ink">Sort by</span>
@@ -345,7 +376,21 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
         {loading ? (
           <p className="mt-4 text-sm text-muted">Loading cases…</p>
         ) : cases.length === 0 ? (
-          <p className="mt-4 text-sm text-muted">No cases match these filters.</p>
+          <div className="mt-4 space-y-2">
+            <p className="text-sm text-muted">
+              {urlCaseId || urlPatient || categoryTab !== 'all' || typeTab !== 'all'
+                ? 'No cases match these filters.'
+                : 'You have no cases yet. Create a case to get started.'}
+            </p>
+            {!urlCaseId && !urlPatient && categoryTab === 'all' ? (
+              <Link
+                to="/app/cases/new"
+                className="inline-flex text-sm font-semibold text-brand-600 hover:text-brand-700"
+              >
+                Create case
+              </Link>
+            ) : null}
+          </div>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-left text-sm">
@@ -452,6 +497,49 @@ export function DoctorDashboard({ firstName }: { firstName: string }) {
                 : ''}
               {typeTab !== 'all' ? ` · ${CASE_TYPE_LABELS[typeTab as CaseType]}` : ''}
             </p>
+            {total > pageSize ? (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  disabled={page <= 1}
+                  onClick={() =>
+                    setSearchParams((prev) => {
+                      const params = new URLSearchParams(prev);
+                      const next = page - 1;
+                      if (next <= 1) params.delete('page');
+                      else params.set('page', String(next));
+                      return params;
+                    })
+                  }
+                  className="rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-muted">
+                  Page {page} of {Math.max(1, Math.ceil(total / pageSize))}
+                </span>
+                <button
+                  type="button"
+                  disabled={page >= Math.ceil(total / pageSize)}
+                  onClick={() =>
+                    setSearchParams((prev) => {
+                      const params = new URLSearchParams(prev);
+                      params.set('page', String(page + 1));
+                      return params;
+                    })
+                  }
+                  className="rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink disabled:opacity-40"
+                >
+                  Next
+                </button>
+                <Link
+                  to="/app/cases"
+                  className="text-sm font-semibold text-brand-600 hover:text-brand-700"
+                >
+                  All my cases
+                </Link>
+              </div>
+            ) : null}
           </div>
         )}
       </section>

@@ -3477,14 +3477,14 @@ export async function approveQcCase(
     userAgent: audit?.userAgent,
   });
 
-  const portalUrl = `${env.clientUrl}/app/cases/${caseDoc.caseId}`;
+  const portalUrl = `${env.clientUrl}/app/cases/${caseDoc.caseId}#work`;
 
   await createNotification({
     userId: String(caseDoc.doctorId),
     type: NOTIFICATION_TYPES.CASE_DELIVERED,
     title: `${caseDoc.caseId} delivered for your review`,
     body: 'Your case is ready. Open it to view the delivery video or link, then record your decision.',
-    link: `/app/cases/${caseDoc.caseId}`,
+    link: `/app/cases/${caseDoc.caseId}#work`,
     caseId: caseDoc.caseId,
   });
 
