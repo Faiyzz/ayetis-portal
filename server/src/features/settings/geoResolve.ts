@@ -17,10 +17,13 @@ export async function resolveCountryGeo(input: {
 }): Promise<ResolvedGeo> {
   let doc: ICountry | null = null;
   const id = input.countryId?.trim();
+  const name = input.countryName?.trim() ?? '';
   if (id && Types.ObjectId.isValid(id)) {
     doc = await Country.findById(id);
+    if (doc && name && doc.name.trim().toLowerCase() !== name.toLowerCase()) {
+      doc = null;
+    }
   }
-  const name = input.countryName?.trim() ?? '';
   if (!doc && name) {
     doc = await Country.findOne({ name: new RegExp(`^${escapeRegex(name)}$`, 'i') });
   }

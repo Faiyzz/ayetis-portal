@@ -307,6 +307,7 @@ export function EditCasePage() {
             practiceName: form.practiceName ?? '',
             clinicName: form.clinicName ?? '',
             country: form.country ?? '',
+            countryId: form.countryId ?? '',
             chiefComplaint: form.chiefComplaint ?? '',
             caseCategory: (form.caseCategory as CaseCategory) || caseCategory,
             caseType: form.caseType as UpdateCaseInput['caseType'],

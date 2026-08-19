@@ -55,6 +55,7 @@ export type RecordsFormSlice = Pick<
   | 'practiceName'
   | 'clinicName'
   | 'country'
+  | 'countryId'
   | 'chiefComplaint'
   | 'caseCategory'
   | 'caseType'
@@ -240,7 +241,10 @@ export function RecordsNumberingPart({
           label="Country"
           options={countryOptions}
           value={form.country || ''}
-          onChange={(value) => onFormChange('country', value)}
+          onChange={(value) => {
+            onFormChange('country', value);
+            onFormChange('countryId', '');
+          }}
         />
 
         {needsDoctorPicker ? (

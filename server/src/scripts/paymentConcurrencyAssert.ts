@@ -24,16 +24,154 @@ function assert(condition: unknown, message: string) {
   }
 }
 
+import { Types } from 'mongoose';
+import { Country } from '../models/Settings';
+import { resolveCountryGeo } from '../features/settings/geoResolve';
+
 async function testGeographyResolution() {
-  console.log('Testing geography resolution on resume/update...');
+  console.log('Testing geography resolution on resume/update (Scenarios A through E)...');
 
-  // Old draft simulation: only has country name "United States"
-  const usRegion = regionCodeForCountry('United States');
-  assert(usRegion === 'NAM', 'US region code must be NAM');
+  const usCountryId = new Types.ObjectId('6a836f04d18dd581ac089a0b');
+  const usRegionId = new Types.ObjectId('6a836f03d18dd581ac08993a');
+  const deCountryId = new Types.ObjectId('6a836f03d18dd581ac089989');
+  const deRegionId = new Types.ObjectId('6a836f03d18dd581ac089945');
 
-  // Country changed on resume: doctor changes country to "Germany"
-  const deRegion = regionCodeForCountry('Germany');
-  assert(deRegion === 'CEMEA', 'Germany region code must be CEMEA');
+  const mockCountries = [
+    {
+      _id: usCountryId,
+      name: 'United States',
+      code: 'UNITED_STATES',
+      regionId: usRegionId,
+    },
+    {
+      _id: deCountryId,
+      name: 'Germany',
+      code: 'GERMANY',
+      regionId: deRegionId,
+    },
+  ];
+
+  // Mock Country query methods for offline assertion
+  const origFindById = Country.findById;
+  const origFindOne = Country.findOne;
+  Country.findById = ((id: unknown) => {
+    const idStr = String(id);
+    const found = mockCountries.find((c) => String(c._id) === idStr);
+    return Promise.resolve(found ?? null) as never;
+  }) as never;
+  Country.findOne = ((query: { name?: RegExp | string }) => {
+    let found = null;
+    if (query?.name instanceof RegExp) {
+      found = mockCountries.find((c) => (query.name as RegExp).test(c.name));
+    } else if (typeof query?.name === 'string') {
+      const target = query.name.toLowerCase();
+      found = mockCountries.find((c) => c.name.toLowerCase() === target);
+    }
+    return Promise.resolve(found ?? null) as never;
+  }) as never;
+
+  try {
+    // Scenario A: Matching country
+    // Input: countryName United States, US countryId
+    const resA = await resolveCountryGeo({
+      countryId: String(usCountryId),
+      countryName: 'United States',
+    });
+    assert(resA.country === 'United States', 'Scenario A: country must be United States');
+    assert(String(resA.countryId) === String(usCountryId), 'Scenario A: countryId must match US');
+    assert(String(resA.regionId) === String(usRegionId), 'Scenario A: regionId must match NAM');
+
+    // Scenario B: Country changed with stale ID
+    // Input: countryName Germany, stale US countryId
+    const resB = await resolveCountryGeo({
+      countryId: String(usCountryId),
+      countryName: 'Germany',
+    });
+    assert(resB.country === 'Germany', 'Scenario B: country must be Germany');
+    assert(String(resB.countryId) === String(deCountryId), 'Scenario B: countryId must match Germany');
+    assert(String(resB.regionId) === String(deRegionId), 'Scenario B: regionId must match CEMEA');
+
+    // Scenario C: Draft update with changed country & stale US ID
+    const draftC = {
+      country: 'United States',
+      countryId: usCountryId,
+      regionId: usRegionId,
+    };
+    const inputC = {
+      country: 'Germany',
+      countryId: String(usCountryId), // Stale ID from client
+    };
+    const countryProvidedC = inputC.country !== undefined;
+    const isCountryChangedC =
+      countryProvidedC &&
+      (inputC.country ?? '').trim().toLowerCase() !== (draftC.country ?? '').trim().toLowerCase();
+    const resC = await resolveCountryGeo({
+      countryId: isCountryChangedC
+        ? inputC.countryId
+        : inputC.countryId || (draftC.countryId ? String(draftC.countryId) : undefined),
+      countryName: countryProvidedC ? inputC.country : draftC.country,
+    });
+    draftC.country = resC.country;
+    draftC.countryId = resC.countryId!;
+    draftC.regionId = resC.regionId!;
+    assert(draftC.country === 'Germany', 'Scenario C: Draft country must update to Germany');
+    assert(String(draftC.countryId) === String(deCountryId), 'Scenario C: Draft countryId must be Germany');
+    assert(String(draftC.regionId) === String(deRegionId), 'Scenario C: Draft regionId must be CEMEA');
+
+    // Scenario D: Old draft without IDs
+    const oldDraftD = {
+      country: 'Germany',
+      countryId: undefined as Types.ObjectId | undefined,
+      regionId: undefined as Types.ObjectId | undefined,
+    };
+    const inputD: { country?: string; countryId?: string } = {};
+    const countryProvidedD = inputD.country !== undefined;
+    const isCountryChangedD =
+      countryProvidedD &&
+      (inputD.country ?? '').trim().toLowerCase() !== (oldDraftD.country ?? '').trim().toLowerCase();
+    const resD = await resolveCountryGeo({
+      countryId: isCountryChangedD
+        ? inputD.countryId
+        : inputD.countryId || (oldDraftD.countryId ? String(oldDraftD.countryId) : undefined),
+      countryName: countryProvidedD ? inputD.country : oldDraftD.country,
+    });
+    oldDraftD.country = resD.country;
+    oldDraftD.countryId = resD.countryId;
+    oldDraftD.regionId = resD.regionId;
+    assert(oldDraftD.country === 'Germany', 'Scenario D: Old draft country must remain Germany');
+    assert(String(oldDraftD.countryId) === String(deCountryId), 'Scenario D: Old draft countryId must resolve to Germany');
+    assert(String(oldDraftD.regionId) === String(deRegionId), 'Scenario D: Old draft regionId must resolve to CEMEA');
+
+    // Scenario E: Country unchanged (update unrelated field only)
+    const draftE = {
+      country: 'United States',
+      countryId: usCountryId,
+      regionId: usRegionId,
+    };
+    const inputE = {
+      patientName: 'Updated Patient Name',
+      country: undefined,
+      countryId: undefined,
+    };
+    const countryProvidedE = inputE.country !== undefined;
+    const isCountryChangedE =
+      countryProvidedE &&
+      (inputE.country ?? '').trim().toLowerCase() !== (draftE.country ?? '').trim().toLowerCase();
+    const resE = await resolveCountryGeo({
+      countryId: isCountryChangedE
+        ? inputE.countryId
+        : inputE.countryId || (draftE.countryId ? String(draftE.countryId) : undefined),
+      countryName: countryProvidedE ? inputE.country : draftE.country,
+    });
+    assert(resE.country === 'United States', 'Scenario E: Country must remain United States');
+    assert(String(resE.countryId) === String(usCountryId), 'Scenario E: CountryId must remain US');
+    assert(String(resE.regionId) === String(usRegionId), 'Scenario E: RegionId must remain NAM');
+
+    console.log('Geography resolution Scenarios A-E passed successfully.');
+  } finally {
+    Country.findById = origFindById;
+    Country.findOne = origFindOne;
+  }
 
   // Priority preservation simulation
   let draftPriority: CasePriority = CASE_PRIORITIES.URGENT;
