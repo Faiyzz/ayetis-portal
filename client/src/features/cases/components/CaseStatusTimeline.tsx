@@ -38,7 +38,7 @@ function captionFor(step: TimelineStep, isCancelled?: boolean): string | null {
     if (TERMINAL_CURRENT.has(step.status) || step.status === 'approved') {
       return step.status === 'cancelled' ? 'Cancelled' : 'Done';
     }
-    if (step.status === 'in_process') return 'Waiting';
+    if (step.status === 'in_process') return 'In progress';
     return 'Current';
   }
   return stateStyles[step.state].caption;

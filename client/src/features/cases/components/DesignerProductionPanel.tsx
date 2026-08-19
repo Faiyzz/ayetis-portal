@@ -35,9 +35,13 @@ export function DesignerProductionPanel({
   }, [caseData.caseId, caseData.productionNotes]);
 
   const inProduction = caseData.status === 'in_process';
-  const needsResubmit = caseData.status === 'in_process';
-  const inQc = caseData.status === 'in_process';
-  const waiting = caseData.status === 'in_process';
+  const needsResubmit =
+    caseData.status === 'in_process' &&
+    (caseData.qcRejectionCount ?? 0) > 0 &&
+    !caseData.submittedToQcAt;
+  const inQc = caseData.status === 'in_process' && Boolean(caseData.submittedToQcAt);
+  const waiting =
+    caseData.status === 'in_process' && (caseData.openClarificationCount ?? 0) > 0;
   const ti = { ...EMPTY_TREATMENT_INSTRUCTIONS, ...caseData.treatmentInstructions };
   const canWork =
     (inProduction || needsResubmit) &&

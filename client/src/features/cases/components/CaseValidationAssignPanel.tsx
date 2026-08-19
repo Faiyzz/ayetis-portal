@@ -65,7 +65,7 @@ export function CaseValidationAssignPanel({
   if (!canValidate && !canAssign) return null;
 
   const validation = caseData.validation;
-  const isWaiting = caseData.status === 'in_process';
+  const isWaiting = (caseData.openClarificationCount ?? 0) > 0;
   const waitingForDesigner = caseData.cutPhase === CUT_PHASES.WAITING_FOR_DESIGNER;
   const showDesignerAssign = !cutRequired || waitingForDesigner;
 

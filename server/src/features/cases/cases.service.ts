@@ -4046,7 +4046,16 @@ export async function markCaseValidated(
   if (caseDoc.status === CASE_STATUSES.CANCELLED) {
     throw new AppError('Cannot validate a cancelled case', 400);
   }
-  if (caseDoc.status === CASE_STATUSES.IN_PROCESS) {
+  if (
+    caseDoc.status === CASE_STATUSES.APPROVED ||
+    caseDoc.status === CASE_STATUSES.WAITING_FOR_APPROVAL ||
+    caseDoc.status === CASE_STATUSES.SAVED_FOR_SUBMISSION
+  ) {
+    throw new AppError('Cannot validate a case in this status', 400);
+  }
+
+  const openClarifications = await countOpenClarifications(caseDoc._id as Types.ObjectId);
+  if (openClarifications > 0) {
     throw new AppError('Resolve open clarifications before validating', 400);
   }
 
@@ -4126,6 +4135,13 @@ export async function assignCase(
   if (caseDoc.isDeleted) throw new AppError('Cannot assign a deleted case', 400);
   if (caseDoc.status === CASE_STATUSES.CANCELLED) {
     throw new AppError('Cannot assign a cancelled case', 400);
+  }
+  if (
+    caseDoc.status === CASE_STATUSES.APPROVED ||
+    caseDoc.status === CASE_STATUSES.WAITING_FOR_APPROVAL ||
+    caseDoc.status === CASE_STATUSES.SAVED_FOR_SUBMISSION
+  ) {
+    throw new AppError('Cannot assign a case in this status', 400);
   }
   if (!caseDoc.validatedAt) {
     throw new AppError('Validate the case before assigning', 400);

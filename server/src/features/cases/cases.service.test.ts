@@ -299,6 +299,7 @@ import {
   submitDoctorDecision,
   uploadCaseFiles,
 } from './cases.service';
+import { countOpenClarifications } from '../clarifications/clarifications.service';
 import { mockQuery } from '../../test/mocks';
 
 describe('cases.service URD workflows', () => {
@@ -579,6 +580,87 @@ describe('cases.service URD workflows', () => {
     });
     expect(approved.status).toBe(CASE_STATUSES.WAITING_FOR_APPROVAL);
     expect(detail.status).toBe(CASE_STATUSES.WAITING_FOR_APPROVAL);
+  });
+
+  it('validates in_process cases with 0 open clarifications and rejects when clarifications are open (DEF-WORKFLOW-001)', async () => {
+    // TEST 1 — normal Coordinator validation: in_process, 0 clarifications, checklist pass
+    vi.mocked(countOpenClarifications).mockResolvedValue(0);
+    const validInProcessCase = makeCase({
+      status: CASE_STATUSES.IN_PROCESS,
+      patientName: 'Jane Doe',
+      treatmentSummary: 'Upper and lower aligners',
+      instructions: 'Full treatment instructions',
+      files: [{ _id: 'f1', storageKey: 'cases/AYT-1001/scan.stl', createdAt: new Date() }],
+      validatedAt: null,
+    });
+    Case.findOne.mockResolvedValue(validInProcessCase);
+
+    const validatedResult = await markCaseValidated(coordinatorActor() as never, 'AYT-1001');
+    expect(validInProcessCase.validatedAt).toBeInstanceOf(Date);
+    expect(validInProcessCase.validatedByName).toBe('Cora Dinator');
+    expect(validatedResult.validatedAt).toBeTruthy();
+
+    // TEST 2 — actual open clarification: in_process + openClarifications > 0
+    vi.mocked(countOpenClarifications).mockResolvedValue(1);
+    const blockedCase = makeCase({
+      status: CASE_STATUSES.IN_PROCESS,
+      patientName: 'Jane Doe',
+      treatmentSummary: 'Upper aligners',
+      validatedAt: null,
+    });
+    Case.findOne.mockResolvedValue(blockedCase);
+
+    await expect(
+      markCaseValidated(coordinatorActor() as never, 'AYT-1001'),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'Resolve open clarifications before validating',
+    });
+  });
+
+  it('enforces assignment rules: requires validation and zero clarifications (DEF-WORKFLOW-001)', async () => {
+    vi.mocked(countOpenClarifications).mockResolvedValue(0);
+
+    // TEST 3 — assignment before validation: in_process, validatedAt = null -> rejected
+    const unvalidatedCase = makeCase({
+      status: CASE_STATUSES.IN_PROCESS,
+      validatedAt: null,
+    });
+    Case.findOne.mockResolvedValue(unvalidatedCase);
+
+    await expect(
+      assignCase(coordinatorActor() as never, 'AYT-1001', {
+        mode: 'designer',
+        designerId: DESIGNER_ID,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'Validate the case before assigning',
+    });
+
+    // TEST 4 — assignment after validation: in_process, validatedAt != null, 0 clarifications -> succeeds
+    const validatedCase = makeCase({
+      status: CASE_STATUSES.IN_PROCESS,
+      validatedAt: new Date(),
+      assignedDesignerId: null,
+    });
+    Case.findOne.mockResolvedValue(validatedCase);
+    User.findById.mockResolvedValue({
+      _id: DESIGNER_ID,
+      id: DESIGNER_ID,
+      firstName: 'Des',
+      lastName: 'Ign',
+      role: ROLES.DESIGNER,
+      isActive: true,
+    });
+
+    const assignedResult = await assignCase(coordinatorActor() as never, 'AYT-1001', {
+      mode: 'designer',
+      designerId: DESIGNER_ID,
+    });
+    expect(validatedCase.assignedDesignerId).toBeDefined();
+    expect(validatedCase.assignedDesignerName).toBe('Des Ign');
+    expect(assignedResult.assignedDesignerName).toBe('Des Ign');
   });
 
   it('builds coordinator and QC dashboards', async () => {

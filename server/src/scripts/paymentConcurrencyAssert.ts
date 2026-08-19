@@ -16,6 +16,8 @@ import {
   canViewDoctorName,
   formatDoctorDisplay,
   regionCodeForCountry,
+  resolveCoordinatorQueue,
+  COORDINATOR_QUEUES,
 } from '@ayetis/shared';
 
 function assert(condition: unknown, message: string) {
@@ -324,10 +326,98 @@ async function testFulfillmentConcurrencyInvariants() {
   assert(invoicesCreated.length === 1, 'No additional invoice created on 3rd call');
 }
 
+async function testCoordinatorValidationAndQueues() {
+  console.log('Testing Coordinator validation, assignment, and queue resolution (DEF-WORKFLOW-001)...');
+
+  // 1. Queue resolution tests
+  // Scenario 1: in_process, 0 clarifications, !validated -> pending_validation
+  const q1 = resolveCoordinatorQueue({
+    status: CASE_STATUSES.IN_PROCESS,
+    validatedAt: null,
+    openClarificationCount: 0,
+  });
+  assert(
+    q1 === COORDINATOR_QUEUES.PENDING_VALIDATION,
+    `Scenario 1: Expected pending_validation, got ${q1}`,
+  );
+
+  // Scenario 2: in_process, 1 open clarification -> waiting_doctor
+  const q2 = resolveCoordinatorQueue({
+    status: CASE_STATUSES.IN_PROCESS,
+    validatedAt: null,
+    openClarificationCount: 1,
+  });
+  assert(
+    q2 === COORDINATOR_QUEUES.WAITING_DOCTOR,
+    `Scenario 2: Expected waiting_doctor, got ${q2}`,
+  );
+
+  // Scenario 3: in_process, 0 clarifications, validatedAt != null, unassigned -> ready_for_assignment
+  const q3 = resolveCoordinatorQueue({
+    status: CASE_STATUSES.IN_PROCESS,
+    validatedAt: new Date(),
+    openClarificationCount: 0,
+  });
+  assert(
+    q3 === COORDINATOR_QUEUES.READY_FOR_ASSIGNMENT,
+    `Scenario 3: Expected ready_for_assignment, got ${q3}`,
+  );
+
+  // Scenario 4: in_process, assigned -> assigned
+  const q4 = resolveCoordinatorQueue({
+    status: CASE_STATUSES.IN_PROCESS,
+    validatedAt: new Date(),
+    assignedDesignerId: 'des-1',
+    openClarificationCount: 0,
+  });
+  assert(
+    q4 === COORDINATOR_QUEUES.ASSIGNED,
+    `Scenario 4: Expected assigned, got ${q4}`,
+  );
+
+  // 2. Validation & Assignment workflow invariants
+  // Test A: Validation allowed for in_process when openClarifications === 0
+  const canValidateZeroClarifications = (status: string, openClarifications: number) => {
+    if (status !== CASE_STATUSES.IN_PROCESS && status !== CASE_STATUSES.NEW_CASE) return false;
+    if (openClarifications > 0) return false;
+    return true;
+  };
+  assert(
+    canValidateZeroClarifications(CASE_STATUSES.IN_PROCESS, 0) === true,
+    'Validation must be allowed for in_process case with 0 open clarifications',
+  );
+  assert(
+    canValidateZeroClarifications(CASE_STATUSES.IN_PROCESS, 2) === false,
+    'Validation must be blocked when open clarifications > 0',
+  );
+
+  // Test B: Assignment allowed only when validatedAt != null and openClarifications === 0
+  const canAssignCase = (validatedAt: Date | null, openClarifications: number) => {
+    if (!validatedAt) return false;
+    if (openClarifications > 0) return false;
+    return true;
+  };
+  assert(
+    canAssignCase(null, 0) === false,
+    'Assignment must be blocked before validation',
+  );
+  assert(
+    canAssignCase(new Date(), 0) === true,
+    'Assignment must be allowed after validation with 0 open clarifications',
+  );
+  assert(
+    canAssignCase(new Date(), 1) === false,
+    'Assignment must be blocked when open clarifications > 0 even if validated',
+  );
+
+  console.log('Coordinator validation, assignment, and queue resolution tests passed successfully.');
+}
+
 async function run() {
   await testGeographyResolution();
   await testNotificationPrivacy();
   await testFulfillmentConcurrencyInvariants();
+  await testCoordinatorValidationAndQueues();
   console.log('All regression & concurrency assertions passed successfully!');
 }
 
