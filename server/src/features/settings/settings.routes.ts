@@ -97,7 +97,8 @@ router.get('/branding/asset', async (req, res, next) => {
     }
     const { stream, contentLength } = await service.streamBrandingAsset(key);
     if (contentLength) res.setHeader('Content-Length', String(contentLength));
-    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Type', service.brandingAssetContentType(key));
+    res.setHeader('Cache-Control', 'public, max-age=300');
     stream.pipe(res);
   } catch (error) {
     next(error);
@@ -303,6 +304,27 @@ router.post(
           mimetype: req.file.mimetype,
           originalname: req.file.originalname,
         },
+        { id: req.user!.id, email: req.user!.email, role: req.user!.role },
+        getRequestAuditContext(req),
+      );
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.delete(
+  '/branding/logos/:slot',
+  requirePermission(PERMISSIONS.BRANDING_MANAGE),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const slot = String(req.params.slot);
+      if (!(Object.values(BRANDING_LOGO_SLOTS) as string[]).includes(slot)) {
+        throw new AppError('Invalid logo slot', 400);
+      }
+      const data = await service.removeBrandingLogo(
+        slot as 'login' | 'header' | 'footer' | 'email',
         { id: req.user!.id, email: req.user!.email, role: req.user!.role },
         getRequestAuditContext(req),
       );

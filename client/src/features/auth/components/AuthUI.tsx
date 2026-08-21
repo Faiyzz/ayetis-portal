@@ -120,7 +120,7 @@ export function BrandMark({
   return (
     <div className="inline-flex items-center gap-2.5">
       {logoUrl ? (
-        <img src={logoUrl} alt="" className="h-9 w-9 rounded-xl object-contain" />
+        <img src={logoUrl} alt="" className="h-9 max-w-[9rem] rounded-xl object-contain" />
       ) : (
         <span
           className={[

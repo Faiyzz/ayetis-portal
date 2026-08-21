@@ -45,6 +45,7 @@ import {
   patchBusinessConfig,
   patchSlaConfig,
   publishPrivacyPolicy,
+  removeBrandingLogo,
   reviewCountryRequest,
   updateBranding,
   updateCustomerScope,
@@ -55,6 +56,7 @@ import {
   upsertMasterListItem,
   upsertRegion,
 } from '@/features/settings/api';
+import { setBrandingCache } from '@/features/settings/useBranding';
 import { getErrorMessage } from '@/lib/api';
 
 type Tab =
@@ -450,6 +452,7 @@ export function SettingsAdminPage() {
         notificationEmails: parseCsv(brandingForm.notificationEmails),
       });
       setBranding(updated);
+      setBrandingCache(updated);
       toast().success('Branding updated');
     } catch (err) {
       toast().error(getErrorMessage(err, 'Unable to update branding'));
@@ -465,10 +468,33 @@ export function SettingsAdminPage() {
     try {
       const updated = await uploadBrandingLogo(slot, file);
       setBranding(updated);
+      setBrandingCache(updated);
       setLogoFiles((prev) => ({ ...prev, [slot]: null }));
       toast().success(`${LOGO_SLOT_LABELS[slot]} logo uploaded`);
     } catch (err) {
       toast().error(getErrorMessage(err, 'Unable to upload logo'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleLogoRemove(slot: (typeof BRANDING_LOGO_SLOTS)[keyof typeof BRANDING_LOGO_SLOTS]) {
+    if (!canBranding) return;
+    if (
+      !window.confirm(
+        `Remove the ${LOGO_SLOT_LABELS[slot]} logo? The portal will use the default mark until you upload a new one.`,
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await removeBrandingLogo(slot);
+      setBranding(updated);
+      setBrandingCache(updated);
+      toast().success(`${LOGO_SLOT_LABELS[slot]} logo removed`);
+    } catch (err) {
+      toast().error(getErrorMessage(err, 'Unable to remove logo'));
     } finally {
       setSaving(false);
     }
@@ -1099,7 +1125,13 @@ export function SettingsAdminPage() {
           </form>
 
           <section className="space-y-3 rounded-xl border border-line bg-white p-4">
-            <h2 className="text-sm font-semibold text-ink">Logos</h2>
+            <div>
+              <h2 className="text-sm font-semibold text-ink">Logos</h2>
+              <p className="mt-1 text-xs text-muted">
+                Upload PNG, JPG, SVG, or WEBP. Header logo appears in the app shell; login logo on
+                the sign-in page. Email logo is used in outbound messages when set.
+              </p>
+            </div>
             {(Object.values(BRANDING_LOGO_SLOTS) as Array<(typeof BRANDING_LOGO_SLOTS)[keyof typeof BRANDING_LOGO_SLOTS]>).map(
               (slot) => {
                 const urlKey =
@@ -1111,18 +1143,25 @@ export function SettingsAdminPage() {
                         ? 'footerLogoUrl'
                         : 'emailLogoUrl';
                 const url = branding[urlKey];
+                const pending = logoFiles[slot];
                 return (
                   <div key={slot} className="space-y-2 border-b border-line pb-3 last:border-0">
                     <p className="text-sm font-medium text-ink">{LOGO_SLOT_LABELS[slot]}</p>
-                    {url ? (
-                      <img src={url} alt={`${slot} logo`} className="max-h-16 object-contain" />
-                    ) : (
-                      <p className="text-xs text-muted">No logo uploaded</p>
-                    )}
+                    <div className="flex min-h-16 items-center rounded-lg border border-dashed border-line bg-surface/60 px-3 py-2">
+                      {url ? (
+                        <img
+                          src={url}
+                          alt={`${slot} logo`}
+                          className="max-h-14 max-w-full object-contain"
+                        />
+                      ) : (
+                        <p className="text-xs text-muted">No logo uploaded</p>
+                      )}
+                    </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif,.png,.jpg,.jpeg,.webp,.svg,.gif"
                         onChange={(e) =>
                           setLogoFiles((prev) => ({
                             ...prev,
@@ -1130,14 +1169,27 @@ export function SettingsAdminPage() {
                           }))
                         }
                       />
+                      {pending ? (
+                        <span className="text-xs text-muted">{pending.name}</span>
+                      ) : null}
                       <button
                         type="button"
-                        disabled={saving || !logoFiles[slot]}
+                        disabled={saving || !pending}
                         onClick={() => void handleLogoUpload(slot)}
-                        className="rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink disabled:opacity-50"
+                        className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
                       >
-                        Upload
+                        {url ? 'Replace' : 'Upload'}
                       </button>
+                      {url ? (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void handleLogoRemove(slot)}
+                          className="rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 );

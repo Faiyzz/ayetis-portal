@@ -51,7 +51,6 @@ import { Organization } from '../../models/Organization';
 import { User } from '../../models/User';
 import { AppError } from '../../utils/AppError';
 import {
-  createSignedFileAccess,
   openStoredReadStream,
   persistUploadedFile,
 } from '../../services/storage.service';
@@ -368,29 +367,47 @@ async function getBusinessConfigDoc(): Promise<IBusinessConfig> {
   return doc;
 }
 
-async function logoUrl(storageKey?: string | null): Promise<string | null> {
+/** Public, stable URLs — signed downloads use attachment disposition and break <img>. */
+function logoUrl(storageKey?: string | null, cacheToken?: string | number | null): string | null {
   if (!storageKey) return null;
-  try {
-    const signed = await createSignedFileAccess({
-      storageKey,
-      originalName: path.basename(storageKey),
-      mimeType: 'image/*',
-      ttlSeconds: 3600,
-    });
-    return signed.url;
-  } catch {
-    return `/api/settings/branding/asset?key=${encodeURIComponent(storageKey)}`;
+  const params = new URLSearchParams({ key: storageKey });
+  if (cacheToken != null && String(cacheToken)) {
+    params.set('v', String(cacheToken));
   }
+  const relative = `/api/settings/branding/asset?${params.toString()}`;
+  const base = (
+    process.env.API_PUBLIC_URL ||
+    process.env.SERVER_URL ||
+    env.clientUrl ||
+    ''
+  ).replace(/\/$/, '');
+  return base ? `${base}${relative}` : relative;
+}
+
+export function brandingAssetContentType(storageKey: string): string {
+  const ext = path.extname(storageKey).toLowerCase();
+  const map: Record<string, string> = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',
+    '.bmp': 'image/bmp',
+    '.ico': 'image/x-icon',
+  };
+  return map[ext] || 'application/octet-stream';
 }
 
 export async function getBranding(): Promise<BrandingConfigDto> {
   const doc = await getBusinessConfigDoc();
+  const cacheToken = doc.updatedAt?.getTime() ?? Date.now();
   return {
     companyName: doc.companyName || 'Ayetis Portal',
-    loginLogoUrl: await logoUrl(doc.logos?.login),
-    headerLogoUrl: await logoUrl(doc.logos?.header),
-    footerLogoUrl: await logoUrl(doc.logos?.footer),
-    emailLogoUrl: await logoUrl(doc.logos?.email),
+    loginLogoUrl: logoUrl(doc.logos?.login, cacheToken),
+    headerLogoUrl: logoUrl(doc.logos?.header, cacheToken),
+    footerLogoUrl: logoUrl(doc.logos?.footer, cacheToken),
+    emailLogoUrl: logoUrl(doc.logos?.email, cacheToken),
     notificationEmails: doc.notificationEmails ?? [],
     updatedAt: doc.updatedAt?.toISOString() ?? null,
   };
@@ -602,6 +619,10 @@ export async function uploadBrandingLogo(
   actor: { id: string; email: string; role: string },
   audit: RequestAuditContext = {},
 ): Promise<BrandingConfigDto> {
+  const mime = (file.mimetype || '').toLowerCase();
+  if (mime && !mime.startsWith('image/')) {
+    throw new AppError('Logo must be an image file (PNG, JPG, SVG, WEBP, …)', 400);
+  }
   const saved = await persistUploadedFile({
     caseId: `branding-${slot}`,
     originalName: file.originalname,
@@ -611,6 +632,7 @@ export async function uploadBrandingLogo(
   });
   const doc = await getBusinessConfigDoc();
   doc.logos = { ...(doc.logos ?? {}), [slot]: saved.storageKey };
+  doc.markModified('logos');
   await doc.save();
   await recordActivity({
     action: AUDIT_ACTIONS.BRANDING_UPDATE,
@@ -623,6 +645,33 @@ export async function uploadBrandingLogo(
     ipAddress: audit.ipAddress,
     userAgent: audit.userAgent,
   });
+  return getBranding();
+}
+
+export async function removeBrandingLogo(
+  slot: 'login' | 'header' | 'footer' | 'email',
+  actor: { id: string; email: string; role: string },
+  audit: RequestAuditContext = {},
+): Promise<BrandingConfigDto> {
+  const doc = await getBusinessConfigDoc();
+  if (doc.logos?.[slot]) {
+    const next = { ...(doc.logos ?? {}) };
+    delete next[slot];
+    doc.logos = next;
+    doc.markModified('logos');
+    await doc.save();
+    await recordActivity({
+      action: AUDIT_ACTIONS.BRANDING_UPDATE,
+      summary: `${actor.email} removed ${slot} logo`,
+      actorId: actor.id,
+      actorEmail: actor.email,
+      actorRole: actor.role,
+      targetType: 'system',
+      targetId: doc.id,
+      ipAddress: audit.ipAddress,
+      userAgent: audit.userAgent,
+    });
+  }
   return getBranding();
 }
 

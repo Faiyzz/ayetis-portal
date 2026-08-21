@@ -164,6 +164,11 @@ export async function uploadBrandingLogo(
   return data.data;
 }
 
+export async function removeBrandingLogo(slot: BrandingLogoSlot): Promise<BrandingConfigDto> {
+  const { data } = await api.delete(`/settings/branding/logos/${slot}`);
+  return data.data;
+}
+
 export async function patchBusinessConfig(
   payload: Partial<BusinessConfigDto>,
 ): Promise<BusinessConfigDto> {
